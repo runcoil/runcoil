@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
-	"github.com/tuanvumaihuynh/runcoil/internal/storage/postgres/sqlc"
+	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 )
 
 // ScheduleStore keeps the schedules with their next ticks. It implements the

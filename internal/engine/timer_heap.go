@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/tuanvumaihuynh/runcoil/internal/domain"
+import "github.com/runcoil/runcoil/internal/domain"
 
 // timerHeap orders the loaded ticks by time.
 type timerHeap []domain.ScheduleTimer

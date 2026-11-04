@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // giveBackTimeout bounds the write that gives an attempt back after a failed send.

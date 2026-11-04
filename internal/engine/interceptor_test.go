@@ -18,9 +18,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	runcoilv1 "github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1"
-	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
-	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
+	runcoilv1 "github.com/runcoil/runcoil-proto/gen/runcoil/v1"
+	"github.com/runcoil/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
+	"github.com/runcoil/runcoil/internal/apierr"
 )
 
 func TestTranslate(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/log"
-	"github.com/tuanvumaihuynh/runcoil/internal/storage/postgres"
+	"github.com/runcoil/runcoil/internal/log"
+	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
 
 func main() {

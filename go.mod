@@ -1,4 +1,4 @@
-module github.com/tuanvumaihuynh/runcoil
+module github.com/runcoil/runcoil
 
 go 1.26.0
 
@@ -19,9 +19,9 @@ require (
 	github.com/lmittmann/tint v1.1.3
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/runcoil/runcoil-proto v0.0.3-0.20261104035949-005be39ee9fe
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
-	github.com/tuanvumaihuynh/runcoil-proto v0.0.2
 	google.golang.org/protobuf v1.36.12
 )
 

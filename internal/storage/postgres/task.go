@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
-	"github.com/tuanvumaihuynh/runcoil/internal/storage/postgres/sqlc"
+	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 )
 
 // TaskStore keeps the Tasks that workers registered. The timing of each Task is kept by
