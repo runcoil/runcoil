@@ -5,7 +5,7 @@ Run. This repository is the server: a [ConnectRPC](https://connectrpc.com) API
 over PostgreSQL.
 
 The application's own process runs the Task code. A worker, built with the
-[Go SDK](https://github.com/tuanvumaihuynh/runcoil-go), connects out to the
+[Go SDK](https://github.com/runcoil/runcoil-go), connects out to the
 server, registers its Tasks, and receives Runs. A caller invokes a Task through
 the API and reads the Run.
 
@@ -42,7 +42,7 @@ Nothing is installed globally.
 Clone this repository, start PostgreSQL, create the tables, and start the server:
 
 ```sh
-git clone https://github.com/tuanvumaihuynh/runcoil.git
+git clone https://github.com/runcoil/runcoil.git
 cd runcoil
 make dc-up          # PostgreSQL 18 on port 5432
 make run-migrate    # create the tables; running it again changes nothing
@@ -50,11 +50,11 @@ make run-runcoil    # the server on port 7070, with the token dev-token
 ```
 
 Start a worker in a second terminal from a checkout of the
-[Go SDK](https://github.com/tuanvumaihuynh/runcoil-go). It can be cloned anywhere;
+[Go SDK](https://github.com/runcoil/runcoil-go). It can be cloned anywhere;
 the server and SDK do not need sibling directories:
 
 ```sh
-git clone https://github.com/tuanvumaihuynh/runcoil-go.git
+git clone https://github.com/runcoil/runcoil-go.git
 cd runcoil-go
 go run ./examples/hello    # worker ID "hello", one Task "hello"
 ```
@@ -86,7 +86,7 @@ tables are missing: run `make run-migrate`.
 
 Every request needs `Authorization: Bearer <token>`, with the token the server
 was started with (`ENGINE__TOKEN`). The schema is in
-[runcoil-proto](https://github.com/tuanvumaihuynh/runcoil-proto).
+[runcoil-proto](https://github.com/runcoil/runcoil-proto).
 
 | Service | Calls | Used by |
 | --- | --- | --- |
@@ -201,7 +201,7 @@ any lost lease after the restart.
 - `pkg/service`: starts the long-running parts and stops them on a signal
 - `docker/app`: a Dockerfile for each binary
 
-The schema module `github.com/tuanvumaihuynh/runcoil-proto` is pinned to a
+The schema module `github.com/runcoil/runcoil-proto` is pinned to a
 published source revision in `go.mod`. This repository builds independently,
 without a sibling schema checkout or `go.work`.
 

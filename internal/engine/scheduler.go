@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // schedulerConfig holds the poller's window, interval, and cap.

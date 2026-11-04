@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // newTestDispatcher builds a dispatcher on the fake stores, with a fixed clock.

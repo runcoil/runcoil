@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // Config is the configuration of the engine.

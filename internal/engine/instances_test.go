@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 var t0 = time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)

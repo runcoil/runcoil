@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
-	"github.com/tuanvumaihuynh/runcoil/internal/storage/postgres/sqlc"
+	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 )
 
 // testTime is a fixed UTC time for the rows and domain values below.

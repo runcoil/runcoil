@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // fakeStore keeps Tasks, schedules, Runs, Steps, and idempotency keys in memory. It

@@ -13,10 +13,10 @@ import (
 
 	"github.com/google/uuid"
 
-	runcoilv1 "github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1"
-	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
-	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	runcoilv1 "github.com/runcoil/runcoil-proto/gen/runcoil/v1"
+	"github.com/runcoil/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
+	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 var _ runcoilv1connect.RunServiceHandler = runHandler{}

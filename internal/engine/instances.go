@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 type taskKey struct {

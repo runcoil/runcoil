@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
-	"github.com/tuanvumaihuynh/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
+	"github.com/runcoil/runcoil/internal/apierr"
 )
 
 // errorInterceptor is the one place that translates errors for the client. A

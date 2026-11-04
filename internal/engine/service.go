@@ -20,8 +20,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 
-	"github.com/tuanvumaihuynh/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
-	"github.com/tuanvumaihuynh/runcoil/internal/domain"
+	"github.com/runcoil/runcoil-proto/gen/runcoil/v1/runcoilv1connect"
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // Service serves the worker and run APIs and dispatches Runs to connected workers.
