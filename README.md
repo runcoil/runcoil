@@ -48,7 +48,7 @@ Each key is a flag (`--postgres.host`), an environment variable with the same
 name in upper case (`POSTGRES_HOST`), or a key in a YAML file passed with
 `--config`, lowest first: file, environment, flag. `cmd/runcoil/config.example.yml`
 and `cmd/runcoil/.env.example` list every key with its default. The binary never
-reads `.env`; `task run` loads `cmd/runcoil/.env` when it exists.
+reads `.env`; pass flags to `task run` after `--` to change a key.
 
 ## Layout
 
