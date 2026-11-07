@@ -5,36 +5,19 @@ package runcoil.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
 
-// One Task that a worker declares in a Register call.
 message TaskDefinition {
   string name = 1 [(buf.validate.field).string = {
     min_len: 1
     max_bytes: 255
   }];
-  // Unset: the server's default policy.
   RetryPolicy retry = 2;
-  // Execution timeout of one attempt. Unset: none.
-  google.protobuf.Duration timeout = 3 [(buf.validate.field).duration.gt = {}];
-  // How long a new Run may wait before its first start. Unset: no limit.
-  google.protobuf.Duration start_deadline = 4 [(buf.validate.field).duration.gt = {}];
-  // Event names that start a Run of this Task.
-  repeated string on_events = 5 [(buf.validate.field).repeated = {
-    unique: true
-    items: {
-      string: {
-        min_len: 1
-        max_bytes: 255
-      }
-    }
-  }];
-  // Unset: the Task has no schedule, and an earlier schedule of this Task is removed.
-  Schedule schedule = 6;
+  google.protobuf.Duration start_deadline = 3 [(buf.validate.field).duration.gt = {}];
 }
 
 message RetryPolicy {
-  // Attempts in total, the first one included. At most 1000: the retry counters are smallint.
+  // The first attempt included. At most 1000: the retry counters are smallint.
   uint32 max_attempts = 1 [(buf.validate.field).uint32.lte = 1000];
-  // Delay before each retry. The last value repeats.
+  // The last delay repeats.
   repeated google.protobuf.Duration delays = 2 [(buf.validate.field).repeated = {
     max_items: 32
     items: {
@@ -43,41 +26,4 @@ message RetryPolicy {
       }
     }
   }];
-}
-
-// Schedule of a Task. Every schedule is read in UTC.
-message Schedule {
-  oneof kind {
-    option (buf.validate.oneof).required = true;
-    // Cron expression: five fields, or six with seconds first ("*/10 * * * * *"). The
-    // server parses it at Register.
-    string cron = 1 [(buf.validate.field).string = {
-      min_len: 1
-      max_bytes: 255
-    }];
-    google.protobuf.Duration every = 2 [(buf.validate.field).duration.gt = {}];
-    DailyTimes daily = 3;
-  }
-  OverlapPolicy overlap = 4;
-}
-
-// The times of day of a daily Schedule. At least one is required.
-message DailyTimes {
-  repeated TimeOfDay at = 1 [(buf.validate.field).repeated.min_items = 1];
-}
-
-// A clock time in UTC: hour 0 to 23, minute 0 to 59.
-message TimeOfDay {
-  uint32 hour = 1 [(buf.validate.field).uint32.lte = 23];
-  uint32 minute = 2 [(buf.validate.field).uint32.lte = 59];
-}
-
-// What a tick does while the previous Run of the schedule is not finished.
-enum OverlapPolicy {
-  // Treated as ALLOW.
-  OVERLAP_POLICY_UNSPECIFIED = 0;
-  // Create the Run anyway.
-  OVERLAP_POLICY_ALLOW = 1;
-  // Create no Run for this tick.
-  OVERLAP_POLICY_SKIP = 2;
 }

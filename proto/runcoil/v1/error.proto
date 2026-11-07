@@ -2,31 +2,16 @@ syntax = "proto3";
 
 package runcoil.v1;
 
-// Detail of a failed RPC that has an ErrorCode, with the IDs the failure names.
 message ErrorDetail {
   ErrorCode code = 1;
-  // For IDEMPOTENCY_CONFLICT: the Run that holds the key.
-  string run_id = 2;
-  // For INVALID_REGISTRATION: the Task at fault.
-  string task_name = 3;
+  string task_name = 2;
 }
 
-// ErrorCode is carried in the details of a failed RPC, beside the transport's code.
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
   ERROR_CODE_INVALID_REQUEST = 1;
-  // The API key is unknown or revoked, or the worker session ended.
-  // A worker calls Register again and gets a new worker ID.
   ERROR_CODE_UNAUTHENTICATED = 2;
-  // One Task definition in a registration is invalid; nothing was registered.
   ERROR_CODE_INVALID_REGISTRATION = 3;
-  // The lease is no longer this attempt's. Stop the handler and drop its result.
   ERROR_CODE_STALE_LEASE = 4;
-  ERROR_CODE_INPUT_TOO_LARGE = 5;
-  ERROR_CODE_OUTPUT_TOO_LARGE = 6;
-  // Same idempotency key, different request.
-  ERROR_CODE_IDEMPOTENCY_CONFLICT = 7;
-  // The Run was cancelled or ran past its timeout, and the server has ended it. Stop the
-  // handler and drop its result.
-  ERROR_CODE_RUN_CANCELLED = 8;
+  ERROR_CODE_OUTPUT_TOO_LARGE = 5;
 }

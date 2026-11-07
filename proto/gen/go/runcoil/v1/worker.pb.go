@@ -24,32 +24,22 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Why the server asks a worker to stop a handler.
 type CancelReason int32
 
 const (
 	CancelReason_CANCEL_REASON_UNSPECIFIED CancelReason = 0
-	// Cancelled through the API or the dashboard. The Run ends as cancelled.
-	CancelReason_CANCEL_REASON_USER CancelReason = 1
-	// The attempt ran past the Task's timeout. The Run ends as failed with TIMEOUT.
-	CancelReason_CANCEL_REASON_TIMEOUT CancelReason = 2
-	// This worker no longer holds the lease. Its result will not be accepted.
-	CancelReason_CANCEL_REASON_LEASE_LOST CancelReason = 3
+	CancelReason_CANCEL_REASON_LEASE_LOST  CancelReason = 1
 )
 
 // Enum value maps for CancelReason.
 var (
 	CancelReason_name = map[int32]string{
 		0: "CANCEL_REASON_UNSPECIFIED",
-		1: "CANCEL_REASON_USER",
-		2: "CANCEL_REASON_TIMEOUT",
-		3: "CANCEL_REASON_LEASE_LOST",
+		1: "CANCEL_REASON_LEASE_LOST",
 	}
 	CancelReason_value = map[string]int32{
 		"CANCEL_REASON_UNSPECIFIED": 0,
-		"CANCEL_REASON_USER":        1,
-		"CANCEL_REASON_TIMEOUT":     2,
-		"CANCEL_REASON_LEASE_LOST":  3,
+		"CANCEL_REASON_LEASE_LOST":  1,
 	}
 )
 
@@ -80,13 +70,10 @@ func (CancelReason) EnumDescriptor() ([]byte, []int) {
 	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{0}
 }
 
-// One attempt of one Run. The SDK gets it in Assign and sends it back unchanged.
 type Lease struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Unique and growing over the Run's life, so a late call from an earlier attempt never
-	// matches a later one.
-	Epoch         int64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Epoch         int64                  `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -135,18 +122,14 @@ func (x *Lease) GetEpoch() int64 {
 	return 0
 }
 
-// The Tasks of one worker process, and how many Runs it runs at once.
 type RegisterRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The application's name for this group of workers. Every process that runs the same
-	// Tasks uses the same app.
-	App   string            `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
-	Tasks []*TaskDefinition `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	// Runs this process runs at one time. The server never gives it more.
-	Slots         uint32 `protobuf:"varint,3,opt,name=slots,proto3" json:"slots,omitempty"`
-	Hostname      string `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	SdkName       string `protobuf:"bytes,5,opt,name=sdk_name,json=sdkName,proto3" json:"sdk_name,omitempty"`
-	SdkVersion    string `protobuf:"bytes,6,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	App           string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Tasks         []*TaskDefinition      `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	Slots         uint32                 `protobuf:"varint,3,opt,name=slots,proto3" json:"slots,omitempty"`
+	Hostname      string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	SdkName       string                 `protobuf:"bytes,5,opt,name=sdk_name,json=sdkName,proto3" json:"sdk_name,omitempty"`
+	SdkVersion    string                 `protobuf:"bytes,6,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -223,13 +206,11 @@ func (x *RegisterRequest) GetSdkVersion() string {
 	return ""
 }
 
-// The session of the registered process and the timing the server sets for it.
 type RegisterResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Made by the server, for logs. The server never reads it from a request.
-	WorkerId          string               `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	SessionToken      string               `protobuf:"bytes,2,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
-	HeartbeatInterval *durationpb.Duration `protobuf:"bytes,3,opt,name=heartbeat_interval,json=heartbeatInterval,proto3" json:"heartbeat_interval,omitempty"`
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId          string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	SessionToken      string                 `protobuf:"bytes,2,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
+	HeartbeatInterval *durationpb.Duration   `protobuf:"bytes,3,opt,name=heartbeat_interval,json=heartbeatInterval,proto3" json:"heartbeat_interval,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -285,10 +266,9 @@ func (x *RegisterResponse) GetHeartbeatInterval() *durationpb.Duration {
 	return nil
 }
 
-// Opens the Listen stream of a registered worker.
 type ListenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Not a filter: the attempts this process is running right now. Empty on the first Listen.
+	// The attempts this process is running now. Empty on the first Listen.
 	Running       []*Lease `protobuf:"bytes,1,rep,name=running,proto3" json:"running,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -331,7 +311,6 @@ func (x *ListenRequest) GetRunning() []*Lease {
 	return nil
 }
 
-// One message on the Listen stream.
 type ListenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -430,21 +409,14 @@ func (*ListenResponse_Cancel) isListenResponse_Kind() {}
 
 func (*ListenResponse_Keepalive) isListenResponse_Kind() {}
 
-// Assign gives one attempt of one Run to the worker, with what replay needs.
 type Assign struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Lease    *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
-	TaskName string                 `protobuf:"bytes,2,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
-	// JSON. Opaque to the server.
-	Input []byte `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
-	// Steps recorded on earlier attempts. Replay reads them and calls nothing.
-	Steps []*StepRecord `protobuf:"bytes,4,rep,name=steps,proto3" json:"steps,omitempty"`
-	// Set when the attempt retries a Step that failed.
-	Retry     *StepRetry             `protobuf:"bytes,5,opt,name=retry,proto3" json:"retry,omitempty"`
-	Source    RunSource              `protobuf:"varint,6,opt,name=source,proto3,enum=runcoil.v1.RunSource" json:"source,omitempty"`
-	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	// For a scheduled Run: the tick it belongs to.
-	SourceAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=source_at,json=sourceAt,proto3" json:"source_at,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lease         *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
+	TaskName      string                 `protobuf:"bytes,2,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Steps         []*StepRecord          `protobuf:"bytes,4,rep,name=steps,proto3" json:"steps,omitempty"`
+	Retry         *StepRetry             `protobuf:"bytes,5,opt,name=retry,proto3" json:"retry,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -514,13 +486,6 @@ func (x *Assign) GetRetry() *StepRetry {
 	return nil
 }
 
-func (x *Assign) GetSource() RunSource {
-	if x != nil {
-		return x.Source
-	}
-	return RunSource_RUN_SOURCE_UNSPECIFIED
-}
-
 func (x *Assign) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
@@ -528,19 +493,10 @@ func (x *Assign) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Assign) GetSourceAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.SourceAt
-	}
-	return nil
-}
-
-// The Step this attempt tries again.
 type StepRetry struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	StepId string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	// Try of that Step, from 2.
-	Attempt       uint32 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StepId        string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	Attempt       uint32                 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -589,9 +545,6 @@ func (x *StepRetry) GetAttempt() uint32 {
 	return 0
 }
 
-// Cancel tells the worker to stop a handler. The worker answers with CompleteRun(cancelled);
-// any other call on the lease also ends the Run. After a grace period with no call, the
-// server ends the Run itself.
 type Cancel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Lease         *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
@@ -644,8 +597,6 @@ func (x *Cancel) GetReason() CancelReason {
 	return CancelReason_CANCEL_REASON_UNSPECIFIED
 }
 
-// Keepalive carries nothing. It keeps proxies from closing a quiet stream and lets the
-// worker notice a dead one.
 type Keepalive struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -682,7 +633,6 @@ func (*Keepalive) Descriptor() ([]byte, []int) {
 	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{8}
 }
 
-// Empty: the worker named in the session token is alive.
 type HeartbeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -719,7 +669,6 @@ func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
 	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{9}
 }
 
-// Empty: the session is kept.
 type HeartbeatResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -756,7 +705,6 @@ func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
 	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{10}
 }
 
-// One try of one Do Step: its outcome, and the Step's own retry policy.
 type CompleteStepRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Lease  *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
@@ -765,12 +713,10 @@ type CompleteStepRequest struct {
 	//
 	//	*CompleteStepRequest_Output
 	//	*CompleteStepRequest_Error
-	Outcome isCompleteStepRequest_Outcome `protobuf_oneof:"outcome"`
-	// The Step's own policy. Unset: the Task's policy.
-	Retry *RetryPolicy `protobuf:"bytes,5,opt,name=retry,proto3" json:"retry,omitempty"`
-	// When the Step function started and returned, for the Step's span.
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	Outcome       isCompleteStepRequest_Outcome `protobuf_oneof:"outcome"`
+	Retry         *RetryPolicy                  `protobuf:"bytes,5,opt,name=retry,proto3" json:"retry,omitempty"`
+	StartedAt     *timestamppb.Timestamp        `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	EndedAt       *timestamppb.Timestamp        `protobuf:"bytes,7,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -870,7 +816,6 @@ type isCompleteStepRequest_Outcome interface {
 }
 
 type CompleteStepRequest_Output struct {
-	// JSON. Opaque to the server.
 	Output []byte `protobuf:"bytes,3,opt,name=output,proto3,oneof"`
 }
 
@@ -882,15 +827,12 @@ func (*CompleteStepRequest_Output) isCompleteStepRequest_Outcome() {}
 
 func (*CompleteStepRequest_Error) isCompleteStepRequest_Outcome() {}
 
-// StepError is one failed try of a Step.
 type StepError struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Message string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	// Do not retry.
-	NonRetriable bool `protobuf:"varint,2,opt,name=non_retriable,json=nonRetriable,proto3" json:"non_retriable,omitempty"`
-	// Replaces the policy's delay for the next try.
-	RetryAfter *durationpb.Duration `protobuf:"bytes,3,opt,name=retry_after,json=retryAfter,proto3" json:"retry_after,omitempty"`
-	// ERROR, PANIC, or OUTPUT_NOT_ENCODABLE. The last two are never retried.
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Message      string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	NonRetriable bool                   `protobuf:"varint,2,opt,name=non_retriable,json=nonRetriable,proto3" json:"non_retriable,omitempty"`
+	RetryAfter   *durationpb.Duration   `protobuf:"bytes,3,opt,name=retry_after,json=retryAfter,proto3" json:"retry_after,omitempty"`
+	// ERROR, PANIC or OUTPUT_NOT_ENCODABLE.
 	Code          FailureCode `protobuf:"varint,4,opt,name=code,proto3,enum=runcoil.v1.FailureCode" json:"code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -954,7 +896,6 @@ func (x *StepError) GetCode() FailureCode {
 	return FailureCode_FAILURE_CODE_UNSPECIFIED
 }
 
-// The stored record of the Step, or the retry scheduled for its next try.
 type CompleteStepResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Result:
@@ -1026,13 +967,10 @@ type isCompleteStepResponse_Result interface {
 }
 
 type CompleteStepResponse_Record struct {
-	// The Step is stored. The handler continues with this record, which may be the one
-	// an earlier send stored. A Step that failed for good arrives here with its Failure.
 	Record *StepRecord `protobuf:"bytes,1,opt,name=record,proto3,oneof"`
 }
 
 type CompleteStepResponse_RetryScheduled struct {
-	// The Step will be tried again. The attempt is over: stop the handler, free the slot.
 	RetryScheduled *RetryScheduled `protobuf:"bytes,2,opt,name=retry_scheduled,json=retryScheduled,proto3,oneof"`
 }
 
@@ -1040,12 +978,10 @@ func (*CompleteStepResponse_Record) isCompleteStepResponse_Result() {}
 
 func (*CompleteStepResponse_RetryScheduled) isCompleteStepResponse_Result() {}
 
-// A try that will be retried: the earliest start of the next attempt.
 type RetryScheduled struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NextAttemptAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=next_attempt_at,json=nextAttemptAt,proto3" json:"next_attempt_at,omitempty"`
-	// Tries of the Step used so far.
-	TriesUsed     uint32 `protobuf:"varint,2,opt,name=tries_used,json=triesUsed,proto3" json:"tries_used,omitempty"`
+	TriesUsed     uint32                 `protobuf:"varint,2,opt,name=tries_used,json=triesUsed,proto3" json:"tries_used,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1094,357 +1030,6 @@ func (x *RetryScheduled) GetTriesUsed() uint32 {
 	return 0
 }
 
-// A Sleep Step.
-type SleepRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Lease  *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
-	StepId string                 `protobuf:"bytes,2,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	// The server computes the wake time with its own clock.
-	Duration      *durationpb.Duration `protobuf:"bytes,3,opt,name=duration,proto3" json:"duration,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SleepRequest) Reset() {
-	*x = SleepRequest{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SleepRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SleepRequest) ProtoMessage() {}
-
-func (x *SleepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SleepRequest.ProtoReflect.Descriptor instead.
-func (*SleepRequest) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *SleepRequest) GetLease() *Lease {
-	if x != nil {
-		return x.Lease
-	}
-	return nil
-}
-
-func (x *SleepRequest) GetStepId() string {
-	if x != nil {
-		return x.StepId
-	}
-	return ""
-}
-
-func (x *SleepRequest) GetDuration() *durationpb.Duration {
-	if x != nil {
-		return x.Duration
-	}
-	return nil
-}
-
-// Empty: the Run sleeps. Stop the handler and free the slot.
-type SleepResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SleepResponse) Reset() {
-	*x = SleepResponse{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SleepResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SleepResponse) ProtoMessage() {}
-
-func (x *SleepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SleepResponse.ProtoReflect.Descriptor instead.
-func (*SleepResponse) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{16}
-}
-
-// A WaitForEvent Step.
-type WaitForEventRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Lease     *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
-	StepId    string                 `protobuf:"bytes,2,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	EventName string                 `protobuf:"bytes,3,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
-	// Required: the correlation key that picks this Run among the waits for event_name.
-	EventKey string `protobuf:"bytes,4,opt,name=event_key,json=eventKey,proto3" json:"event_key,omitempty"`
-	// After this the Step resolves with timed_out.
-	Timeout *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
-	// Only events received at or after this time match. Unset: when the Run was created, so
-	// an event sent at any time after that matches, even one sent long before this call.
-	Since         *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=since,proto3" json:"since,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WaitForEventRequest) Reset() {
-	*x = WaitForEventRequest{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WaitForEventRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WaitForEventRequest) ProtoMessage() {}
-
-func (x *WaitForEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WaitForEventRequest.ProtoReflect.Descriptor instead.
-func (*WaitForEventRequest) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *WaitForEventRequest) GetLease() *Lease {
-	if x != nil {
-		return x.Lease
-	}
-	return nil
-}
-
-func (x *WaitForEventRequest) GetStepId() string {
-	if x != nil {
-		return x.StepId
-	}
-	return ""
-}
-
-func (x *WaitForEventRequest) GetEventName() string {
-	if x != nil {
-		return x.EventName
-	}
-	return ""
-}
-
-func (x *WaitForEventRequest) GetEventKey() string {
-	if x != nil {
-		return x.EventKey
-	}
-	return ""
-}
-
-func (x *WaitForEventRequest) GetTimeout() *durationpb.Duration {
-	if x != nil {
-		return x.Timeout
-	}
-	return nil
-}
-
-func (x *WaitForEventRequest) GetSince() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Since
-	}
-	return nil
-}
-
-// Empty: the Run waits, or is already queued with the event. Stop the handler either way.
-type WaitForEventResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WaitForEventResponse) Reset() {
-	*x = WaitForEventResponse{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WaitForEventResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WaitForEventResponse) ProtoMessage() {}
-
-func (x *WaitForEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WaitForEventResponse.ProtoReflect.Descriptor instead.
-func (*WaitForEventResponse) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{18}
-}
-
-// A SendEvent Step.
-type SendEventRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Lease     *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
-	StepId    string                 `protobuf:"bytes,2,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	EventName string                 `protobuf:"bytes,3,opt,name=event_name,json=eventName,proto3" json:"event_name,omitempty"`
-	// Correlation key for waits. Empty: the event only triggers Tasks.
-	EventKey string `protobuf:"bytes,4,opt,name=event_key,json=eventKey,proto3" json:"event_key,omitempty"`
-	// JSON. Opaque to the server.
-	Payload       []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SendEventRequest) Reset() {
-	*x = SendEventRequest{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SendEventRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SendEventRequest) ProtoMessage() {}
-
-func (x *SendEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SendEventRequest.ProtoReflect.Descriptor instead.
-func (*SendEventRequest) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *SendEventRequest) GetLease() *Lease {
-	if x != nil {
-		return x.Lease
-	}
-	return nil
-}
-
-func (x *SendEventRequest) GetStepId() string {
-	if x != nil {
-		return x.StepId
-	}
-	return ""
-}
-
-func (x *SendEventRequest) GetEventName() string {
-	if x != nil {
-		return x.EventName
-	}
-	return ""
-}
-
-func (x *SendEventRequest) GetEventKey() string {
-	if x != nil {
-		return x.EventKey
-	}
-	return ""
-}
-
-func (x *SendEventRequest) GetPayload() []byte {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
-}
-
-// The stored record of the Step; its output is the event ID. On a resend or a replay it is
-// the record of the first send, and no second event exists.
-type SendEventResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Record        *StepRecord            `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SendEventResponse) Reset() {
-	*x = SendEventResponse{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[20]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SendEventResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SendEventResponse) ProtoMessage() {}
-
-func (x *SendEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[20]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SendEventResponse.ProtoReflect.Descriptor instead.
-func (*SendEventResponse) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *SendEventResponse) GetRecord() *StepRecord {
-	if x != nil {
-		return x.Record
-	}
-	return nil
-}
-
-// Ends the worker's attempt of a Run with its result.
 type CompleteRunRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Lease *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
@@ -1452,7 +1037,6 @@ type CompleteRunRequest struct {
 	//
 	//	*CompleteRunRequest_Output
 	//	*CompleteRunRequest_Failure
-	//	*CompleteRunRequest_Cancelled
 	Result        isCompleteRunRequest_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1460,7 +1044,7 @@ type CompleteRunRequest struct {
 
 func (x *CompleteRunRequest) Reset() {
 	*x = CompleteRunRequest{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[21]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1472,7 +1056,7 @@ func (x *CompleteRunRequest) String() string {
 func (*CompleteRunRequest) ProtoMessage() {}
 
 func (x *CompleteRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[21]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1485,7 +1069,7 @@ func (x *CompleteRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteRunRequest.ProtoReflect.Descriptor instead.
 func (*CompleteRunRequest) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{21}
+	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CompleteRunRequest) GetLease() *Lease {
@@ -1520,78 +1104,22 @@ func (x *CompleteRunRequest) GetFailure() *Failure {
 	return nil
 }
 
-func (x *CompleteRunRequest) GetCancelled() *Cancelled {
-	if x != nil {
-		if x, ok := x.Result.(*CompleteRunRequest_Cancelled); ok {
-			return x.Cancelled
-		}
-	}
-	return nil
-}
-
 type isCompleteRunRequest_Result interface {
 	isCompleteRunRequest_Result()
 }
 
 type CompleteRunRequest_Output struct {
-	// The handler returned. JSON, opaque to the server.
 	Output []byte `protobuf:"bytes,2,opt,name=output,proto3,oneof"`
 }
 
 type CompleteRunRequest_Failure struct {
-	// The handler failed outside any Step, or returned a Step's final error. Never retried.
 	Failure *Failure `protobuf:"bytes,3,opt,name=failure,proto3,oneof"`
-}
-
-type CompleteRunRequest_Cancelled struct {
-	// The handler stopped after a Cancel.
-	Cancelled *Cancelled `protobuf:"bytes,4,opt,name=cancelled,proto3,oneof"`
 }
 
 func (*CompleteRunRequest_Output) isCompleteRunRequest_Result() {}
 
 func (*CompleteRunRequest_Failure) isCompleteRunRequest_Result() {}
 
-func (*CompleteRunRequest_Cancelled) isCompleteRunRequest_Result() {}
-
-// The handler stopped after a Cancel.
-type Cancelled struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Cancelled) Reset() {
-	*x = Cancelled{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Cancelled) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Cancelled) ProtoMessage() {}
-
-func (x *Cancelled) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Cancelled.ProtoReflect.Descriptor instead.
-func (*Cancelled) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{22}
-}
-
-// Empty: the attempt is over.
 type CompleteRunResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1600,7 +1128,7 @@ type CompleteRunResponse struct {
 
 func (x *CompleteRunResponse) Reset() {
 	*x = CompleteRunResponse{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[23]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +1140,7 @@ func (x *CompleteRunResponse) String() string {
 func (*CompleteRunResponse) ProtoMessage() {}
 
 func (x *CompleteRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[23]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,21 +1153,19 @@ func (x *CompleteRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteRunResponse.ProtoReflect.Descriptor instead.
 func (*CompleteRunResponse) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{23}
+	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{16}
 }
 
-// Ends the session of a worker that drained.
 type DeregisterRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Free text for logs.
-	Reason        string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeregisterRequest) Reset() {
 	*x = DeregisterRequest{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[24]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1177,7 @@ func (x *DeregisterRequest) String() string {
 func (*DeregisterRequest) ProtoMessage() {}
 
 func (x *DeregisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[24]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1190,7 @@ func (x *DeregisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeregisterRequest.ProtoReflect.Descriptor instead.
 func (*DeregisterRequest) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{24}
+	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeregisterRequest) GetReason() string {
@@ -1674,7 +1200,6 @@ func (x *DeregisterRequest) GetReason() string {
 	return ""
 }
 
-// Empty: the session is over and its leases are back in the queue.
 type DeregisterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1683,7 +1208,7 @@ type DeregisterResponse struct {
 
 func (x *DeregisterResponse) Reset() {
 	*x = DeregisterResponse{}
-	mi := &file_runcoil_v1_worker_proto_msgTypes[25]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1695,7 +1220,7 @@ func (x *DeregisterResponse) String() string {
 func (*DeregisterResponse) ProtoMessage() {}
 
 func (x *DeregisterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runcoil_v1_worker_proto_msgTypes[25]
+	mi := &file_runcoil_v1_worker_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1708,7 +1233,7 @@ func (x *DeregisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeregisterResponse.ProtoReflect.Descriptor instead.
 func (*DeregisterResponse) Descriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{25}
+	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{18}
 }
 
 var File_runcoil_v1_worker_proto protoreflect.FileDescriptor
@@ -1739,17 +1264,15 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x06assign\x18\x01 \x01(\v2\x12.runcoil.v1.AssignH\x00R\x06assign\x12,\n" +
 	"\x06cancel\x18\x02 \x01(\v2\x12.runcoil.v1.CancelH\x00R\x06cancel\x125\n" +
 	"\tkeepalive\x18\x03 \x01(\v2\x15.runcoil.v1.KeepaliveH\x00R\tkeepaliveB\x06\n" +
-	"\x04kind\"\xe2\x02\n" +
+	"\x04kind\"\xfa\x01\n" +
 	"\x06Assign\x12'\n" +
 	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseR\x05lease\x12\x1b\n" +
 	"\ttask_name\x18\x02 \x01(\tR\btaskName\x12\x14\n" +
 	"\x05input\x18\x03 \x01(\fR\x05input\x12,\n" +
 	"\x05steps\x18\x04 \x03(\v2\x16.runcoil.v1.StepRecordR\x05steps\x12+\n" +
-	"\x05retry\x18\x05 \x01(\v2\x15.runcoil.v1.StepRetryR\x05retry\x12-\n" +
-	"\x06source\x18\x06 \x01(\x0e2\x15.runcoil.v1.RunSourceR\x06source\x129\n" +
+	"\x05retry\x18\x05 \x01(\v2\x15.runcoil.v1.StepRetryR\x05retry\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x127\n" +
-	"\tsource_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bsourceAt\">\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\">\n" +
 	"\tStepRetry\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x18\n" +
 	"\aattempt\x18\x02 \x01(\rR\aattempt\"c\n" +
@@ -1775,7 +1298,7 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\rnon_retriable\x18\x02 \x01(\bR\fnonRetriable\x12:\n" +
 	"\vretry_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"retryAfter\x129\n" +
-	"\x04code\x18\x04 \x01(\x0e2\x17.runcoil.v1.FailureCodeB\f\xbaH\t\x82\x01\x06\x18\x01\x18\x02\x18\aR\x04code\"\x99\x01\n" +
+	"\x04code\x18\x04 \x01(\x0e2\x17.runcoil.v1.FailureCodeB\f\xbaH\t\x82\x01\x06\x18\x01\x18\x02\x18\x06R\x04code\"\x99\x01\n" +
 	"\x14CompleteStepResponse\x120\n" +
 	"\x06record\x18\x01 \x01(\v2\x16.runcoil.v1.StepRecordH\x00R\x06record\x12E\n" +
 	"\x0fretry_scheduled\x18\x02 \x01(\v2\x1a.runcoil.v1.RetryScheduledH\x00R\x0eretryScheduledB\b\n" +
@@ -1783,60 +1306,24 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x0eRetryScheduled\x12B\n" +
 	"\x0fnext_attempt_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\rnextAttemptAt\x12\x1d\n" +
 	"\n" +
-	"tries_used\x18\x02 \x01(\rR\ttriesUsed\"\xa8\x01\n" +
-	"\fSleepRequest\x12/\n" +
-	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12#\n" +
-	"\astep_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\x80\bR\x06stepId\x12B\n" +
-	"\bduration\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\v\xbaH\b\xc8\x01\x01\xaa\x01\x022\x00R\bduration\"\x0f\n" +
-	"\rSleepResponse\"\xb3\x02\n" +
-	"\x13WaitForEventRequest\x12/\n" +
-	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12#\n" +
-	"\astep_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\x80\bR\x06stepId\x12)\n" +
-	"\n" +
-	"event_name\x18\x03 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\xff\x01R\teventName\x12'\n" +
-	"\tevent_key\x18\x04 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\x80\bR\beventKey\x12@\n" +
-	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationB\v\xbaH\b\xc8\x01\x01\xaa\x01\x02*\x00R\atimeout\x120\n" +
-	"\x05since\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\"\x16\n" +
-	"\x14WaitForEventResponse\"\xd4\x01\n" +
-	"\x10SendEventRequest\x12/\n" +
-	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12#\n" +
-	"\astep_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\x80\bR\x06stepId\x12)\n" +
-	"\n" +
-	"event_name\x18\x03 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\xff\x01R\teventName\x12%\n" +
-	"\tevent_key\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\beventKey\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\"C\n" +
-	"\x11SendEventResponse\x12.\n" +
-	"\x06record\x18\x01 \x01(\v2\x16.runcoil.v1.StepRecordR\x06record\"\xd8\x01\n" +
+	"tries_used\x18\x02 \x01(\rR\ttriesUsed\"\xa1\x01\n" +
 	"\x12CompleteRunRequest\x12/\n" +
 	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12\x18\n" +
 	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12/\n" +
-	"\afailure\x18\x03 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailure\x125\n" +
-	"\tcancelled\x18\x04 \x01(\v2\x15.runcoil.v1.CancelledH\x00R\tcancelledB\x0f\n" +
-	"\x06result\x12\x05\xbaH\x02\b\x01\"\v\n" +
-	"\tCancelled\"\x15\n" +
+	"\afailure\x18\x03 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailureB\x0f\n" +
+	"\x06result\x12\x05\xbaH\x02\b\x01\"\x15\n" +
 	"\x13CompleteRunResponse\"5\n" +
 	"\x11DeregisterRequest\x12 \n" +
 	"\x06reason\x18\x01 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x06reason\"\x14\n" +
-	"\x12DeregisterResponse*~\n" +
+	"\x12DeregisterResponse*K\n" +
 	"\fCancelReason\x12\x1d\n" +
-	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12CANCEL_REASON_USER\x10\x01\x12\x19\n" +
-	"\x15CANCEL_REASON_TIMEOUT\x10\x02\x12\x1c\n" +
-	"\x18CANCEL_REASON_LEASE_LOST\x10\x032\xae\x05\n" +
+	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18CANCEL_REASON_LEASE_LOST\x10\x012\xd3\x03\n" +
 	"\rWorkerService\x12E\n" +
 	"\bRegister\x12\x1b.runcoil.v1.RegisterRequest\x1a\x1c.runcoil.v1.RegisterResponse\x12A\n" +
 	"\x06Listen\x12\x19.runcoil.v1.ListenRequest\x1a\x1a.runcoil.v1.ListenResponse0\x01\x12H\n" +
 	"\tHeartbeat\x12\x1c.runcoil.v1.HeartbeatRequest\x1a\x1d.runcoil.v1.HeartbeatResponse\x12Q\n" +
-	"\fCompleteStep\x12\x1f.runcoil.v1.CompleteStepRequest\x1a .runcoil.v1.CompleteStepResponse\x12<\n" +
-	"\x05Sleep\x12\x18.runcoil.v1.SleepRequest\x1a\x19.runcoil.v1.SleepResponse\x12Q\n" +
-	"\fWaitForEvent\x12\x1f.runcoil.v1.WaitForEventRequest\x1a .runcoil.v1.WaitForEventResponse\x12H\n" +
-	"\tSendEvent\x12\x1c.runcoil.v1.SendEventRequest\x1a\x1d.runcoil.v1.SendEventResponse\x12N\n" +
+	"\fCompleteStep\x12\x1f.runcoil.v1.CompleteStepRequest\x1a .runcoil.v1.CompleteStepResponse\x12N\n" +
 	"\vCompleteRun\x12\x1e.runcoil.v1.CompleteRunRequest\x1a\x1f.runcoil.v1.CompleteRunResponse\x12K\n" +
 	"\n" +
 	"Deregister\x12\x1d.runcoil.v1.DeregisterRequest\x1a\x1e.runcoil.v1.DeregisterResponseB\xa4\x01\n" +
@@ -1857,7 +1344,7 @@ func file_runcoil_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var file_runcoil_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_runcoil_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_runcoil_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_runcoil_v1_worker_proto_goTypes = []any{
 	(CancelReason)(0),             // 0: runcoil.v1.CancelReason
 	(*Lease)(nil),                 // 1: runcoil.v1.Lease
@@ -1875,84 +1362,60 @@ var file_runcoil_v1_worker_proto_goTypes = []any{
 	(*StepError)(nil),             // 13: runcoil.v1.StepError
 	(*CompleteStepResponse)(nil),  // 14: runcoil.v1.CompleteStepResponse
 	(*RetryScheduled)(nil),        // 15: runcoil.v1.RetryScheduled
-	(*SleepRequest)(nil),          // 16: runcoil.v1.SleepRequest
-	(*SleepResponse)(nil),         // 17: runcoil.v1.SleepResponse
-	(*WaitForEventRequest)(nil),   // 18: runcoil.v1.WaitForEventRequest
-	(*WaitForEventResponse)(nil),  // 19: runcoil.v1.WaitForEventResponse
-	(*SendEventRequest)(nil),      // 20: runcoil.v1.SendEventRequest
-	(*SendEventResponse)(nil),     // 21: runcoil.v1.SendEventResponse
-	(*CompleteRunRequest)(nil),    // 22: runcoil.v1.CompleteRunRequest
-	(*Cancelled)(nil),             // 23: runcoil.v1.Cancelled
-	(*CompleteRunResponse)(nil),   // 24: runcoil.v1.CompleteRunResponse
-	(*DeregisterRequest)(nil),     // 25: runcoil.v1.DeregisterRequest
-	(*DeregisterResponse)(nil),    // 26: runcoil.v1.DeregisterResponse
-	(*TaskDefinition)(nil),        // 27: runcoil.v1.TaskDefinition
-	(*durationpb.Duration)(nil),   // 28: google.protobuf.Duration
-	(*StepRecord)(nil),            // 29: runcoil.v1.StepRecord
-	(RunSource)(0),                // 30: runcoil.v1.RunSource
-	(*timestamppb.Timestamp)(nil), // 31: google.protobuf.Timestamp
-	(*RetryPolicy)(nil),           // 32: runcoil.v1.RetryPolicy
-	(FailureCode)(0),              // 33: runcoil.v1.FailureCode
-	(*Failure)(nil),               // 34: runcoil.v1.Failure
+	(*CompleteRunRequest)(nil),    // 16: runcoil.v1.CompleteRunRequest
+	(*CompleteRunResponse)(nil),   // 17: runcoil.v1.CompleteRunResponse
+	(*DeregisterRequest)(nil),     // 18: runcoil.v1.DeregisterRequest
+	(*DeregisterResponse)(nil),    // 19: runcoil.v1.DeregisterResponse
+	(*TaskDefinition)(nil),        // 20: runcoil.v1.TaskDefinition
+	(*durationpb.Duration)(nil),   // 21: google.protobuf.Duration
+	(*StepRecord)(nil),            // 22: runcoil.v1.StepRecord
+	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*RetryPolicy)(nil),           // 24: runcoil.v1.RetryPolicy
+	(FailureCode)(0),              // 25: runcoil.v1.FailureCode
+	(*Failure)(nil),               // 26: runcoil.v1.Failure
 }
 var file_runcoil_v1_worker_proto_depIdxs = []int32{
-	27, // 0: runcoil.v1.RegisterRequest.tasks:type_name -> runcoil.v1.TaskDefinition
-	28, // 1: runcoil.v1.RegisterResponse.heartbeat_interval:type_name -> google.protobuf.Duration
+	20, // 0: runcoil.v1.RegisterRequest.tasks:type_name -> runcoil.v1.TaskDefinition
+	21, // 1: runcoil.v1.RegisterResponse.heartbeat_interval:type_name -> google.protobuf.Duration
 	1,  // 2: runcoil.v1.ListenRequest.running:type_name -> runcoil.v1.Lease
 	6,  // 3: runcoil.v1.ListenResponse.assign:type_name -> runcoil.v1.Assign
 	8,  // 4: runcoil.v1.ListenResponse.cancel:type_name -> runcoil.v1.Cancel
 	9,  // 5: runcoil.v1.ListenResponse.keepalive:type_name -> runcoil.v1.Keepalive
 	1,  // 6: runcoil.v1.Assign.lease:type_name -> runcoil.v1.Lease
-	29, // 7: runcoil.v1.Assign.steps:type_name -> runcoil.v1.StepRecord
+	22, // 7: runcoil.v1.Assign.steps:type_name -> runcoil.v1.StepRecord
 	7,  // 8: runcoil.v1.Assign.retry:type_name -> runcoil.v1.StepRetry
-	30, // 9: runcoil.v1.Assign.source:type_name -> runcoil.v1.RunSource
-	31, // 10: runcoil.v1.Assign.created_at:type_name -> google.protobuf.Timestamp
-	31, // 11: runcoil.v1.Assign.source_at:type_name -> google.protobuf.Timestamp
-	1,  // 12: runcoil.v1.Cancel.lease:type_name -> runcoil.v1.Lease
-	0,  // 13: runcoil.v1.Cancel.reason:type_name -> runcoil.v1.CancelReason
-	1,  // 14: runcoil.v1.CompleteStepRequest.lease:type_name -> runcoil.v1.Lease
-	13, // 15: runcoil.v1.CompleteStepRequest.error:type_name -> runcoil.v1.StepError
-	32, // 16: runcoil.v1.CompleteStepRequest.retry:type_name -> runcoil.v1.RetryPolicy
-	31, // 17: runcoil.v1.CompleteStepRequest.started_at:type_name -> google.protobuf.Timestamp
-	31, // 18: runcoil.v1.CompleteStepRequest.ended_at:type_name -> google.protobuf.Timestamp
-	28, // 19: runcoil.v1.StepError.retry_after:type_name -> google.protobuf.Duration
-	33, // 20: runcoil.v1.StepError.code:type_name -> runcoil.v1.FailureCode
-	29, // 21: runcoil.v1.CompleteStepResponse.record:type_name -> runcoil.v1.StepRecord
-	15, // 22: runcoil.v1.CompleteStepResponse.retry_scheduled:type_name -> runcoil.v1.RetryScheduled
-	31, // 23: runcoil.v1.RetryScheduled.next_attempt_at:type_name -> google.protobuf.Timestamp
-	1,  // 24: runcoil.v1.SleepRequest.lease:type_name -> runcoil.v1.Lease
-	28, // 25: runcoil.v1.SleepRequest.duration:type_name -> google.protobuf.Duration
-	1,  // 26: runcoil.v1.WaitForEventRequest.lease:type_name -> runcoil.v1.Lease
-	28, // 27: runcoil.v1.WaitForEventRequest.timeout:type_name -> google.protobuf.Duration
-	31, // 28: runcoil.v1.WaitForEventRequest.since:type_name -> google.protobuf.Timestamp
-	1,  // 29: runcoil.v1.SendEventRequest.lease:type_name -> runcoil.v1.Lease
-	29, // 30: runcoil.v1.SendEventResponse.record:type_name -> runcoil.v1.StepRecord
-	1,  // 31: runcoil.v1.CompleteRunRequest.lease:type_name -> runcoil.v1.Lease
-	34, // 32: runcoil.v1.CompleteRunRequest.failure:type_name -> runcoil.v1.Failure
-	23, // 33: runcoil.v1.CompleteRunRequest.cancelled:type_name -> runcoil.v1.Cancelled
-	2,  // 34: runcoil.v1.WorkerService.Register:input_type -> runcoil.v1.RegisterRequest
-	4,  // 35: runcoil.v1.WorkerService.Listen:input_type -> runcoil.v1.ListenRequest
-	10, // 36: runcoil.v1.WorkerService.Heartbeat:input_type -> runcoil.v1.HeartbeatRequest
-	12, // 37: runcoil.v1.WorkerService.CompleteStep:input_type -> runcoil.v1.CompleteStepRequest
-	16, // 38: runcoil.v1.WorkerService.Sleep:input_type -> runcoil.v1.SleepRequest
-	18, // 39: runcoil.v1.WorkerService.WaitForEvent:input_type -> runcoil.v1.WaitForEventRequest
-	20, // 40: runcoil.v1.WorkerService.SendEvent:input_type -> runcoil.v1.SendEventRequest
-	22, // 41: runcoil.v1.WorkerService.CompleteRun:input_type -> runcoil.v1.CompleteRunRequest
-	25, // 42: runcoil.v1.WorkerService.Deregister:input_type -> runcoil.v1.DeregisterRequest
-	3,  // 43: runcoil.v1.WorkerService.Register:output_type -> runcoil.v1.RegisterResponse
-	5,  // 44: runcoil.v1.WorkerService.Listen:output_type -> runcoil.v1.ListenResponse
-	11, // 45: runcoil.v1.WorkerService.Heartbeat:output_type -> runcoil.v1.HeartbeatResponse
-	14, // 46: runcoil.v1.WorkerService.CompleteStep:output_type -> runcoil.v1.CompleteStepResponse
-	17, // 47: runcoil.v1.WorkerService.Sleep:output_type -> runcoil.v1.SleepResponse
-	19, // 48: runcoil.v1.WorkerService.WaitForEvent:output_type -> runcoil.v1.WaitForEventResponse
-	21, // 49: runcoil.v1.WorkerService.SendEvent:output_type -> runcoil.v1.SendEventResponse
-	24, // 50: runcoil.v1.WorkerService.CompleteRun:output_type -> runcoil.v1.CompleteRunResponse
-	26, // 51: runcoil.v1.WorkerService.Deregister:output_type -> runcoil.v1.DeregisterResponse
-	43, // [43:52] is the sub-list for method output_type
-	34, // [34:43] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	23, // 9: runcoil.v1.Assign.created_at:type_name -> google.protobuf.Timestamp
+	1,  // 10: runcoil.v1.Cancel.lease:type_name -> runcoil.v1.Lease
+	0,  // 11: runcoil.v1.Cancel.reason:type_name -> runcoil.v1.CancelReason
+	1,  // 12: runcoil.v1.CompleteStepRequest.lease:type_name -> runcoil.v1.Lease
+	13, // 13: runcoil.v1.CompleteStepRequest.error:type_name -> runcoil.v1.StepError
+	24, // 14: runcoil.v1.CompleteStepRequest.retry:type_name -> runcoil.v1.RetryPolicy
+	23, // 15: runcoil.v1.CompleteStepRequest.started_at:type_name -> google.protobuf.Timestamp
+	23, // 16: runcoil.v1.CompleteStepRequest.ended_at:type_name -> google.protobuf.Timestamp
+	21, // 17: runcoil.v1.StepError.retry_after:type_name -> google.protobuf.Duration
+	25, // 18: runcoil.v1.StepError.code:type_name -> runcoil.v1.FailureCode
+	22, // 19: runcoil.v1.CompleteStepResponse.record:type_name -> runcoil.v1.StepRecord
+	15, // 20: runcoil.v1.CompleteStepResponse.retry_scheduled:type_name -> runcoil.v1.RetryScheduled
+	23, // 21: runcoil.v1.RetryScheduled.next_attempt_at:type_name -> google.protobuf.Timestamp
+	1,  // 22: runcoil.v1.CompleteRunRequest.lease:type_name -> runcoil.v1.Lease
+	26, // 23: runcoil.v1.CompleteRunRequest.failure:type_name -> runcoil.v1.Failure
+	2,  // 24: runcoil.v1.WorkerService.Register:input_type -> runcoil.v1.RegisterRequest
+	4,  // 25: runcoil.v1.WorkerService.Listen:input_type -> runcoil.v1.ListenRequest
+	10, // 26: runcoil.v1.WorkerService.Heartbeat:input_type -> runcoil.v1.HeartbeatRequest
+	12, // 27: runcoil.v1.WorkerService.CompleteStep:input_type -> runcoil.v1.CompleteStepRequest
+	16, // 28: runcoil.v1.WorkerService.CompleteRun:input_type -> runcoil.v1.CompleteRunRequest
+	18, // 29: runcoil.v1.WorkerService.Deregister:input_type -> runcoil.v1.DeregisterRequest
+	3,  // 30: runcoil.v1.WorkerService.Register:output_type -> runcoil.v1.RegisterResponse
+	5,  // 31: runcoil.v1.WorkerService.Listen:output_type -> runcoil.v1.ListenResponse
+	11, // 32: runcoil.v1.WorkerService.Heartbeat:output_type -> runcoil.v1.HeartbeatResponse
+	14, // 33: runcoil.v1.WorkerService.CompleteStep:output_type -> runcoil.v1.CompleteStepResponse
+	17, // 34: runcoil.v1.WorkerService.CompleteRun:output_type -> runcoil.v1.CompleteRunResponse
+	19, // 35: runcoil.v1.WorkerService.Deregister:output_type -> runcoil.v1.DeregisterResponse
+	30, // [30:36] is the sub-list for method output_type
+	24, // [24:30] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_runcoil_v1_worker_proto_init() }
@@ -1975,10 +1438,9 @@ func file_runcoil_v1_worker_proto_init() {
 		(*CompleteStepResponse_Record)(nil),
 		(*CompleteStepResponse_RetryScheduled)(nil),
 	}
-	file_runcoil_v1_worker_proto_msgTypes[21].OneofWrappers = []any{
+	file_runcoil_v1_worker_proto_msgTypes[15].OneofWrappers = []any{
 		(*CompleteRunRequest_Output)(nil),
 		(*CompleteRunRequest_Failure)(nil),
-		(*CompleteRunRequest_Cancelled)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1986,7 +1448,7 @@ func file_runcoil_v1_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runcoil_v1_worker_proto_rawDesc), len(file_runcoil_v1_worker_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

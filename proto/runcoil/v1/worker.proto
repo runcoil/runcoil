@@ -8,75 +8,27 @@ import "google/protobuf/timestamp.proto";
 import "runcoil/v1/run.proto";
 import "runcoil/v1/task.proto";
 
-// Register takes the project's API key; every other call takes the session token that
-// Register returns.
+// Register takes the API key; the other calls take the session token that Register returns.
 service WorkerService {
-  // Register declares the Tasks of one worker process and opens its session. All-or-nothing:
-  // one invalid Task registers nothing. Upserts the Tasks, their event triggers and schedules.
   rpc Register(RegisterRequest) returns (RegisterResponse);
-
-  // Listen is the only stream. The worker opens it and the server pushes on it.
-  //
-  // 1. The worker reports the Runs it is really running. Leases it does not name go back to
-  //    the queue; named Runs it no longer holds get a Cancel with LEASE_LOST.
-  // 2. The server sends Keepalive at the heartbeat interval, so proxies keep a quiet stream
-  //    open and the worker notices a dead one (HTTP/1.1 has no transport ping).
-  // 3. A newer Listen of the same worker replaces the older one; claims made for the old
-  //    stream are reconciled.
-  // 4. When the stream ends, the server stops dispatching to this worker at once. Leases
-  //    stay while heartbeats keep coming: closing Listen is how a worker drains.
   rpc Listen(ListenRequest) returns (stream ListenResponse);
-
-  // Heartbeat shows the worker process is alive, which keeps every lease it holds. Sent at
-  // the heartbeat interval, outside the stream. With none for the session TTL, the session
-  // ends and its leases go back to the queue, counted as lost.
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
-
-  // CompleteStep stores the outcome of one try of a Do Step and answers after the commit.
   rpc CompleteStep(CompleteStepRequest) returns (CompleteStepResponse);
-
-  // Sleep records the Step with its wake time and puts the Run to sleep. The attempt ends:
-  // the worker stops the handler and frees the slot. The Run is replayed after the wake time.
-  rpc Sleep(SleepRequest) returns (SleepResponse);
-
-  // WaitForEvent puts the Run to wait for an event by name and key. The attempt ends either
-  // way. An event already received since `since` resolves the Step at once and queues the
-  // Run; otherwise the Run waits until the event or the timeout.
-  rpc WaitForEvent(WaitForEventRequest) returns (WaitForEventResponse);
-
-  // SendEvent sends an event from a Run as a Step: it triggers Tasks by name and resolves
-  // waits by name and key, like any event. The attempt goes on. The record of the Step
-  // makes it safe on replay: an event is sent once per Run and Step.
-  rpc SendEvent(SendEventRequest) returns (SendEventResponse);
-
-  // CompleteRun ends the worker's attempt: the handler returned, failed outside any Step, or
-  // stopped after a Cancel.
   rpc CompleteRun(CompleteRunRequest) returns (CompleteRunResponse);
-
-  // Deregister ends the session after a drain: close Listen, let handlers finish within the
-  // drain time, cancel the rest, then call this. Leases still held go back to the queue
-  // without counting as lost; their recorded Steps are kept.
   rpc Deregister(DeregisterRequest) returns (DeregisterResponse);
 }
 
-// One attempt of one Run. The SDK gets it in Assign and sends it back unchanged.
 message Lease {
   string run_id = 1 [(buf.validate.field).string.uuid = true];
-  // Unique and growing over the Run's life, so a late call from an earlier attempt never
-  // matches a later one.
   int64 epoch = 2 [(buf.validate.field).int64.gt = 0];
 }
 
-// The Tasks of one worker process, and how many Runs it runs at once.
 message RegisterRequest {
-  // The application's name for this group of workers. Every process that runs the same
-  // Tasks uses the same app.
   string app = 1 [(buf.validate.field).string = {
     min_len: 1
     max_bytes: 255
   }];
   repeated TaskDefinition tasks = 2 [(buf.validate.field).repeated.min_items = 1];
-  // Runs this process runs at one time. The server never gives it more.
   uint32 slots = 3 [(buf.validate.field).uint32.gte = 1];
   string hostname = 4 [(buf.validate.field).string.max_bytes = 255];
   string sdk_name = 5 [(buf.validate.field).string = {
@@ -89,21 +41,17 @@ message RegisterRequest {
   }];
 }
 
-// The session of the registered process and the timing the server sets for it.
 message RegisterResponse {
-  // Made by the server, for logs. The server never reads it from a request.
   string worker_id = 1;
   string session_token = 2;
   google.protobuf.Duration heartbeat_interval = 3;
 }
 
-// Opens the Listen stream of a registered worker.
 message ListenRequest {
-  // Not a filter: the attempts this process is running right now. Empty on the first Listen.
+  // The attempts this process is running now. Empty on the first Listen.
   repeated Lease running = 1;
 }
 
-// One message on the Listen stream.
 message ListenResponse {
   oneof kind {
     Assign assign = 1;
@@ -112,48 +60,31 @@ message ListenResponse {
   }
 }
 
-// Assign gives one attempt of one Run to the worker, with what replay needs.
 message Assign {
   Lease lease = 1;
   string task_name = 2;
-  // JSON. Opaque to the server.
   bytes input = 3;
-  // Steps recorded on earlier attempts. Replay reads them and calls nothing.
   repeated StepRecord steps = 4;
-  // Set when the attempt retries a Step that failed.
   StepRetry retry = 5;
-  RunSource source = 6;
-  google.protobuf.Timestamp created_at = 7;
-  // For a scheduled Run: the tick it belongs to.
-  google.protobuf.Timestamp source_at = 8;
+  google.protobuf.Timestamp created_at = 6;
 }
 
-// The Step this attempt tries again.
 message StepRetry {
   string step_id = 1;
-  // Try of that Step, from 2.
   uint32 attempt = 2;
 }
 
-// Cancel tells the worker to stop a handler. The worker answers with CompleteRun(cancelled);
-// any other call on the lease also ends the Run. After a grace period with no call, the
-// server ends the Run itself.
 message Cancel {
   Lease lease = 1;
   CancelReason reason = 2;
 }
 
-// Keepalive carries nothing. It keeps proxies from closing a quiet stream and lets the
-// worker notice a dead one.
 message Keepalive {}
 
-// Empty: the worker named in the session token is alive.
 message HeartbeatRequest {}
 
-// Empty: the session is kept.
 message HeartbeatResponse {}
 
-// One try of one Do Step: its outcome, and the Step's own retry policy.
 message CompleteStepRequest {
   Lease lease = 1 [(buf.validate.field).required = true];
   string step_id = 2 [(buf.validate.field).string = {
@@ -162,157 +93,58 @@ message CompleteStepRequest {
   }];
   oneof outcome {
     option (buf.validate.oneof).required = true;
-    // JSON. Opaque to the server.
     bytes output = 3;
     StepError error = 4;
   }
-  // The Step's own policy. Unset: the Task's policy.
   RetryPolicy retry = 5;
-  // When the Step function started and returned, for the Step's span.
   google.protobuf.Timestamp started_at = 6;
   google.protobuf.Timestamp ended_at = 7;
 }
 
-// StepError is one failed try of a Step.
 message StepError {
   string message = 1;
-  // Do not retry.
   bool non_retriable = 2;
-  // Replaces the policy's delay for the next try.
   google.protobuf.Duration retry_after = 3;
-  // ERROR, PANIC, or OUTPUT_NOT_ENCODABLE. The last two are never retried.
+  // ERROR, PANIC or OUTPUT_NOT_ENCODABLE.
   FailureCode code = 4 [(buf.validate.field).enum = {
     in: [
       1,
       2,
-      7
+      6
     ]
   }];
 }
 
-// The stored record of the Step, or the retry scheduled for its next try.
 message CompleteStepResponse {
   oneof result {
-    // The Step is stored. The handler continues with this record, which may be the one
-    // an earlier send stored. A Step that failed for good arrives here with its Failure.
     StepRecord record = 1;
-    // The Step will be tried again. The attempt is over: stop the handler, free the slot.
     RetryScheduled retry_scheduled = 2;
   }
 }
 
-// A try that will be retried: the earliest start of the next attempt.
 message RetryScheduled {
   google.protobuf.Timestamp next_attempt_at = 1;
-  // Tries of the Step used so far.
   uint32 tries_used = 2;
 }
 
-// A Sleep Step.
-message SleepRequest {
-  Lease lease = 1 [(buf.validate.field).required = true];
-  string step_id = 2 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 1024
-  }];
-  // The server computes the wake time with its own clock.
-  google.protobuf.Duration duration = 3 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).duration.gte = {}
-  ];
-}
-
-// Empty: the Run sleeps. Stop the handler and free the slot.
-message SleepResponse {}
-
-// A WaitForEvent Step.
-message WaitForEventRequest {
-  Lease lease = 1 [(buf.validate.field).required = true];
-  string step_id = 2 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 1024
-  }];
-  string event_name = 3 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 255
-  }];
-  // Required: the correlation key that picks this Run among the waits for event_name.
-  string event_key = 4 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 1024
-  }];
-  // After this the Step resolves with timed_out.
-  google.protobuf.Duration timeout = 5 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).duration.gt = {}
-  ];
-  // Only events received at or after this time match. Unset: when the Run was created, so
-  // an event sent at any time after that matches, even one sent long before this call.
-  google.protobuf.Timestamp since = 6;
-}
-
-// Empty: the Run waits, or is already queued with the event. Stop the handler either way.
-message WaitForEventResponse {}
-
-// A SendEvent Step.
-message SendEventRequest {
-  Lease lease = 1 [(buf.validate.field).required = true];
-  string step_id = 2 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 1024
-  }];
-  string event_name = 3 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 255
-  }];
-  // Correlation key for waits. Empty: the event only triggers Tasks.
-  string event_key = 4 [(buf.validate.field).string.max_bytes = 1024];
-  // JSON. Opaque to the server.
-  bytes payload = 5;
-}
-
-// The stored record of the Step; its output is the event ID. On a resend or a replay it is
-// the record of the first send, and no second event exists.
-message SendEventResponse {
-  StepRecord record = 1;
-}
-
-// Ends the worker's attempt of a Run with its result.
 message CompleteRunRequest {
   Lease lease = 1 [(buf.validate.field).required = true];
   oneof result {
     option (buf.validate.oneof).required = true;
-    // The handler returned. JSON, opaque to the server.
     bytes output = 2;
-    // The handler failed outside any Step, or returned a Step's final error. Never retried.
     Failure failure = 3;
-    // The handler stopped after a Cancel.
-    Cancelled cancelled = 4;
   }
 }
 
-// The handler stopped after a Cancel.
-message Cancelled {}
-
-// Empty: the attempt is over.
 message CompleteRunResponse {}
 
-// Ends the session of a worker that drained.
 message DeregisterRequest {
-  // Free text for logs.
   string reason = 1 [(buf.validate.field).string.max_bytes = 1024];
 }
 
-// Empty: the session is over and its leases are back in the queue.
 message DeregisterResponse {}
 
-// Why the server asks a worker to stop a handler.
 enum CancelReason {
   CANCEL_REASON_UNSPECIFIED = 0;
-  // Cancelled through the API or the dashboard. The Run ends as cancelled.
-  CANCEL_REASON_USER = 1;
-  // The attempt ran past the Task's timeout. The Run ends as failed with TIMEOUT.
-  CANCEL_REASON_TIMEOUT = 2;
-  // This worker no longer holds the lease. Its result will not be accepted.
-  CANCEL_REASON_LEASE_LOST = 3;
+  CANCEL_REASON_LEASE_LOST = 1;
 }

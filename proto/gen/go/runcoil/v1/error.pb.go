@@ -21,26 +21,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ErrorCode is carried in the details of a failed RPC, beside the transport's code.
 type ErrorCode int32
 
 const (
-	ErrorCode_ERROR_CODE_UNSPECIFIED     ErrorCode = 0
-	ErrorCode_ERROR_CODE_INVALID_REQUEST ErrorCode = 1
-	// The API key is unknown or revoked, or the worker session ended.
-	// A worker calls Register again and gets a new worker ID.
-	ErrorCode_ERROR_CODE_UNAUTHENTICATED ErrorCode = 2
-	// One Task definition in a registration is invalid; nothing was registered.
+	ErrorCode_ERROR_CODE_UNSPECIFIED          ErrorCode = 0
+	ErrorCode_ERROR_CODE_INVALID_REQUEST      ErrorCode = 1
+	ErrorCode_ERROR_CODE_UNAUTHENTICATED      ErrorCode = 2
 	ErrorCode_ERROR_CODE_INVALID_REGISTRATION ErrorCode = 3
-	// The lease is no longer this attempt's. Stop the handler and drop its result.
-	ErrorCode_ERROR_CODE_STALE_LEASE      ErrorCode = 4
-	ErrorCode_ERROR_CODE_INPUT_TOO_LARGE  ErrorCode = 5
-	ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE ErrorCode = 6
-	// Same idempotency key, different request.
-	ErrorCode_ERROR_CODE_IDEMPOTENCY_CONFLICT ErrorCode = 7
-	// The Run was cancelled or ran past its timeout, and the server has ended it. Stop the
-	// handler and drop its result.
-	ErrorCode_ERROR_CODE_RUN_CANCELLED ErrorCode = 8
+	ErrorCode_ERROR_CODE_STALE_LEASE          ErrorCode = 4
+	ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE     ErrorCode = 5
 )
 
 // Enum value maps for ErrorCode.
@@ -51,10 +40,7 @@ var (
 		2: "ERROR_CODE_UNAUTHENTICATED",
 		3: "ERROR_CODE_INVALID_REGISTRATION",
 		4: "ERROR_CODE_STALE_LEASE",
-		5: "ERROR_CODE_INPUT_TOO_LARGE",
-		6: "ERROR_CODE_OUTPUT_TOO_LARGE",
-		7: "ERROR_CODE_IDEMPOTENCY_CONFLICT",
-		8: "ERROR_CODE_RUN_CANCELLED",
+		5: "ERROR_CODE_OUTPUT_TOO_LARGE",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_UNSPECIFIED":          0,
@@ -62,10 +48,7 @@ var (
 		"ERROR_CODE_UNAUTHENTICATED":      2,
 		"ERROR_CODE_INVALID_REGISTRATION": 3,
 		"ERROR_CODE_STALE_LEASE":          4,
-		"ERROR_CODE_INPUT_TOO_LARGE":      5,
-		"ERROR_CODE_OUTPUT_TOO_LARGE":     6,
-		"ERROR_CODE_IDEMPOTENCY_CONFLICT": 7,
-		"ERROR_CODE_RUN_CANCELLED":        8,
+		"ERROR_CODE_OUTPUT_TOO_LARGE":     5,
 	}
 )
 
@@ -96,14 +79,10 @@ func (ErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_runcoil_v1_error_proto_rawDescGZIP(), []int{0}
 }
 
-// Detail of a failed RPC that has an ErrorCode, with the IDs the failure names.
 type ErrorDetail struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Code  ErrorCode              `protobuf:"varint,1,opt,name=code,proto3,enum=runcoil.v1.ErrorCode" json:"code,omitempty"`
-	// For IDEMPOTENCY_CONFLICT: the Run that holds the key.
-	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// For INVALID_REGISTRATION: the Task at fault.
-	TaskName      string `protobuf:"bytes,3,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          ErrorCode              `protobuf:"varint,1,opt,name=code,proto3,enum=runcoil.v1.ErrorCode" json:"code,omitempty"`
+	TaskName      string                 `protobuf:"bytes,2,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -145,13 +124,6 @@ func (x *ErrorDetail) GetCode() ErrorCode {
 	return ErrorCode_ERROR_CODE_UNSPECIFIED
 }
 
-func (x *ErrorDetail) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
 func (x *ErrorDetail) GetTaskName() string {
 	if x != nil {
 		return x.TaskName
@@ -164,21 +136,17 @@ var File_runcoil_v1_error_proto protoreflect.FileDescriptor
 const file_runcoil_v1_error_proto_rawDesc = "" +
 	"\n" +
 	"\x16runcoil/v1/error.proto\x12\n" +
-	"runcoil.v1\"l\n" +
+	"runcoil.v1\"U\n" +
 	"\vErrorDetail\x12)\n" +
-	"\x04code\x18\x01 \x01(\x0e2\x15.runcoil.v1.ErrorCodeR\x04code\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x1b\n" +
-	"\ttask_name\x18\x03 \x01(\tR\btaskName*\xac\x02\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x15.runcoil.v1.ErrorCodeR\x04code\x12\x1b\n" +
+	"\ttask_name\x18\x02 \x01(\tR\btaskName*\xc9\x01\n" +
 	"\tErrorCode\x12\x1a\n" +
 	"\x16ERROR_CODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aERROR_CODE_INVALID_REQUEST\x10\x01\x12\x1e\n" +
 	"\x1aERROR_CODE_UNAUTHENTICATED\x10\x02\x12#\n" +
 	"\x1fERROR_CODE_INVALID_REGISTRATION\x10\x03\x12\x1a\n" +
-	"\x16ERROR_CODE_STALE_LEASE\x10\x04\x12\x1e\n" +
-	"\x1aERROR_CODE_INPUT_TOO_LARGE\x10\x05\x12\x1f\n" +
-	"\x1bERROR_CODE_OUTPUT_TOO_LARGE\x10\x06\x12#\n" +
-	"\x1fERROR_CODE_IDEMPOTENCY_CONFLICT\x10\a\x12\x1c\n" +
-	"\x18ERROR_CODE_RUN_CANCELLED\x10\bB\xa3\x01\n" +
+	"\x16ERROR_CODE_STALE_LEASE\x10\x04\x12\x1f\n" +
+	"\x1bERROR_CODE_OUTPUT_TOO_LARGE\x10\x05B\xa3\x01\n" +
 	"\x0ecom.runcoil.v1B\n" +
 	"ErrorProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +

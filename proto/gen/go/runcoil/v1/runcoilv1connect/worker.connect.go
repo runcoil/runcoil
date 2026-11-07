@@ -32,12 +32,6 @@ const (
 	WorkerServiceHeartbeatProcedure = "/runcoil.v1.WorkerService/Heartbeat"
 	// WorkerServiceCompleteStepProcedure is the procedure name of the WorkerService's CompleteStep RPC.
 	WorkerServiceCompleteStepProcedure = "/runcoil.v1.WorkerService/CompleteStep"
-	// WorkerServiceSleepProcedure is the procedure name of the WorkerService's Sleep RPC.
-	WorkerServiceSleepProcedure = "/runcoil.v1.WorkerService/Sleep"
-	// WorkerServiceWaitForEventProcedure is the procedure name of the WorkerService's WaitForEvent RPC.
-	WorkerServiceWaitForEventProcedure = "/runcoil.v1.WorkerService/WaitForEvent"
-	// WorkerServiceSendEventProcedure is the procedure name of the WorkerService's SendEvent RPC.
-	WorkerServiceSendEventProcedure = "/runcoil.v1.WorkerService/SendEvent"
 	// WorkerServiceCompleteRunProcedure is the procedure name of the WorkerService's CompleteRun RPC.
 	WorkerServiceCompleteRunProcedure = "/runcoil.v1.WorkerService/CompleteRun"
 	// WorkerServiceDeregisterProcedure is the procedure name of the WorkerService's Deregister RPC.
@@ -73,27 +67,6 @@ var (
 			Procedure:  WorkerServiceCompleteStepProcedure,
 		}
 	})
-	workerServiceSleepSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_runcoil_v1_worker_proto.Services().ByName("WorkerService").Methods().ByName("Sleep"),
-			Procedure:  WorkerServiceSleepProcedure,
-		}
-	})
-	workerServiceWaitForEventSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_runcoil_v1_worker_proto.Services().ByName("WorkerService").Methods().ByName("WaitForEvent"),
-			Procedure:  WorkerServiceWaitForEventProcedure,
-		}
-	})
-	workerServiceSendEventSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_runcoil_v1_worker_proto.Services().ByName("WorkerService").Methods().ByName("SendEvent"),
-			Procedure:  WorkerServiceSendEventProcedure,
-		}
-	})
 	workerServiceCompleteRunSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -112,43 +85,11 @@ var (
 
 // WorkerServiceClient is a client for the runcoil.v1.WorkerService service.
 type WorkerServiceClient interface {
-	// Register declares the Tasks of one worker process and opens its session. All-or-nothing:
-	// one invalid Task registers nothing. Upserts the Tasks, their event triggers and schedules.
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
-	// Listen is the only stream. The worker opens it and the server pushes on it.
-	//
-	// 1. The worker reports the Runs it is really running. Leases it does not name go back to
-	//    the queue; named Runs it no longer holds get a Cancel with LEASE_LOST.
-	// 2. The server sends Keepalive at the heartbeat interval, so proxies keep a quiet stream
-	//    open and the worker notices a dead one (HTTP/1.1 has no transport ping).
-	// 3. A newer Listen of the same worker replaces the older one; claims made for the old
-	//    stream are reconciled.
-	// 4. When the stream ends, the server stops dispatching to this worker at once. Leases
-	//    stay while heartbeats keep coming: closing Listen is how a worker drains.
 	Listen(context.Context, *v1.ListenRequest) (WorkerServiceListenClientStream, error)
-	// Heartbeat shows the worker process is alive, which keeps every lease it holds. Sent at
-	// the heartbeat interval, outside the stream. With none for the session TTL, the session
-	// ends and its leases go back to the queue, counted as lost.
 	Heartbeat(context.Context, *v1.HeartbeatRequest) (*v1.HeartbeatResponse, error)
-	// CompleteStep stores the outcome of one try of a Do Step and answers after the commit.
 	CompleteStep(context.Context, *v1.CompleteStepRequest) (*v1.CompleteStepResponse, error)
-	// Sleep records the Step with its wake time and puts the Run to sleep. The attempt ends:
-	// the worker stops the handler and frees the slot. The Run is replayed after the wake time.
-	Sleep(context.Context, *v1.SleepRequest) (*v1.SleepResponse, error)
-	// WaitForEvent puts the Run to wait for an event by name and key. The attempt ends either
-	// way. An event already received since `since` resolves the Step at once and queues the
-	// Run; otherwise the Run waits until the event or the timeout.
-	WaitForEvent(context.Context, *v1.WaitForEventRequest) (*v1.WaitForEventResponse, error)
-	// SendEvent sends an event from a Run as a Step: it triggers Tasks by name and resolves
-	// waits by name and key, like any event. The attempt goes on. The record of the Step
-	// makes it safe on replay: an event is sent once per Run and Step.
-	SendEvent(context.Context, *v1.SendEventRequest) (*v1.SendEventResponse, error)
-	// CompleteRun ends the worker's attempt: the handler returned, failed outside any Step, or
-	// stopped after a Cancel.
 	CompleteRun(context.Context, *v1.CompleteRunRequest) (*v1.CompleteRunResponse, error)
-	// Deregister ends the session after a drain: close Listen, let handlers finish within the
-	// drain time, cancel the rest, then call this. Leases still held go back to the queue
-	// without counting as lost; their recorded Steps are kept.
 	Deregister(context.Context, *v1.DeregisterRequest) (*v1.DeregisterResponse, error)
 }
 
@@ -180,43 +121,11 @@ func (s WorkerServiceListenClientStream) Close() error {
 
 // WorkerServiceHandler is an implementation of the runcoil.v1.WorkerService service.
 type WorkerServiceHandler interface {
-	// Register declares the Tasks of one worker process and opens its session. All-or-nothing:
-	// one invalid Task registers nothing. Upserts the Tasks, their event triggers and schedules.
 	Register(context.Context, *v1.RegisterRequest) (*v1.RegisterResponse, error)
-	// Listen is the only stream. The worker opens it and the server pushes on it.
-	//
-	// 1. The worker reports the Runs it is really running. Leases it does not name go back to
-	//    the queue; named Runs it no longer holds get a Cancel with LEASE_LOST.
-	// 2. The server sends Keepalive at the heartbeat interval, so proxies keep a quiet stream
-	//    open and the worker notices a dead one (HTTP/1.1 has no transport ping).
-	// 3. A newer Listen of the same worker replaces the older one; claims made for the old
-	//    stream are reconciled.
-	// 4. When the stream ends, the server stops dispatching to this worker at once. Leases
-	//    stay while heartbeats keep coming: closing Listen is how a worker drains.
 	Listen(context.Context, *v1.ListenRequest, WorkerServiceListenServerStream) error
-	// Heartbeat shows the worker process is alive, which keeps every lease it holds. Sent at
-	// the heartbeat interval, outside the stream. With none for the session TTL, the session
-	// ends and its leases go back to the queue, counted as lost.
 	Heartbeat(context.Context, *v1.HeartbeatRequest) (*v1.HeartbeatResponse, error)
-	// CompleteStep stores the outcome of one try of a Do Step and answers after the commit.
 	CompleteStep(context.Context, *v1.CompleteStepRequest) (*v1.CompleteStepResponse, error)
-	// Sleep records the Step with its wake time and puts the Run to sleep. The attempt ends:
-	// the worker stops the handler and frees the slot. The Run is replayed after the wake time.
-	Sleep(context.Context, *v1.SleepRequest) (*v1.SleepResponse, error)
-	// WaitForEvent puts the Run to wait for an event by name and key. The attempt ends either
-	// way. An event already received since `since` resolves the Step at once and queues the
-	// Run; otherwise the Run waits until the event or the timeout.
-	WaitForEvent(context.Context, *v1.WaitForEventRequest) (*v1.WaitForEventResponse, error)
-	// SendEvent sends an event from a Run as a Step: it triggers Tasks by name and resolves
-	// waits by name and key, like any event. The attempt goes on. The record of the Step
-	// makes it safe on replay: an event is sent once per Run and Step.
-	SendEvent(context.Context, *v1.SendEventRequest) (*v1.SendEventResponse, error)
-	// CompleteRun ends the worker's attempt: the handler returned, failed outside any Step, or
-	// stopped after a Cancel.
 	CompleteRun(context.Context, *v1.CompleteRunRequest) (*v1.CompleteRunResponse, error)
-	// Deregister ends the session after a drain: close Listen, let handlers finish within the
-	// drain time, cancel the rest, then call this. Leases still held go back to the queue
-	// without counting as lost; their recorded Steps are kept.
 	Deregister(context.Context, *v1.DeregisterRequest) (*v1.DeregisterResponse, error)
 }
 
@@ -229,9 +138,6 @@ func RegisterWorkerServiceHandler(server *connect.Server, svc WorkerServiceHandl
 		connect.Method{Spec: workerServiceListenSpec(), Handler: adapter.listen},
 		connect.Method{Spec: workerServiceHeartbeatSpec(), Handler: adapter.heartbeat},
 		connect.Method{Spec: workerServiceCompleteStepSpec(), Handler: adapter.completeStep},
-		connect.Method{Spec: workerServiceSleepSpec(), Handler: adapter.sleep},
-		connect.Method{Spec: workerServiceWaitForEventSpec(), Handler: adapter.waitForEvent},
-		connect.Method{Spec: workerServiceSendEventSpec(), Handler: adapter.sendEvent},
 		connect.Method{Spec: workerServiceCompleteRunSpec(), Handler: adapter.completeRun},
 		connect.Method{Spec: workerServiceDeregisterSpec(), Handler: adapter.deregister},
 	)
@@ -269,18 +175,6 @@ func (UnimplementedWorkerServiceHandler) Heartbeat(context.Context, *v1.Heartbea
 
 func (UnimplementedWorkerServiceHandler) CompleteStep(context.Context, *v1.CompleteStepRequest) (*v1.CompleteStepResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "runcoil.v1.WorkerService.CompleteStep is not implemented")
-}
-
-func (UnimplementedWorkerServiceHandler) Sleep(context.Context, *v1.SleepRequest) (*v1.SleepResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "runcoil.v1.WorkerService.Sleep is not implemented")
-}
-
-func (UnimplementedWorkerServiceHandler) WaitForEvent(context.Context, *v1.WaitForEventRequest) (*v1.WaitForEventResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "runcoil.v1.WorkerService.WaitForEvent is not implemented")
-}
-
-func (UnimplementedWorkerServiceHandler) SendEvent(context.Context, *v1.SendEventRequest) (*v1.SendEventResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "runcoil.v1.WorkerService.SendEvent is not implemented")
 }
 
 func (UnimplementedWorkerServiceHandler) CompleteRun(context.Context, *v1.CompleteRunRequest) (*v1.CompleteRunResponse, error) {
@@ -322,30 +216,6 @@ func (c *workerServiceClient) Heartbeat(ctx context.Context, req *v1.HeartbeatRe
 func (c *workerServiceClient) CompleteStep(ctx context.Context, req *v1.CompleteStepRequest) (*v1.CompleteStepResponse, error) {
 	var res v1.CompleteStepResponse
 	if err := c.client.CallUnary(ctx, workerServiceCompleteStepSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *workerServiceClient) Sleep(ctx context.Context, req *v1.SleepRequest) (*v1.SleepResponse, error) {
-	var res v1.SleepResponse
-	if err := c.client.CallUnary(ctx, workerServiceSleepSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *workerServiceClient) WaitForEvent(ctx context.Context, req *v1.WaitForEventRequest) (*v1.WaitForEventResponse, error) {
-	var res v1.WaitForEventResponse
-	if err := c.client.CallUnary(ctx, workerServiceWaitForEventSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *workerServiceClient) SendEvent(ctx context.Context, req *v1.SendEventRequest) (*v1.SendEventResponse, error) {
-	var res v1.SendEventResponse
-	if err := c.client.CallUnary(ctx, workerServiceSendEventSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -407,42 +277,6 @@ func (h workerServiceHandler) completeStep(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.CompleteStep(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h workerServiceHandler) sleep(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.SleepRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.Sleep(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h workerServiceHandler) waitForEvent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.WaitForEventRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.WaitForEvent(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h workerServiceHandler) sendEvent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.SendEventRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.SendEvent(ctx, &req)
 	if err != nil {
 		return err
 	}
