@@ -1,0 +1,56 @@
+version: '3'
+
+env:
+  GOWORK: 'off'
+
+vars:
+  BUF: go tool -modfile=../tools/go.mod buf
+
+tasks:
+  gen:
+    desc: Generate the Go code of the protos
+    sources:
+      - buf.yaml
+      - buf.lock
+      - buf.gen.yaml
+      - runcoil/**/*.proto
+    generates:
+      - gen/go/**/*.go
+    cmds:
+      - '{{.BUF}} generate'
+
+  lint:
+    desc: Run buf lint
+    cmds:
+      - '{{.BUF}} lint'
+
+  format:
+    desc: Format the protos
+    cmds:
+      - '{{.BUF}} format -w'
+
+  breaking:
+    desc: Fail on a breaking change against main
+    cmds:
+      - "{{.BUF}} breaking --against 'https://github.com/runcoil/runcoil.git#branch=main,subdir=proto'"
+
+  build:
+    desc: Build and vet the generated code
+    cmds:
+      - go build ./...
+      - go vet ./...
+
+  tidy:
+    desc: Fail when go.mod or go.sum is not tidy
+    cmds:
+      - go mod tidy -diff
+
+  check:
+    desc: Run lint, the format check, the generated-code check, build and tidy
+    cmds:
+      - task: lint
+      - '{{.BUF}} format --diff --exit-code'
+      - '{{.BUF}} generate'
+      - git diff --exit-code -- gen && test -z "$(git status --porcelain -- gen)"
+      - task: build
+      - task: tidy

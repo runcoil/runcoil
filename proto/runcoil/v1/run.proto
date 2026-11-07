@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package runcoil.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// StepRecord is the stored outcome of one Step of one Run. Replay matches records by step_id:
+// a record found with the same kind is returned and the Step is not called again; a step_id
+// with no record, or with a record of another kind (the code changed), runs and its new
+// record replaces the old one. Records the code no longer reaches are ignored.
+message StepRecord {
+  // Made by the SDK from the Step's name: the name the first time, then numbered ("charge#2").
+  // An ID already used in this Run gets numbered again ("charge#2#2"), so two Steps never
+  // share one.
+  string step_id = 1;
+  StepKind kind = 2;
+  oneof result {
+    // Do: the return value. Wait: the event payload. Send: the event ID as a JSON string.
+    // JSON, opaque to the server except for Send.
+    bytes output = 3;
+    // Do: the final error, its tries used up or its error permanent.
+    Failure failure = 4;
+  }
+  // Sleep only: when the Run woke up.
+  google.protobuf.Timestamp wake_at = 5;
+  // Wait only: the deadline passed with no event. The SDK returns no payload, not an error.
+  bool timed_out = 6;
+}
+
+// Failure is the final error of a Step or a Run. Only text survives.
+message Failure {
+  FailureCode code = 1;
+  // Text of the last error.
+  string message = 2;
+  // For a Run failure caused by a Step: that Step.
+  string step_id = 3 [(buf.validate.field).string.max_bytes = 1024];
+}
+
+// The kind of a Step, one per SDK call: step.Do, step.Sleep, step.WaitForEvent,
+// step.SendEvent.
+enum StepKind {
+  STEP_KIND_UNSPECIFIED = 0;
+  STEP_KIND_DO = 1;
+  STEP_KIND_SLEEP = 2;
+  STEP_KIND_WAIT = 3;
+  STEP_KIND_SEND = 4;
+}
+
+// Why a Step or a Run failed for good.
+enum FailureCode {
+  FAILURE_CODE_UNSPECIFIED = 0;
+  // The Step function or the handler returned an error and no attempt is left,
+  // or the error was permanent. An error outside any Step is never retried.
+  FAILURE_CODE_ERROR = 1;
+  // The handler panicked.
+  FAILURE_CODE_PANIC = 2;
+  // The handler returned the final error of a Step.
+  FAILURE_CODE_STEP_FAILED = 3;
+  // Workers were lost while running this Run more often than the server allows.
+  FAILURE_CODE_ATTEMPT_LOST = 4;
+  // The attempt ran past the Task's timeout.
+  FAILURE_CODE_TIMEOUT = 5;
+  // The Run did not start within its Task's start deadline.
+  FAILURE_CODE_START_DEADLINE = 6;
+  // The SDK could not encode an output.
+  FAILURE_CODE_OUTPUT_NOT_ENCODABLE = 7;
+  // An output is over its size limit.
+  FAILURE_CODE_OUTPUT_TOO_LARGE = 8;
+  // The Run's stored data is over its total limit.
+  FAILURE_CODE_RUN_DATA_LIMIT = 9;
+}
+
+// What created a Run.
+enum RunSource {
+  RUN_SOURCE_UNSPECIFIED = 0;
+  RUN_SOURCE_INVOKE = 1;
+  // A Task triggered by an event name.
+  RUN_SOURCE_EVENT = 2;
+  RUN_SOURCE_SCHEDULE = 3;
+  // Reserved for rerun, which comes later.
+  RUN_SOURCE_RERUN = 4;
+}

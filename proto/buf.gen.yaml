@@ -1,0 +1,16 @@
+version: v2
+clean: true
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/runcoil/runcoil/proto/gen/go
+  disable:
+    - module: buf.build/bufbuild/protovalidate
+plugins:
+  - local: ["go", "run", "google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12"]
+    out: gen/go
+    opt: paths=source_relative
+  - local: ["go", "run", "connectrpc.com/connect/v2/cmd/protoc-gen-connect-go@v2.0.2"]
+    out: gen/go
+    opt: paths=source_relative
