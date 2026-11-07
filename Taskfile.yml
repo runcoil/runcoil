@@ -11,6 +11,24 @@ tasks:
     cmds:
       - go build ./...
 
+  run:
+    desc: Run the server with the settings in .env
+    cmds:
+      - go run ./cmd/runcoil {{.CLI_ARGS}}
+
+  up:
+    desc: Start PostgreSQL and the server in Docker Compose
+    preconditions:
+      - sh: test -f .env
+        msg: Copy .env.example to .env and set POSTGRES_PASSWORD
+    cmds:
+      - docker compose up --build --detach --wait
+
+  down:
+    desc: Stop Docker Compose
+    cmds:
+      - docker compose down
+
   test:
     desc: Run the tests with the race detector
     cmds:
