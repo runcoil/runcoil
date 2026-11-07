@@ -1,7 +1,3 @@
-// Package apierr is the error vocabulary of the server. The core returns these
-// errors, possibly wrapped with fmt.Errorf("...: %w", err). The transport layer
-// is the only place that translates them. The package depends only on the
-// standard library, so any layer may depend on it.
 package apierr
 
 import "maps"

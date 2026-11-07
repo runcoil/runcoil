@@ -10,7 +10,8 @@ import (
 // Service represents a long-running application component managed as part of
 // the application lifecycle.
 type Service interface {
-	// Run must block until the service stops or encounters an error.
+	// Run must block until the service stops or encounters an error. After Stop it
+	// returns nil, unless the shutdown itself failed: Manager.Run reports that error.
 	Run(ctx context.Context) error
 	// Stop initiates a graceful shutdown and must eventually cause Run to return.
 	Stop()
@@ -43,7 +44,8 @@ func (m *Manager) Add(run func(ctx context.Context) error, stop func()) {
 //   - one of the services returns.
 //
 // Once shutdown begins, all services are stopped sequentially in reverse
-// registration order. Run waits until every service's Run method has returned.
+// registration order. Run waits until every service's Run method has returned,
+// and returns the first error, one returned during the shutdown included.
 func (m *Manager) Run(ctx context.Context) error {
 	if len(m.services) == 0 {
 		return nil
@@ -83,7 +85,10 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// Wait until every Run method has returned.
 	for received < serviceCount {
-		<-results
+		if err := <-results; firstErr == nil {
+			firstErr = err
+		}
+
 		received++
 	}
 

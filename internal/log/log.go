@@ -1,4 +1,3 @@
-// Package log builds the slog logger of the binaries.
 package log
 
 import (
@@ -72,7 +71,7 @@ func NewLogger(cfg Config) (*slog.Logger, error) {
 			AddSource: cfg.AddSource,
 		})
 	} else {
-		handler = tint.NewHandler(os.Stdout, &tint.Options{
+		handler = tint.NewTextHandler(os.Stdout, &tint.Options{
 			Level:      cfg.Level,
 			AddSource:  cfg.AddSource,
 			TimeFormat: time.RFC3339,

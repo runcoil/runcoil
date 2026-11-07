@@ -1,4 +1,3 @@
-# Secrets and local settings. The Dockerfiles copy the whole context with COPY . .
 **/.env
 **/.env.*
 
