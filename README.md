@@ -51,18 +51,6 @@ name in upper case (`POSTGRES_HOST`), or a key in a YAML file passed with
 and `cmd/runcoil/.env.example` list every key with its default. The binary never
 reads `.env`; pass flags to `task run` after `--` to change a key.
 
-## Layout
-
-- `cmd/runcoil`: the server binary
-- `internal/apierr`: the error vocabulary
-- `internal/log`: the logger
-- `internal/postgres`: the PostgreSQL pool
-- `internal/http`: the HTTP server, with the health checks for now
-- `pkg/configutil`: loads the config from flags, the environment and a file
-- `pkg/service`: starts the long-running parts and stops them on a signal
-- `tools`: the Go tools, in their own module
-- `docker/app`: the Dockerfile of the server
-
 Build the image from the root of the repository:
 
 ```sh
