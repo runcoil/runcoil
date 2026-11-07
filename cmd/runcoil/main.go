@@ -1,22 +1,14 @@
-// Command runcoil runs the Runcoil server.
 package main
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/runcoil/runcoil/internal/engine"
 	"github.com/runcoil/runcoil/internal/log"
-	"github.com/runcoil/runcoil/internal/storage/postgres"
-	"github.com/runcoil/runcoil/internal/worker"
 	"github.com/runcoil/runcoil/pkg/service"
-)
-
-// The services the manager runs must satisfy service.Service.
-var (
-	_ service.Service = (*engine.Service)(nil)
-	_ service.Service = (*worker.Service)(nil)
 )
 
 func main() {
@@ -27,48 +19,24 @@ func main() {
 }
 
 func run() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	cfg, err := NewConfig()
-	if err != nil {
-		return fmt.Errorf("new config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("validate config: %w", err)
-	}
-
-	logger, err := log.NewLogger(cfg.Log)
+	logger, err := log.NewLogger(log.Config{Format: log.FormatText})
 	if err != nil {
 		return fmt.Errorf("new logger: %w", err)
 	}
 
-	pool, err := postgres.NewPgxPool(ctx, cfg.Postgres)
-	if err != nil {
-		return fmt.Errorf("new pgx pool: %w", err)
-	}
-	defer pool.Close()
+	manager := service.NewManager()
 
-	// PostgreSQL holds the system of record: the tasks, the runs, and the schedules. The
-	// worker instances and the signals live in this process, which holds the worker streams.
-	db := postgres.NewClient(pool)
-	tasks := postgres.NewTaskStore(db)
-	runs := postgres.NewRunStore(db)
-	schedules := postgres.NewScheduleStore(db)
-
-	// The engine is registered first. The services are told to stop in reverse registration
-	// order, so the worker service is told first. The manager returns after every service
-	// has stopped, and the pool is closed after that. The run store is also the run queue:
-	// the runs table is the queue.
-	manager := service.NewManager(
-		engine.NewService(cfg.Engine, logger, tasks, runs, runs, schedules),
-		worker.NewService(cfg.Worker, logger, runs),
-	)
+	logger.InfoContext(ctx, "server is started")
 
 	if err := manager.Run(ctx); err != nil {
 		return fmt.Errorf("run services: %w", err)
 	}
+
+	// The manager returns at once while it has no services, so wait for the signal here.
+	<-ctx.Done()
 
 	logger.InfoContext(ctx, "server is stopped")
 

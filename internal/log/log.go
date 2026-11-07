@@ -1,4 +1,3 @@
-// Package log builds the slog logger of the binaries.
 package log
 
 import (

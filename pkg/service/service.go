@@ -83,7 +83,10 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// Wait until every Run method has returned.
 	for received < serviceCount {
-		<-results
+		if err := <-results; firstErr == nil {
+			firstErr = err
+		}
+
 		received++
 	}
 
