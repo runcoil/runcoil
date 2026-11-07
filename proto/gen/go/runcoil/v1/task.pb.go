@@ -85,7 +85,7 @@ func (x *TaskDefinition) GetStartDeadline() *durationpb.Duration {
 
 type RetryPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The first attempt included. At most 1000: the retry counters are smallint.
+	// The first attempt included.
 	MaxAttempts uint32 `protobuf:"varint,1,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
 	// The last delay repeats.
 	Delays        []*durationpb.Duration `protobuf:"bytes,2,rep,name=delays,proto3" json:"delays,omitempty"`
@@ -147,9 +147,9 @@ const file_runcoil_v1_task_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\xff\x01R\x04name\x12-\n" +
 	"\x05retry\x18\x02 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x12J\n" +
-	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\b\xbaH\x05\xaa\x01\x02*\x00R\rstartDeadline\"~\n" +
-	"\vRetryPolicy\x12+\n" +
-	"\fmax_attempts\x18\x01 \x01(\rB\b\xbaH\x05*\x03\x18\xe8\aR\vmaxAttempts\x12B\n" +
+	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\b\xbaH\x05\xaa\x01\x02*\x00R\rstartDeadline\"t\n" +
+	"\vRetryPolicy\x12!\n" +
+	"\fmax_attempts\x18\x01 \x01(\rR\vmaxAttempts\x12B\n" +
 	"\x06delays\x18\x02 \x03(\v2\x19.google.protobuf.DurationB\x0f\xbaH\f\x92\x01\t\x10 \"\x05\xaa\x01\x022\x00R\x06delaysB\xa2\x01\n" +
 	"\x0ecom.runcoil.v1B\tTaskProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +

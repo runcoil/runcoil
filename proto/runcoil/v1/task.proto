@@ -15,8 +15,8 @@ message TaskDefinition {
 }
 
 message RetryPolicy {
-  // The first attempt included. At most 1000: the retry counters are smallint.
-  uint32 max_attempts = 1 [(buf.validate.field).uint32.lte = 1000];
+  // The first attempt included.
+  uint32 max_attempts = 1;
   // The last delay repeats.
   repeated google.protobuf.Duration delays = 2 [(buf.validate.field).repeated = {
     max_items: 32
