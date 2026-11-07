@@ -1,62 +1,34 @@
-# Runcoil
+![Runcoil](docs/logo/runcoil-lockup-on-light.svg#gh-light-mode-only)
+![Runcoil](docs/logo/runcoil-lockup-on-dark.svg#gh-dark-mode-only)
 
-Runcoil runs background Tasks for an application and keeps the state of every
-Run. This repository is the server, and the home of the protocol, the SDKs and
-the dashboard as they land.
+Durable background Tasks for your application
 
-**Status: being rebuilt.** The first engine is gone. The server is rebuilt
-phase by phase on a new design. For now it loads its config, opens the
-PostgreSQL pool, and serves its health checks.
+[![License](https://img.shields.io/github/license/runcoil/runcoil)](LICENSE)
 
-## Requirements
+Runcoil runs your functions durably. A crash, a deploy, or a long wait does not
+lose the work, because each finished Step is saved and the function replays past it.
 
-- Go 1.27
-- [Task](https://taskfile.dev)
-- Docker, for Compose and the image
+- **Steps:** wrap each piece of work in a Step; a retry or a restart skips the Steps already done.
+- **Retries:** a failed Step retries on its own policy, with backoff, before the Run fails.
+- **Schedules:** run a Task on cron, at fixed times, or every interval.
+- **Waits:** sleep for days, or wait for an Event, without holding a worker.
+- **Self-hosted:** one server and PostgreSQL, nothing else to run.
 
-The Go tools (golangci-lint, govulncheck) are pinned in `tools/go.mod` and run
-through `go tool`. Nothing else is installed globally.
+> [!NOTE]
+> **Runcoil is being rebuilt** on a new design, phase by phase. Today the server
+> loads its config, opens the PostgreSQL pool, and serves its health checks.
 
-## Development
-
-```sh
-task setup    # download the modules and build the Go tools
-task build    # build the server
-task test     # tests with the race detector
-task lint     # golangci-lint
-task tidy     # fail when go.mod or go.sum is not tidy
-task vuln     # govulncheck
-task check    # lint, test, tidy and vuln
-```
-
-The tests open no database. Every tool call runs with `GOWORK=off`, because
-`go tool -modfile` does not work in workspace mode.
-
-## Running
+## Get started
 
 ```sh
-docker compose up -d     # PostgreSQL 18 and the server
-docker compose down
-task run                 # the server on the host, against the PostgreSQL of Compose
+docker compose up -d
+curl localhost:7070/readyz
 ```
 
-The server listens on port `7070`:
+## Contributing
 
-- `/livez`: the process is alive
-- `/readyz`: the database answers and the server is not shutting down
-
-Each key is a flag (`--postgres.host`), an environment variable with the same
-name in upper case (`POSTGRES_HOST`), or a key in a YAML file passed with
-`--config`, lowest first: file, environment, flag. `cmd/runcoil/config.example.yml`
-and `cmd/runcoil/.env.example` list every key with its default. The binary never
-reads `.env`; pass flags to `task run` after `--` to change a key.
-
-Build the image from the root of the repository:
-
-```sh
-docker build -f docker/app/runcoil.dockerfile -t runcoil:local .
-```
+Set up your local environment with the [developer guide](contribute/developer-guide.md).
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Runcoil is distributed under the [Apache License 2.0](LICENSE).
