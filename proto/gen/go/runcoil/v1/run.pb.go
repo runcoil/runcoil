@@ -7,7 +7,6 @@
 package runcoilv1
 
 import (
-	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -298,18 +297,18 @@ var File_runcoil_v1_run_proto protoreflect.FileDescriptor
 const file_runcoil_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14runcoil/v1/run.proto\x12\n" +
-	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\"\xa4\x01\n" +
+	"runcoil.v1\"\xa4\x01\n" +
 	"\n" +
 	"StepRecord\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12(\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x14.runcoil.v1.StepKindR\x04kind\x12\x18\n" +
 	"\x06output\x18\x03 \x01(\fH\x00R\x06output\x12/\n" +
 	"\afailure\x18\x04 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailureB\b\n" +
-	"\x06result\"s\n" +
+	"\x06result\"i\n" +
 	"\aFailure\x12+\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x17.runcoil.v1.FailureCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12!\n" +
-	"\astep_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x06stepId*7\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
+	"\astep_id\x18\x03 \x01(\tR\x06stepId*7\n" +
 	"\bStepKind\x12\x19\n" +
 	"\x15STEP_KIND_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fSTEP_KIND_DO\x10\x01*\xa4\x02\n" +

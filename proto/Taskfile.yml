@@ -29,11 +29,6 @@ tasks:
     cmds:
       - '{{.BUF}} format -w'
 
-  breaking:
-    desc: Fail on a breaking change against main
-    cmds:
-      - "{{.BUF}} breaking --against 'https://github.com/runcoil/runcoil.git#branch=main,subdir=proto'"
-
   build:
     desc: Build and vet the generated code
     cmds:

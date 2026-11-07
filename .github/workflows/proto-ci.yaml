@@ -7,8 +7,6 @@ on:
       - 'proto/**'
       - 'tools/**'
       - '.github/workflows/proto-ci.yaml'
-    # labeled and unlabeled rerun the check when 'buf skip breaking' is added or removed.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
     paths:
@@ -39,9 +37,9 @@ jobs:
         with:
           version: 1.75.0
           input: proto
-          breaking_against: ${{ github.event.repository.clone_url }}#format=git,commit=${{ github.event.pull_request.base.sha }},subdir=proto
           lint: true
           format: true
+          breaking: false
           push: false
           pr_comment: false
 

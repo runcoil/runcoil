@@ -11,19 +11,12 @@ message TaskDefinition {
     max_bytes: 255
   }];
   RetryPolicy retry = 2;
-  google.protobuf.Duration start_deadline = 3 [(buf.validate.field).duration.gt = {}];
+  google.protobuf.Duration start_deadline = 3;
 }
 
 message RetryPolicy {
   // The first attempt included.
   uint32 max_attempts = 1;
   // The last delay repeats.
-  repeated google.protobuf.Duration delays = 2 [(buf.validate.field).repeated = {
-    max_items: 32
-    items: {
-      duration: {
-        gte: {}
-      }
-    }
-  }];
+  repeated google.protobuf.Duration delays = 2;
 }

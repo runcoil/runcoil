@@ -20,7 +20,7 @@ service WorkerService {
 
 message Lease {
   string run_id = 1 [(buf.validate.field).string.uuid = true];
-  int64 epoch = 2 [(buf.validate.field).int64.gt = 0];
+  int64 epoch = 2;
 }
 
 message RegisterRequest {
@@ -28,17 +28,11 @@ message RegisterRequest {
     min_len: 1
     max_bytes: 255
   }];
-  repeated TaskDefinition tasks = 2 [(buf.validate.field).repeated.min_items = 1];
-  uint32 slots = 3 [(buf.validate.field).uint32.gte = 1];
-  string hostname = 4 [(buf.validate.field).string.max_bytes = 255];
-  string sdk_name = 5 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 64
-  }];
-  string sdk_version = 6 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 64
-  }];
+  repeated TaskDefinition tasks = 2;
+  uint32 slots = 3;
+  string hostname = 4;
+  string sdk_name = 5;
+  string sdk_version = 6;
 }
 
 message RegisterResponse {
@@ -87,10 +81,7 @@ message HeartbeatResponse {}
 
 message CompleteStepRequest {
   Lease lease = 1 [(buf.validate.field).required = true];
-  string step_id = 2 [(buf.validate.field).string = {
-    min_len: 1
-    max_bytes: 1024
-  }];
+  string step_id = 2 [(buf.validate.field).string.min_len = 1];
   oneof outcome {
     option (buf.validate.oneof).required = true;
     bytes output = 3;
@@ -106,13 +97,7 @@ message StepError {
   bool non_retriable = 2;
   google.protobuf.Duration retry_after = 3;
   // ERROR, PANIC or OUTPUT_NOT_ENCODABLE.
-  FailureCode code = 4 [(buf.validate.field).enum = {
-    in: [
-      1,
-      2,
-      6
-    ]
-  }];
+  FailureCode code = 4;
 }
 
 message CompleteStepResponse {
@@ -139,7 +124,7 @@ message CompleteRunRequest {
 message CompleteRunResponse {}
 
 message DeregisterRequest {
-  string reason = 1 [(buf.validate.field).string.max_bytes = 1024];
+  string reason = 1;
 }
 
 message DeregisterResponse {}

@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package runcoil.v1;
 
-import "buf/validate/validate.proto";
-
 message StepRecord {
   string step_id = 1;
   StepKind kind = 2;
@@ -16,7 +14,7 @@ message StepRecord {
 message Failure {
   FailureCode code = 1;
   string message = 2;
-  string step_id = 3 [(buf.validate.field).string.max_bytes = 1024];
+  string step_id = 3;
 }
 
 enum StepKind {

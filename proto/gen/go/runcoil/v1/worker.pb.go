@@ -1241,18 +1241,18 @@ var File_runcoil_v1_worker_proto protoreflect.FileDescriptor
 const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17runcoil/v1/worker.proto\x12\n" +
-	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14runcoil/v1/run.proto\x1a\x15runcoil/v1/task.proto\"G\n" +
+	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14runcoil/v1/run.proto\x1a\x15runcoil/v1/task.proto\">\n" +
 	"\x05Lease\x12\x1f\n" +
-	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12\x1d\n" +
-	"\x05epoch\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x05epoch\"\x82\x02\n" +
+	"\x06run_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12\x14\n" +
+	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\"\xcf\x01\n" +
 	"\x0fRegisterRequest\x12\x1c\n" +
 	"\x03app\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\xff\x01R\x03app\x12:\n" +
-	"\x05tasks\x18\x02 \x03(\v2\x1a.runcoil.v1.TaskDefinitionB\b\xbaH\x05\x92\x01\x02\b\x01R\x05tasks\x12\x1d\n" +
-	"\x05slots\x18\x03 \x01(\rB\a\xbaH\x04*\x02(\x01R\x05slots\x12$\n" +
-	"\bhostname\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\xff\x01R\bhostname\x12$\n" +
-	"\bsdk_name\x18\x05 \x01(\tB\t\xbaH\x06r\x04\x10\x01(@R\asdkName\x12*\n" +
-	"\vsdk_version\x18\x06 \x01(\tB\t\xbaH\x06r\x04\x10\x01(@R\n" +
+	"\xbaH\ar\x05\x10\x01(\xff\x01R\x03app\x120\n" +
+	"\x05tasks\x18\x02 \x03(\v2\x1a.runcoil.v1.TaskDefinitionR\x05tasks\x12\x14\n" +
+	"\x05slots\x18\x03 \x01(\rR\x05slots\x12\x1a\n" +
+	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\x19\n" +
+	"\bsdk_name\x18\x05 \x01(\tR\asdkName\x12\x1f\n" +
+	"\vsdk_version\x18\x06 \x01(\tR\n" +
 	"sdkVersion\"\x9e\x01\n" +
 	"\x10RegisterResponse\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12#\n" +
@@ -1281,24 +1281,23 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\x0e2\x18.runcoil.v1.CancelReasonR\x06reason\"\v\n" +
 	"\tKeepalive\"\x12\n" +
 	"\x10HeartbeatRequest\"\x13\n" +
-	"\x11HeartbeatResponse\"\xe7\x02\n" +
+	"\x11HeartbeatResponse\"\xe4\x02\n" +
 	"\x13CompleteStepRequest\x12/\n" +
-	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12#\n" +
-	"\astep_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\x80\bR\x06stepId\x12\x18\n" +
+	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12 \n" +
+	"\astep_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stepId\x12\x18\n" +
 	"\x06output\x18\x03 \x01(\fH\x00R\x06output\x12-\n" +
 	"\x05error\x18\x04 \x01(\v2\x15.runcoil.v1.StepErrorH\x00R\x05error\x12-\n" +
 	"\x05retry\x18\x05 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x129\n" +
 	"\n" +
 	"started_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendedAtB\x10\n" +
-	"\aoutcome\x12\x05\xbaH\x02\b\x01\"\xc1\x01\n" +
+	"\aoutcome\x12\x05\xbaH\x02\b\x01\"\xb3\x01\n" +
 	"\tStepError\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12#\n" +
 	"\rnon_retriable\x18\x02 \x01(\bR\fnonRetriable\x12:\n" +
 	"\vretry_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\n" +
-	"retryAfter\x129\n" +
-	"\x04code\x18\x04 \x01(\x0e2\x17.runcoil.v1.FailureCodeB\f\xbaH\t\x82\x01\x06\x18\x01\x18\x02\x18\x06R\x04code\"\x99\x01\n" +
+	"retryAfter\x12+\n" +
+	"\x04code\x18\x04 \x01(\x0e2\x17.runcoil.v1.FailureCodeR\x04code\"\x99\x01\n" +
 	"\x14CompleteStepResponse\x120\n" +
 	"\x06record\x18\x01 \x01(\v2\x16.runcoil.v1.StepRecordH\x00R\x06record\x12E\n" +
 	"\x0fretry_scheduled\x18\x02 \x01(\v2\x1a.runcoil.v1.RetryScheduledH\x00R\x0eretryScheduledB\b\n" +
@@ -1312,9 +1311,9 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12/\n" +
 	"\afailure\x18\x03 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailureB\x0f\n" +
 	"\x06result\x12\x05\xbaH\x02\b\x01\"\x15\n" +
-	"\x13CompleteRunResponse\"5\n" +
-	"\x11DeregisterRequest\x12 \n" +
-	"\x06reason\x18\x01 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x06reason\"\x14\n" +
+	"\x13CompleteRunResponse\"+\n" +
+	"\x11DeregisterRequest\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x14\n" +
 	"\x12DeregisterResponse*K\n" +
 	"\fCancelReason\x12\x1d\n" +
 	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
