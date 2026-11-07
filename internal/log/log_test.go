@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/pkg/cmdutil"
+	"github.com/runcoil/runcoil/pkg/configutil"
 )
 
 func load(t *testing.T, vars map[string]string) (Config, error) {
 	t.Helper()
 
 	var cfg Config
-	err := cmdutil.Load("test", &cfg, nil, func(key string) (string, bool) {
+	err := configutil.Load("test", &cfg, nil, func(key string) (string, bool) {
 		v, ok := vars[key]
 		return v, ok
 	})
@@ -26,35 +26,25 @@ func TestConfigDefaults(t *testing.T) {
 	cfg, err := load(t, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, Config{Level: slog.LevelInfo, Format: FormatText}, cfg)
+	assert.Equal(t, Config{Level: slog.LevelInfo, Format: "text"}, cfg)
 	assert.NoError(t, cfg.Validate())
 }
 
 func TestConfigValues(t *testing.T) {
-	cfg, err := load(t, map[string]string{"LOG_LEVEL": "debug", "LOG_FORMAT": "JSON"})
+	cfg, err := load(t, map[string]string{"LOG_LEVEL": "debug", "LOG_FORMAT": "json"})
 
 	require.NoError(t, err)
-	assert.Equal(t, Config{Level: slog.LevelDebug, Format: FormatJSON}, cfg)
+	assert.Equal(t, Config{Level: slog.LevelDebug, Format: "json"}, cfg)
 }
 
-func TestConfigBadValues(t *testing.T) {
-	_, err := load(t, map[string]string{"LOG_LEVEL": "loud", "LOG_FORMAT": "xml"})
+func TestConfigBadLevel(t *testing.T) {
+	_, err := load(t, map[string]string{"LOG_LEVEL": "loud"})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "LOG_LEVEL: log.level")
-	assert.Contains(t, err.Error(), "LOG_FORMAT: log.format")
+	assert.ErrorContains(t, err, "LOG_LEVEL: log.level")
 }
 
 func TestValidate(t *testing.T) {
-	cfg := Config{Format: Format(7)}
+	cfg := Config{Format: "xml"}
 
-	assert.EqualError(t, cfg.Validate(), "log.format must be text or json")
-}
-
-func TestFormatText(t *testing.T) {
-	b, err := FormatJSON.MarshalText()
-
-	require.NoError(t, err)
-	assert.Equal(t, "json", string(b))
-	assert.Equal(t, "text", FormatText.String())
+	assert.EqualError(t, cfg.Validate(), "format must be text or json")
 }

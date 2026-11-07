@@ -23,6 +23,4 @@ COPY --chown=appuser:appuser --from=builder /app/main /app/main
 
 USER appuser
 
-EXPOSE 7070
-
 ENTRYPOINT ["/app/main"]

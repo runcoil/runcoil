@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -13,11 +13,9 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const connectTimeout = 10 * time.Second
+var sslModes = []string{"disable", "require", "verify-full"}
 
-var sslModes = []string{"disable", "prefer", "require", "verify-ca", "verify-full"}
-
-// Config is the PostgreSQL connection, set by its parts.
+// Config is the PostgreSQL connection configuration.
 type Config struct {
 	Host     string
 	Port     int
@@ -32,81 +30,83 @@ type Config struct {
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Host, "postgres.host", "localhost", "PostgreSQL host.")
 	fs.IntVar(&c.Port, "postgres.port", 5432, "PostgreSQL port.")
-	fs.StringVar(&c.User, "postgres.user", "runcoil", "PostgreSQL user.")
-	fs.StringVar(&c.Password, "postgres.password", "", "PostgreSQL password.")
-	fs.StringVar(&c.DB, "postgres.db", "runcoil", "PostgreSQL database.")
-	fs.StringVar(&c.SSLMode, "postgres.ssl-mode", "prefer", "TLS mode, as libpq names it: "+strings.Join(sslModes, ", ")+".")
+	fs.StringVar(&c.User, "postgres.user", "postgres", "PostgreSQL user.")
+	fs.StringVar(&c.Password, "postgres.password", "postgres", "PostgreSQL password.")
+	fs.StringVar(&c.DB, "postgres.db", "postgres", "PostgreSQL database.")
+	fs.StringVar(&c.SSLMode, "postgres.ssl-mode", "disable", "TLS mode: "+strings.Join(sslModes, ", ")+".")
 	fs.Int32Var(&c.MaxConns, "postgres.max-conns", 10, "Most connections in the pool.")
 }
 
-// Validate returns every invalid value at once.
+// Validate checks the configuration.
 func (c *Config) Validate() error {
-	var errs []error
-
 	if c.Host == "" {
-		errs = append(errs, errors.New("postgres.host is required"))
+		return errors.New("host is required")
 	}
+
 	if c.Port < 1 || c.Port > 65535 {
-		errs = append(errs, errors.New("postgres.port must be between 1 and 65535"))
+		return errors.New("port must be between 1 and 65535")
 	}
+
 	if c.User == "" {
-		errs = append(errs, errors.New("postgres.user is required"))
+		return errors.New("user is required")
 	}
+
+	if c.Password == "" {
+		return errors.New("password is required")
+	}
+
 	if c.DB == "" {
-		errs = append(errs, errors.New("postgres.db is required"))
+		return errors.New("db is required")
 	}
+
 	if !slices.Contains(sslModes, c.SSLMode) {
-		errs = append(errs, fmt.Errorf("postgres.ssl-mode must be one of %s", strings.Join(sslModes, ", ")))
-	}
-	if c.MaxConns < 1 {
-		errs = append(errs, errors.New("postgres.max-conns must be at least 1"))
+		return fmt.Errorf("ssl mode must be one of the following values: %s", strings.Join(sslModes, ", "))
 	}
 
-	return errors.Join(errs...)
-}
-
-// connString builds a libpq keyword/value string, with each value quoted. The
-// password stays out: pgx redacts it from errors only up to the first quote.
-func (c *Config) connString() string {
-	parts := []string{
-		"host=" + quote(c.Host),
-		"port=" + strconv.Itoa(c.Port),
-		"user=" + quote(c.User),
-		"dbname=" + quote(c.DB),
-		"sslmode=" + quote(c.SSLMode),
+	if c.MaxConns <= 0 {
+		return errors.New("max conns must be greater than 0")
 	}
 
-	return strings.Join(parts, " ")
+	return nil
 }
 
-func quote(s string) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
-}
-
-// NewPool opens the pool and checks that the database answers.
-func NewPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
-	poolCfg, err := pgxpool.ParseConfig(cfg.connString())
+// NewPgxPool creates a connection pool and checks that the database answers.
+func NewPgxPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
+	pgConf, err := pgxpool.ParseConfig(connectionString(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	if cfg.Password != "" {
-		poolCfg.ConnConfig.Password = cfg.Password
-	}
-	poolCfg.MaxConns = cfg.MaxConns
+	pgConf.MaxConns = cfg.MaxConns
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	pool, err := pgxpool.NewWithConfig(ctx, pgConf)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
 
-	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
+	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer pingCancel()
 
 	if err := pool.Ping(pingCtx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("ping: %w", err)
+		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
 	return pool, nil
+}
+
+// connectionString builds the URL of the database.
+func connectionString(cfg Config) string {
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(cfg.User, cfg.Password),
+		Host:   fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Path:   cfg.DB,
+	}
+
+	q := u.Query()
+	q.Add("sslmode", cfg.SSLMode)
+	u.RawQuery = q.Encode()
+
+	return u.String()
 }

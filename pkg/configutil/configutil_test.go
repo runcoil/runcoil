@@ -1,4 +1,4 @@
-package cmdutil
+package configutil
 
 import (
 	"os"
@@ -222,7 +222,7 @@ func TestLoadIgnoresUnknownEnvironment(t *testing.T) {
 
 func TestEnvName(t *testing.T) {
 	assert.Equal(t, "POSTGRES_MAX_CONNS", EnvName("postgres.max-conns"))
-	assert.Equal(t, "HTTP_ADDR", EnvName("http.addr"))
+	assert.Equal(t, "ENGINE_PORT", EnvName("engine.port"))
 }
 
 func TestFlagNames(t *testing.T) {

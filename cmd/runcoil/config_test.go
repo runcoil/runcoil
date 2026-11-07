@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/runcoil/runcoil/pkg/cmdutil"
+	"github.com/runcoil/runcoil/pkg/configutil"
 )
 
 func noEnv(string) (string, bool) { return "", false }
@@ -20,7 +20,7 @@ func defaults(t *testing.T) Config {
 	t.Helper()
 
 	var cfg Config
-	require.NoError(t, cmdutil.Load("test", &cfg, nil, noEnv))
+	require.NoError(t, configutil.Load("test", &cfg, nil, noEnv))
 
 	return cfg
 }
@@ -31,24 +31,30 @@ func TestDefaultsAreValid(t *testing.T) {
 	assert.NoError(t, cfg.Validate())
 }
 
-func TestValidateReportsEveryError(t *testing.T) {
-	cfg := defaults(t)
-	cfg.HTTP.Addr = "nope"
-	cfg.Postgres.Port = 0
-	cfg.Postgres.MaxConns = 0
-	cfg.Log.Format = 9
+func TestValidateNamesTheSection(t *testing.T) {
+	tests := []struct {
+		name   string
+		modify func(*Config)
+		want   string
+	}{
+		{name: "log", modify: func(c *Config) { c.Log.Format = "xml" }, want: "log: format must be text or json"},
+		{name: "postgres", modify: func(c *Config) { c.Postgres.Port = 0 }, want: "postgres: port must be between 1 and 65535"},
+		{name: "engine", modify: func(c *Config) { c.Engine.Port = 0 }, want: "engine: port must be between 1 and 65535"},
+	}
 
-	err := cfg.Validate()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaults(t)
+			tt.modify(&cfg)
 
-	require.Error(t, err)
-	for _, want := range []string{"http.addr", "postgres.port", "postgres.max-conns", "log.format"} {
-		assert.Contains(t, err.Error(), want)
+			assert.EqualError(t, cfg.Validate(), tt.want)
+		})
 	}
 }
 
 func TestLoadReportsEveryBadValue(t *testing.T) {
 	var cfg Config
-	err := cmdutil.Load("test", &cfg, nil, func(key string) (string, bool) {
+	err := configutil.Load("test", &cfg, nil, func(key string) (string, bool) {
 		v, ok := map[string]string{"POSTGRES_PORT": "tcp://x", "LOG_LEVEL": "loud"}[key]
 		return v, ok
 	})
@@ -70,7 +76,7 @@ func flatKeys(prefix string, in map[string]any, out *[]string) {
 }
 
 func TestConfigExampleListsEveryFlag(t *testing.T) {
-	b, err := os.ReadFile("../../config.example.yml")
+	b, err := os.ReadFile("config.example.yml")
 	require.NoError(t, err)
 
 	var doc map[string]any
@@ -80,15 +86,15 @@ func TestConfigExampleListsEveryFlag(t *testing.T) {
 	flatKeys("", doc, &keys)
 	slices.Sort(keys)
 
-	assert.Equal(t, cmdutil.FlagNames(&Config{}), keys)
+	assert.Equal(t, configutil.FlagNames(&Config{}), keys)
 
 	var cfg Config
-	require.NoError(t, cmdutil.Load("test", &cfg, []string{"--config", "../../config.example.yml"}, noEnv))
+	require.NoError(t, configutil.Load("test", &cfg, []string{"--config", "config.example.yml"}, noEnv))
 	assert.Equal(t, defaults(t), cfg, "config.example.yml must hold the defaults")
 }
 
 func TestEnvExampleListsEveryFlag(t *testing.T) {
-	f, err := os.Open("../../.env.example")
+	f, err := os.Open(".env.example")
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -97,7 +103,7 @@ func TestEnvExampleListsEveryFlag(t *testing.T) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" {
 			continue
 		}
 
@@ -109,8 +115,8 @@ func TestEnvExampleListsEveryFlag(t *testing.T) {
 	require.NoError(t, scanner.Err())
 
 	var want []string
-	for _, flag := range cmdutil.FlagNames(&Config{}) {
-		want = append(want, cmdutil.EnvName(flag))
+	for _, flag := range configutil.FlagNames(&Config{}) {
+		want = append(want, configutil.EnvName(flag))
 	}
 	slices.Sort(want)
 	slices.Sort(names)
@@ -118,7 +124,7 @@ func TestEnvExampleListsEveryFlag(t *testing.T) {
 	assert.Equal(t, want, names)
 
 	var cfg Config
-	require.NoError(t, cmdutil.Load("test", &cfg, nil, func(key string) (string, bool) {
+	require.NoError(t, configutil.Load("test", &cfg, nil, func(key string) (string, bool) {
 		v, ok := vars[key]
 		return v, ok
 	}))

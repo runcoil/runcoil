@@ -1,6 +1,6 @@
 version: '3'
 
-dotenv: ['.env']
+dotenv: ['cmd/runcoil/.env']
 
 env:
   GOWORK: 'off'
@@ -12,30 +12,19 @@ tasks:
       - go build ./...
 
   run:
-    desc: Run the server with the settings in .env
+    desc: Run the server
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
 
-  up:
+  dc-up:
     desc: Start PostgreSQL and the server in Docker Compose
-    preconditions: &compose-preconditions
-      - sh: test -f .env
-        msg: Copy .env.example to .env and set POSTGRES_PASSWORD
-      - sh: test -n "$POSTGRES_PASSWORD"
-        msg: Set POSTGRES_PASSWORD in .env; the postgres image needs a password
     cmds:
-      - docker compose up --build --detach --wait
+      - docker compose -f docker-compose.yml up --build -d
 
-  db:
-    desc: Start only PostgreSQL in Docker Compose, for task run
-    preconditions: *compose-preconditions
-    cmds:
-      - docker compose up --detach --wait postgres
-
-  down:
+  dc-down:
     desc: Stop Docker Compose
     cmds:
-      - docker compose down
+      - docker compose -f docker-compose.yml down
 
   test:
     desc: Run the tests with the race detector

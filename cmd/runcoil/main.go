@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/engine"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/postgres"
-	"github.com/runcoil/runcoil/internal/server"
-	"github.com/runcoil/runcoil/pkg/cmdutil"
+	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/service"
 )
 
@@ -27,7 +27,7 @@ func run() error {
 	defer cancel()
 
 	var cfg Config
-	loadErr := cmdutil.Load("runcoil", &cfg, os.Args[1:], os.LookupEnv)
+	loadErr := configutil.Load("runcoil", &cfg, os.Args[1:], os.LookupEnv)
 	if errors.Is(loadErr, pflag.ErrHelp) {
 		return nil
 	}
@@ -38,14 +38,14 @@ func run() error {
 
 	logger := log.NewLogger(cfg.Log)
 
-	pool, err := postgres.NewPool(ctx, cfg.Postgres)
+	pool, err := postgres.NewPgxPool(ctx, cfg.Postgres)
 	if err != nil {
-		return fmt.Errorf("open postgres pool: %w", err)
+		return fmt.Errorf("new pgx pool: %w", err)
 	}
 	defer pool.Close()
 
 	manager := service.NewManager(
-		server.NewService(cfg.HTTP, logger, pool),
+		engine.NewService(cfg.Engine, logger, pool),
 	)
 
 	logger.InfoContext(ctx, "server is started")

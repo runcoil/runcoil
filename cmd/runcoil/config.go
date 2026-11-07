@@ -1,34 +1,42 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/engine"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/postgres"
-	"github.com/runcoil/runcoil/internal/server"
 )
 
-// Config gathers the configs of the server's packages.
+// Config is the configuration of the server.
 type Config struct {
-	HTTP     server.Config
-	Postgres postgres.Config
 	Log      log.Config
+	Postgres postgres.Config
+	Engine   engine.Config
 }
 
-// RegisterFlags registers every package's flags.
+// RegisterFlags registers the flags of every section.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
-	c.HTTP.RegisterFlags(fs)
-	c.Postgres.RegisterFlags(fs)
 	c.Log.RegisterFlags(fs)
+	c.Postgres.RegisterFlags(fs)
+	c.Engine.RegisterFlags(fs)
 }
 
-// Validate checks every package and returns every error at once.
+// Validate checks every section of the configuration.
 func (c *Config) Validate() error {
-	return errors.Join(
-		c.HTTP.Validate(),
-		c.Postgres.Validate(),
-		c.Log.Validate(),
-	)
+	if err := c.Log.Validate(); err != nil {
+		return fmt.Errorf("log: %w", err)
+	}
+
+	if err := c.Postgres.Validate(); err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+
+	if err := c.Engine.Validate(); err != nil {
+		return fmt.Errorf("engine: %w", err)
+	}
+
+	return nil
 }
