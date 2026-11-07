@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/runcoil/runcoil/internal/engine"
+	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/postgres"
 	"github.com/runcoil/runcoil/pkg/configutil"
@@ -45,7 +45,7 @@ func run() error {
 	defer pool.Close()
 
 	manager := service.NewManager(
-		engine.NewService(cfg.Engine, logger, pool),
+		http.NewService(cfg.HTTP, logger, pool),
 	)
 
 	logger.InfoContext(ctx, "server is started")

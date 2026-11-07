@@ -1,4 +1,4 @@
-package engine
+package http
 
 import (
 	"context"
@@ -19,14 +19,14 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// Config is the engine configuration.
+// Config is the HTTP server configuration.
 type Config struct {
 	Port int
 }
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
-	fs.IntVar(&c.Port, "engine.port", 7070, "Port of the APIs and the health checks.")
+	fs.IntVar(&c.Port, "http.port", 7070, "Port of the APIs and the health checks.")
 }
 
 // Validate checks the configuration.
@@ -53,7 +53,7 @@ type Service struct {
 	stopOnce sync.Once
 }
 
-// NewService creates the engine service.
+// NewService creates the HTTP service.
 func NewService(cfg Config, logger *slog.Logger, db Pinger) *Service {
 	return &Service{
 		cfg:     cfg,
@@ -81,7 +81,7 @@ func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 		served <- srv.Serve(listener)
 	}()
 
-	s.logger.InfoContext(ctx, "engine listening", slog.String("addr", listener.Addr().String()))
+	s.logger.InfoContext(ctx, "http server listening", slog.String("addr", listener.Addr().String()))
 
 	select {
 	case <-s.stopped:

@@ -56,7 +56,7 @@ reads `.env`; `task run` loads `cmd/runcoil/.env` when it exists.
 - `internal/apierr`: the error vocabulary
 - `internal/log`: the logger
 - `internal/postgres`: the PostgreSQL pool
-- `internal/engine`: the engine; for now the HTTP server and its health checks
+- `internal/http`: the HTTP server, with the health checks for now
 - `pkg/configutil`: loads the config from flags, the environment and a file
 - `pkg/service`: starts the long-running parts and stops them on a signal
 - `tools`: the Go tools, in their own module

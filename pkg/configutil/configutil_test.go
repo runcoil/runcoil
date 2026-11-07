@@ -222,7 +222,7 @@ func TestLoadIgnoresUnknownEnvironment(t *testing.T) {
 
 func TestEnvName(t *testing.T) {
 	assert.Equal(t, "POSTGRES_MAX_CONNS", EnvName("postgres.max-conns"))
-	assert.Equal(t, "ENGINE_PORT", EnvName("engine.port"))
+	assert.Equal(t, "HTTP_PORT", EnvName("http.port"))
 }
 
 func TestFlagNames(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/runcoil/runcoil/internal/engine"
+	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/postgres"
 )
@@ -14,14 +14,14 @@ import (
 type Config struct {
 	Log      log.Config
 	Postgres postgres.Config
-	Engine   engine.Config
+	HTTP     http.Config
 }
 
 // RegisterFlags registers the flags of every section.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	c.Log.RegisterFlags(fs)
 	c.Postgres.RegisterFlags(fs)
-	c.Engine.RegisterFlags(fs)
+	c.HTTP.RegisterFlags(fs)
 }
 
 // Validate checks every section of the configuration.
@@ -34,8 +34,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("postgres: %w", err)
 	}
 
-	if err := c.Engine.Validate(); err != nil {
-		return fmt.Errorf("engine: %w", err)
+	if err := c.HTTP.Validate(); err != nil {
+		return fmt.Errorf("http: %w", err)
 	}
 
 	return nil
