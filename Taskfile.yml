@@ -4,6 +4,14 @@ env:
   GOWORK: 'off'
 
 tasks:
+  setup:
+    desc: Download the modules and build the Go tools
+    cmds:
+      - go mod download
+      - cmd: go mod download
+        dir: tools
+      - go build -modfile=tools/go.mod tool
+
   build:
     desc: Build the server
     cmds:
@@ -13,16 +21,6 @@ tasks:
     desc: Run the server
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
-
-  dc-up:
-    desc: Start PostgreSQL and the server in Docker Compose
-    cmds:
-      - docker compose -f docker-compose.yml up --build -d
-
-  dc-down:
-    desc: Stop Docker Compose
-    cmds:
-      - docker compose -f docker-compose.yml down
 
   test:
     desc: Run the tests with the race detector

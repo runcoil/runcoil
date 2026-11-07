@@ -20,6 +20,7 @@ through `go tool`. Nothing else is installed globally.
 ## Development
 
 ```sh
+task setup    # download the modules and build the Go tools
 task build    # build the server
 task test     # tests with the race detector
 task lint     # golangci-lint
@@ -34,9 +35,9 @@ The tests open no database. Every tool call runs with `GOWORK=off`, because
 ## Running
 
 ```sh
-task dc-up     # PostgreSQL 18 and the server in Docker Compose
-task dc-down
-task run       # the server on the host, against the PostgreSQL of task dc-up
+docker compose up -d     # PostgreSQL 18 and the server
+docker compose down
+task run                 # the server on the host, against the PostgreSQL of Compose
 ```
 
 The server listens on port `7070`:
