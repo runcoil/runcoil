@@ -17,8 +17,7 @@ lose the work, because each finished Step is saved and the function replays past
 - **Self-hosted:** one server and PostgreSQL, nothing else to run.
 
 > [!NOTE]
-> **Runcoil is being rebuilt** on a new design, phase by phase. Today the server
-> loads its config, opens the PostgreSQL pool, and serves its health checks.
+> **Runcoil is in early development.** Expect breaking changes until the first release.
 
 ## Get started
 
