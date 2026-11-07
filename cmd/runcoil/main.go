@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/pkg/service"
@@ -19,8 +17,8 @@ func main() {
 }
 
 func run() error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	logger, err := log.NewLogger(log.Config{Format: log.FormatText})
 	if err != nil {
@@ -34,9 +32,6 @@ func run() error {
 	if err := manager.Run(ctx); err != nil {
 		return fmt.Errorf("run services: %w", err)
 	}
-
-	// The manager returns at once while it has no services, so wait for the signal here.
-	<-ctx.Done()
 
 	logger.InfoContext(ctx, "server is stopped")
 

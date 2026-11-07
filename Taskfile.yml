@@ -25,6 +25,8 @@ tasks:
     desc: Fail when go.mod or go.sum is not tidy
     cmds:
       - go mod tidy -diff
+      - cmd: go mod tidy -diff
+        dir: tools
 
   vuln:
     desc: Scan for known vulnerabilities

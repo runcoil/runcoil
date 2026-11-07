@@ -166,6 +166,24 @@ func TestAServiceThatReturnsNilStopsTheOthers(t *testing.T) {
 	assert.Equal(t, []string{"stop b", "stop a"}, log.stops(), "every service gets Stop, in reverse order")
 }
 
+func TestAnErrorDuringShutdownIsReturned(t *testing.T) {
+	log := &events{}
+	b := newStub("b", log)
+	stopped := make(chan struct{})
+	m := NewManager()
+	m.Add(func(context.Context) error {
+		<-stopped
+		return errBoom
+	}, func() { close(stopped) })
+	m.services = append(m.services, b)
+	done := runAsync(context.Background(), m)
+	waitStarted(t, b)
+
+	b.fail <- nil
+
+	require.ErrorIs(t, waitRun(t, done), errBoom)
+}
+
 func TestCancellingTheContextStopsEveryServiceAndReturnsTheCause(t *testing.T) {
 	log := &events{}
 	a, b, c := newStub("a", log), newStub("b", log), newStub("c", log)

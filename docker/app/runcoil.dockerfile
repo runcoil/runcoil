@@ -6,13 +6,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 \
+RUN GOWORK=off \
+    CGO_ENABLED=0 \
     GOOS=linux \
     go build -ldflags "-s -w" \
     -o main ./cmd/runcoil
 
 
-FROM alpine:3.23 AS prod
+FROM alpine:3.24 AS prod
 
 WORKDIR /app
 
