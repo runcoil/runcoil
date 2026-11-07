@@ -1,15 +1,26 @@
 version: '3'
 
-dotenv: ['.env']
-
 env:
   GOWORK: 'off'
 
 tasks:
+  setup:
+    desc: Download the modules and build the Go tools
+    cmds:
+      - go mod download
+      - cmd: go mod download
+        dir: tools
+      - go build -modfile=tools/go.mod tool
+
   build:
     desc: Build the server
     cmds:
       - go build ./...
+
+  run:
+    desc: Run the server
+    cmds:
+      - go run ./cmd/runcoil {{.CLI_ARGS}}
 
   test:
     desc: Run the tests with the race detector

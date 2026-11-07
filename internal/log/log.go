@@ -1,79 +1,45 @@
 package log
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/lmittmann/tint"
+	"github.com/spf13/pflag"
 )
 
-// Config represents the logging configuration.
+// Config is the logging configuration.
 type Config struct {
-	Format    Format     `yaml:"format"`
-	Level     slog.Level `yaml:"level"`
-	AddSource bool       `yaml:"add_source"`
+	Level  slog.Level
+	Format string
 }
 
-// Validate checks the logging configuration. Every value is valid, so it returns nil.
-func (l *Config) Validate() error {
-	return nil
+// RegisterFlags declares every key with its default and help text.
+func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
+	fs.TextVar(&c.Level, "log.level", slog.LevelInfo, "Lowest level written: debug, info, warn or error.")
+	fs.StringVar(&c.Format, "log.format", "text", "Output format: text for a terminal, json for production.")
 }
 
-// Format is the output format of the logger.
-type Format uint8
-
-const (
-	// FormatJSON writes one JSON object per line.
-	FormatJSON Format = iota
-	// FormatText writes colored text for a terminal.
-	FormatText
-)
-
-// String implements flag.Value.
-func (f Format) String() string {
-	return []string{"JSON", "TEXT"}[f]
-}
-
-// Set implements flag.Value.
-func (f Format) Set(s string) error {
-	return f.UnmarshalText([]byte(s))
-}
-
-// UnmarshalText implements [encoding.TextUnmarshaler].
-func (f *Format) UnmarshalText(text []byte) error {
-	switch strings.ToUpper(string(text)) {
-	case "JSON":
-		*f = FormatJSON
-	case "TEXT":
-		*f = FormatText
-	default:
-		return fmt.Errorf("unknown log format: %s", text)
+// Validate checks the logging configuration.
+func (c *Config) Validate() error {
+	if c.Format != "text" && c.Format != "json" {
+		return errors.New("format must be text or json")
 	}
 
 	return nil
 }
 
-// MarshalText implements [encoding.TextMarshaler].
-func (f Format) MarshalText() ([]byte, error) {
-	return []byte(f.String()), nil
-}
-
 // NewLogger creates the logger from the configuration and makes it the slog default.
-func NewLogger(cfg Config) (*slog.Logger, error) {
+func NewLogger(cfg Config) *slog.Logger {
 	var handler slog.Handler
 
-	if cfg.Format == FormatJSON {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level:     cfg.Level,
-			AddSource: cfg.AddSource,
-		})
+	if cfg.Format == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.Level})
 	} else {
 		handler = tint.NewTextHandler(os.Stdout, &tint.Options{
 			Level:      cfg.Level,
-			AddSource:  cfg.AddSource,
 			TimeFormat: time.RFC3339,
 			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 				if a.Value.Kind() == slog.KindAny {
@@ -90,5 +56,5 @@ func NewLogger(cfg Config) (*slog.Logger, error) {
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
-	return logger, nil
+	return logger
 }
