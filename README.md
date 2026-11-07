@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/logo/runcoil-lockup-on-dark.svg">
-  <img alt="Runcoil" src="docs/logo/runcoil-lockup-on-light.svg" width="240">
+  <img alt="Runcoil" src="docs/logo/runcoil-lockup-on-light.svg" width="360">
 </picture>
 
 Durable background Tasks for your application
