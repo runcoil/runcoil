@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +50,7 @@ func TestValidate(t *testing.T) {
 
 func TestConnStringEscapes(t *testing.T) {
 	cfg := validConfig()
-	cfg.Password = `it's a \ pass word=x`
+	cfg.User = `it's a \ user=x`
 	cfg.DB = "my db"
 	cfg.SSLMode = "disable"
 
@@ -57,8 +59,33 @@ func TestConnStringEscapes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "localhost", parsed.Host)
 	assert.Equal(t, uint16(5432), parsed.Port)
-	assert.Equal(t, "runcoil", parsed.User)
-	assert.Equal(t, `it's a \ pass word=x`, parsed.Password)
+	assert.Equal(t, `it's a \ user=x`, parsed.User)
 	assert.Equal(t, "my db", parsed.Database)
 	assert.Nil(t, parsed.TLSConfig)
+}
+
+func TestPasswordNeverInErrors(t *testing.T) {
+	cfg := validConfig()
+	cfg.Host = "127.0.0.1"
+	cfg.Port = 1
+	cfg.Password = `zebra\'quartz violet-7731`
+
+	connString := cfg.connString()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, connectErr := NewPool(ctx, cfg)
+	require.ErrorContains(t, connectErr, "ping")
+
+	badSSLMode := cfg
+	badSSLMode.SSLMode = `prefer' sslmode='nope`
+	_, parseErr := NewPool(ctx, badSSLMode)
+	require.ErrorContains(t, parseErr, "parse config")
+
+	for _, part := range []string{"zebra", "quartz", "violet", "7731"} {
+		assert.NotContains(t, connString, part)
+		assert.NotContains(t, connectErr.Error(), part)
+		assert.NotContains(t, parseErr.Error(), part)
+	}
 }

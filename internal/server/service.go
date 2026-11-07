@@ -115,6 +115,10 @@ func (s *Service) Run(ctx context.Context) error {
 
 	s.logger.InfoContext(ctx, "http server is listening", slog.String("addr", listener.Addr().String()))
 
+	return s.serve(listener)
+}
+
+func (s *Service) serve(listener net.Listener) error {
 	if err := s.server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -136,7 +140,7 @@ func (s *Service) Stop() {
 		defer cancel()
 
 		if err := s.server.Shutdown(ctx); err != nil {
-			s.stopErr = fmt.Errorf("shutdown: %w", err)
+			s.stopErr = fmt.Errorf("shutdown: %w", errors.Join(err, s.server.Close()))
 		}
 		close(s.stopped)
 	})

@@ -118,42 +118,37 @@ func TestMethodNotAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
-// start runs s on a free port and returns its base URL and the result of Run.
+// start serves s on a free port and returns its base URL and the result of serve.
 func start(t *testing.T, s *Service) (string, <-chan error) {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	addr := listener.Addr().String()
-	require.NoError(t, listener.Close())
 
-	s.cfg.Addr = addr
 	done := make(chan error, 1)
-	go func() { done <- s.Run(context.Background()) }()
+	go func() { done <- s.serve(listener) }()
 
-	base := "http://" + addr
-	require.Eventually(t, func() bool {
-		resp, err := http.Get(base + "/livez")
-		if err != nil {
-			return false
-		}
-		_ = resp.Body.Close()
-
-		return true
-	}, 5*time.Second, 10*time.Millisecond)
-
-	return base, done
+	return "http://" + listener.Addr().String(), done
 }
 
-func status(t *testing.T, client *http.Client, url string) int {
+func status(t *testing.T, url string) int {
 	t.Helper()
 
-	resp, err := client.Get(url)
+	code, err := fetch(url)
 	require.NoError(t, err)
+
+	return code
+}
+
+func fetch(url string) (int, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, err
+	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
-	return resp.StatusCode
+	return resp.StatusCode, nil
 }
 
 func TestRunAndStop(t *testing.T) {
@@ -161,7 +156,7 @@ func TestRunAndStop(t *testing.T) {
 	s.shutdownDelay = 300 * time.Millisecond
 	base, done := start(t, s)
 
-	assert.Equal(t, http.StatusOK, status(t, http.DefaultClient, base+"/readyz"))
+	assert.Equal(t, http.StatusOK, status(t, base+"/readyz"))
 
 	stopped := make(chan struct{})
 	go func() {
@@ -170,7 +165,8 @@ func TestRunAndStop(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return status(t, http.DefaultClient, base+"/readyz") == http.StatusServiceUnavailable
+		code, err := fetch(base + "/readyz")
+		return err == nil && code == http.StatusServiceUnavailable
 	}, time.Second, 10*time.Millisecond)
 
 	<-stopped
@@ -178,7 +174,7 @@ func TestRunAndStop(t *testing.T) {
 	case err := <-done:
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return after Stop")
+		require.FailNow(t, "serve did not return after Stop")
 	}
 
 	_, err := http.Get(base + "/livez")

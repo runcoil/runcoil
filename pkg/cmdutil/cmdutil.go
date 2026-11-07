@@ -3,7 +3,6 @@ package cmdutil
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,20 +29,13 @@ func Load(name string, cfg Registerer, args []string, lookup func(string) (strin
 		return err
 	}
 
-	file := map[string]string{}
-	if *configPath != "" {
-		var err error
-		file, err = readFile(*configPath)
-		if err != nil {
-			return fmt.Errorf("read config file %s: %w", *configPath, err)
-		}
-	}
-
 	var errs []error
-	for _, key := range slices.Sorted(maps.Keys(file)) {
-		if key == "config" || fs.Lookup(key) == nil {
-			errs = append(errs, fmt.Errorf("%s: unknown key %s", *configPath, key))
-		}
+
+	var file map[string]string
+	if *configPath != "" {
+		var fileErrs []error
+		file, fileErrs = readFile(*configPath, fs)
+		errs = append(errs, fileErrs...)
 	}
 
 	seen := map[string]string{}
@@ -104,47 +96,72 @@ func underscoreIsDash(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 }
 
 // readFile flattens a YAML file into flag names: a nested key becomes a dotted
-// name and a list becomes one comma-separated value.
-func readFile(path string) (map[string]string, error) {
+// name and a list becomes one comma-separated value. It returns every problem
+// with a key, sorted.
+func readFile(path string, fs *pflag.FlagSet) (map[string]string, []error) {
 	b, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, err
+		return nil, []error{fmt.Errorf("read config file: %w", err)}
 	}
 
 	var doc map[string]any
 	if err := yaml.Unmarshal(b, &doc); err != nil {
-		return nil, err
+		return nil, []error{fmt.Errorf("read config file %s: %w", path, err)}
 	}
 
-	out := map[string]string{}
-	if err := flatten("", doc, out); err != nil {
-		return nil, err
+	values := map[string]string{}
+	sources := map[string]string{}
+	var problems []string
+	flatten("", "", doc, values, sources, &problems)
+
+	for key, source := range sources {
+		if key == "config" || fs.Lookup(key) == nil {
+			problems = append(problems, "unknown key "+source)
+		}
 	}
 
-	return out, nil
+	slices.Sort(problems)
+	errs := make([]error, len(problems))
+	for i, problem := range problems {
+		errs[i] = fmt.Errorf("%s: %s", path, problem)
+	}
+
+	return values, errs
 }
 
-func flatten(prefix string, in map[string]any, out map[string]string) error {
+// flatten fills values by flag name, and sources with the key as the file
+// spells it.
+func flatten(prefix, rawPrefix string, in map[string]any, values, sources map[string]string, problems *[]string) {
 	for k, v := range in {
+		raw := rawPrefix + k
 		key := strings.ReplaceAll(prefix+k, "_", "-")
 
+		var value string
 		switch v := v.(type) {
 		case map[string]any:
-			if err := flatten(key+".", v, out); err != nil {
-				return err
-			}
+			flatten(key+".", raw+".", v, values, sources, problems)
+			continue
+		case nil:
+			*problems = append(*problems, raw+" has no value")
+			continue
 		case []any:
 			parts := make([]string, len(v))
 			for i, item := range v {
 				parts[i] = fmt.Sprint(item)
 			}
-			out[key] = strings.Join(parts, ",")
-		case nil:
-			return fmt.Errorf("%s has no value", key)
+			value = strings.Join(parts, ",")
 		default:
-			out[key] = fmt.Sprint(v)
+			value = fmt.Sprint(v)
 		}
-	}
 
-	return nil
+		if other, ok := sources[key]; ok {
+			pair := []string{other, raw}
+			slices.Sort(pair)
+			*problems = append(*problems, fmt.Sprintf("%s and %s both set %s", pair[0], pair[1], key))
+			continue
+		}
+
+		sources[key] = raw
+		values[key] = value
+	}
 }

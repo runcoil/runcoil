@@ -35,10 +35,12 @@ The tests open no database. Every tool call runs with `GOWORK=off`, because
 
 ```sh
 cp .env.example .env   # then set POSTGRES_PASSWORD
-task up                # PostgreSQL 18 and the server in Docker Compose
+task up                # PostgreSQL 18 and the server, both in Docker Compose
 task down
-task run               # or the server alone, against POSTGRES_HOST in .env
 ```
+
+To run the server on the host instead, start only the database with `task db`,
+then `task run`.
 
 The server listens on one port, `7070`:
 
@@ -50,7 +52,8 @@ Each key is a flag (`--postgres.host`), an environment variable with the same
 name in upper case (`POSTGRES_HOST`), or a key in a YAML file passed with
 `--config`, lowest first: file, environment, flag. `config.example.yml` and
 `.env.example` list every key with its default. The binary never reads `.env`;
-Task and Compose load it.
+Task and Compose load it. pgx also reads the libpq `PG*` variables and
+`~/.pgpass` for what the config leaves unset, such as an empty password.
 
 ## Layout
 

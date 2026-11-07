@@ -3,6 +3,7 @@ package cmdutil
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +127,53 @@ func TestLoadFileKeyWithoutValue(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db.host has no value")
+}
+
+func TestLoadDuplicateFileKeys(t *testing.T) {
+	path := writeFile(t, "db:\n  max_conns: 1\n  max-conns: 2\n")
+
+	var cfg testConfig
+	err := Load("test", &cfg, []string{"--config", path}, env(nil))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path+": db.max-conns and db.max_conns both set db.max-conns")
+}
+
+func TestLoadReportsEveryFileAndEnvironmentError(t *testing.T) {
+	path := writeFile(t, "db:\n  port:\n  host:\n  hots: x\n  max_conns: 1\n  max-conns: 2\nretry:\n  delays:\n")
+
+	var cfg testConfig
+	err := Load("test", &cfg, []string{"--config", path}, env(map[string]string{"DB_PORT": "tcp://x"}))
+
+	require.Error(t, err)
+	assert.Equal(t, []string{
+		path + ": db.host has no value",
+		path + ": db.max-conns and db.max_conns both set db.max-conns",
+		path + ": db.port has no value",
+		path + ": retry.delays has no value",
+		path + ": unknown key db.hots",
+		`DB_PORT: db.port: invalid argument "tcp://x" for "--db.port" flag: must be an integer`,
+	}, strings.Split(err.Error(), "\n"))
+}
+
+func TestLoadSyntaxErrorKeepsEnvironmentErrors(t *testing.T) {
+	path := writeFile(t, "db: [\n")
+
+	var cfg testConfig
+	err := Load("test", &cfg, []string{"--config", path}, env(map[string]string{"DB_PORT": "tcp://x"}))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read config file "+path)
+	assert.Contains(t, err.Error(), "DB_PORT: db.port")
+}
+
+func TestLoadIgnoresConfigInEnvironment(t *testing.T) {
+	path := writeFile(t, "db:\n  host: file-host\n")
+
+	var cfg testConfig
+	require.NoError(t, Load("test", &cfg, nil, env(map[string]string{"CONFIG": path})))
+
+	assert.Equal(t, "localhost", cfg.Host)
 }
 
 func TestLoadMissingFile(t *testing.T) {

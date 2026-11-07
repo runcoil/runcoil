@@ -65,13 +65,13 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// connString builds a libpq keyword/value string, with each value quoted.
+// connString builds a libpq keyword/value string, with each value quoted. The
+// password stays out: pgx redacts it from errors only up to the first quote.
 func (c *Config) connString() string {
 	parts := []string{
 		"host=" + quote(c.Host),
 		"port=" + strconv.Itoa(c.Port),
 		"user=" + quote(c.User),
-		"password=" + quote(c.Password),
 		"dbname=" + quote(c.DB),
 		"sslmode=" + quote(c.SSLMode),
 	}
@@ -88,6 +88,10 @@ func NewPool(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.connString())
 	if err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
+	}
+
+	if cfg.Password != "" {
+		poolCfg.ConnConfig.Password = cfg.Password
 	}
 	poolCfg.MaxConns = cfg.MaxConns
 

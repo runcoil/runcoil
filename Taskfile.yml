@@ -18,11 +18,19 @@ tasks:
 
   up:
     desc: Start PostgreSQL and the server in Docker Compose
-    preconditions:
+    preconditions: &compose-preconditions
       - sh: test -f .env
         msg: Copy .env.example to .env and set POSTGRES_PASSWORD
+      - sh: test -n "$POSTGRES_PASSWORD"
+        msg: Set POSTGRES_PASSWORD in .env; the postgres image needs a password
     cmds:
       - docker compose up --build --detach --wait
+
+  db:
+    desc: Start only PostgreSQL in Docker Compose, for task run
+    preconditions: *compose-preconditions
+    cmds:
+      - docker compose up --detach --wait postgres
 
   down:
     desc: Stop Docker Compose
