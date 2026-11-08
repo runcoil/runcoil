@@ -15,6 +15,9 @@ includes:
   proto:
     taskfile: ./proto/Taskfile.yml
     dir: ./proto
+  sdk-go:
+    taskfile: ./sdks/go/Taskfile.yml
+    dir: ./sdks/go
 
 tasks:
   setup:

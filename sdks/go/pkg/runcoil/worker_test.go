@@ -1,0 +1,357 @@
+package runcoil
+
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
+	"github.com/runcoil/runcoil/sdks/go/pkg/step"
+)
+
+type orderInput struct {
+	Amount int `json:"amount"`
+}
+
+type orderOutput struct {
+	Receipt string `json:"receipt"`
+}
+
+func TestNewWorkerValidates(t *testing.T) {
+	client, err := NewClient(URL("http://localhost:7070"), APIKey("k"))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		opts []WorkerOption
+		want string
+	}{
+		{name: "no app", want: "new worker: app is required"},
+		{name: "no slots", opts: []WorkerOption{App("shop"), Slots(0)}, want: "new worker: slots must be at least 1, got 0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewWorker(client, tt.opts...)
+			assert.EqualError(t, err, tt.want)
+		})
+	}
+
+	_, err = NewWorker(nil, App("shop"))
+	assert.Error(t, err)
+}
+
+func TestNewTaskValidates(t *testing.T) {
+	client, err := NewClient(URL("http://localhost:7070"), APIKey("k"))
+	require.NoError(t, err)
+
+	w, err := NewWorker(client, App("shop"))
+	require.NoError(t, err)
+
+	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
+
+	assert.EqualError(t, w.NewTask("", h), "new task: name is required")
+	assert.EqualError(t, w.NewTask("charge", Handler{}), `new task "charge": handler is required`)
+	require.NoError(t, w.NewTask("charge", h))
+	assert.EqualError(t, w.NewTask("charge", h), `new task "charge": task name is already registered`)
+}
+
+func TestRunSucceeds(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, in orderInput) (orderOutput, error) {
+			info, ok := Info(ctx)
+			require.True(t, ok)
+			assert.Equal(t, RunInfo{RunID: "run-1", App: "shop", TaskName: "order"}, info)
+
+			charged, err := step.Do(ctx, "charge", func(context.Context) (int, error) { return in.Amount, nil })
+			if err != nil {
+				return orderOutput{}, err
+			}
+
+			receipt, err := step.Do(ctx, "receipt", func(context.Context) (string, error) { return "r-42", nil })
+			if err != nil {
+				return orderOutput{}, err
+			}
+
+			assert.Equal(t, 30, charged)
+
+			return orderOutput{Receipt: receipt}, nil
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 7, "order", `{"amount":30}`)
+
+	run := f.waitRun(t)
+	assert.Equal(t, &runcoilv1.Lease{RunId: "run-1", Epoch: 7}, run.GetLease())
+	assert.JSONEq(t, `{"receipt":"r-42"}`, string(run.GetOutput()))
+
+	registers, _, listenAuth, steps := f.snapshot()
+	assert.Equal(t, []string{testAPIKey}, registers, "Register sends the API key")
+	assert.Equal(t, []string{testSession}, listenAuth, "Listen sends the session token")
+
+	require.Len(t, steps, 2)
+	assert.Equal(t, "charge", steps[0].GetStepId())
+	assert.Equal(t, "30", string(steps[0].GetOutput()))
+	assert.Equal(t, "receipt", steps[1].GetStepId())
+	assert.NotNil(t, steps[0].GetStartedAt())
+}
+
+func TestReplayReturnsTheStoredStep(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	var charged atomic.Int32
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			id, err := step.Do(ctx, "charge", func(context.Context) (string, error) {
+				charged.Add(1)
+				return "new", nil
+			})
+			if err != nil {
+				return orderOutput{}, err
+			}
+
+			return orderOutput{Receipt: id}, nil
+		}),
+	})
+
+	stored := &runcoilv1.StepRecord{
+		StepId: "charge",
+		Kind:   runcoilv1.StepRecord_KIND_DO,
+		Result: &runcoilv1.StepRecord_Output{Output: []byte(`"stored"`)},
+	}
+	st.send <- assignMsg("run-1", 1, "order", `{}`, stored)
+
+	run := f.waitRun(t)
+	assert.JSONEq(t, `{"receipt":"stored"}`, string(run.GetOutput()))
+	assert.Zero(t, charged.Load(), "a stored Step does not run again")
+
+	_, _, _, steps := f.snapshot()
+	assert.Empty(t, steps)
+}
+
+func TestAStepFailureFailsTheRun(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			_, err := step.Do(ctx, "charge", func(context.Context) (string, error) {
+				return "", errors.New("card declined")
+			})
+
+			var stepErr *step.Error
+			require.ErrorAs(t, err, &stepErr)
+			assert.Equal(t, "charge", stepErr.StepID)
+
+			return orderOutput{}, err
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+
+	run := f.waitRun(t)
+	assert.Equal(t, runcoilv1.ErrorKind_ERROR_KIND_ERROR, run.GetError().GetKind())
+	assert.Equal(t, "card declined", run.GetError().GetMessage())
+	assert.Equal(t, "charge", run.GetError().GetStepId())
+}
+
+func TestAPanicFailsTheRun(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { panic("boom") }),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+
+	run := f.waitRun(t)
+	assert.Equal(t, runcoilv1.ErrorKind_ERROR_KIND_PANIC, run.GetError().GetKind())
+	assert.Equal(t, "handler panicked: boom", run.GetError().GetMessage())
+}
+
+func TestAnUnknownTaskFailsTheRun(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+	})
+
+	st.send <- assignMsg("run-1", 1, "refund", `{}`)
+
+	run := f.waitRun(t)
+	assert.Equal(t, `task "refund" is not registered by this worker`, run.GetError().GetMessage())
+}
+
+func TestLeaseLostStopsTheHandler(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	running := make(chan struct{})
+	stopped := make(chan struct{})
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			_, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
+				close(running)
+				<-ctx.Done()
+				close(stopped)
+
+				return "", ctx.Err()
+			})
+
+			return orderOutput{}, err
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 3, "order", `{}`)
+	<-running
+
+	st.send <- leaseLostMsg("run-1", 3)
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "the handler's context was not cancelled")
+	}
+
+	f.noRun(t)
+
+	_, _, _, steps := f.snapshot()
+	assert.Empty(t, steps, "a Step of a lost attempt is not reported")
+}
+
+func TestReconnectReportsTheRunningAttempts(t *testing.T) {
+	f, url := newFakeServer(t)
+	first, second := newFakeStream(), newFakeStream()
+	f.streams <- first
+	f.streams <- second
+
+	release := make(chan struct{})
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			<-release
+			return orderOutput{Receipt: "done"}, nil
+		}),
+	})
+
+	first.send <- assignMsg("run-1", 5, "order", `{}`)
+	close(first.send)
+
+	require.Eventually(t, func() bool {
+		_, listens, _, _ := f.snapshot()
+		return len(listens) == 2
+	}, 5*time.Second, 10*time.Millisecond)
+
+	_, listens, _, _ := f.snapshot()
+	assert.Empty(t, listens[0].GetRunning())
+	require.Len(t, listens[1].GetRunning(), 1)
+	assert.Equal(t, &runcoilv1.Lease{RunId: "run-1", Epoch: 5}, listens[1].GetRunning()[0])
+
+	close(release)
+
+	run := f.waitRun(t)
+	assert.JSONEq(t, `{"receipt":"done"}`, string(run.GetOutput()))
+}
+
+func TestAnEndedSessionRegistersAgain(t *testing.T) {
+	f, url := newFakeServer(t)
+	f.streams <- &fakeStream{refuse: codedError(t, connect.CodeUnauthenticated, runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "worker session has ended, register again")}
+	f.streams <- newFakeStream()
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+	})
+
+	require.Eventually(t, func() bool {
+		registers, listens, _, _ := f.snapshot()
+		return len(registers) == 2 && len(listens) == 2
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+func TestShutdownWaitsForTheHandlers(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	running := make(chan struct{})
+	w := startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) {
+			close(running)
+			time.Sleep(100 * time.Millisecond)
+
+			return orderOutput{Receipt: "done"}, nil
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	<-running
+
+	require.NoError(t, w.Shutdown(context.Background()))
+
+	run := f.waitRun(t)
+	assert.JSONEq(t, `{"receipt":"done"}`, string(run.GetOutput()))
+}
+
+func TestShutdownGivesUpAtItsDeadline(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	running := make(chan struct{})
+	w := startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			close(running)
+			<-ctx.Done()
+
+			return orderOutput{}, ctx.Err()
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	<-running
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := w.Shutdown(ctx)
+	assert.EqualError(t, err, "shutdown: gave up 1 runs before they finished: [run-1]")
+
+	f.noRun(t)
+}
+
+func TestStartFailsWhenRegisterIsRefused(t *testing.T) {
+	client, err := NewClient(URL("http://127.0.0.1:1"), APIKey("k"))
+	require.NoError(t, err)
+
+	w, err := NewWorker(client, App("shop"))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	assert.ErrorContains(t, w.Start(ctx), "start worker: register:")
+	assert.ErrorContains(t, w.Start(ctx), "start worker: register:", "a failed Start can be tried again")
+}
+
+func TestRetryable(t *testing.T) {
+	assert.True(t, retryable(connect.NewError(connect.CodeUnavailable, "down")))
+	assert.False(t, retryable(connect.NewError(connect.CodeInvalidArgument, "bad")))
+	assert.False(t, retryable(codedError(t, connect.CodeFailedPrecondition, runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE, "stale")))
+}
