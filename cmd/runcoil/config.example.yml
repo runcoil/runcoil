@@ -1,3 +1,5 @@
+auto_migrate: false
+
 log:
   level: info
   format: text
@@ -10,7 +12,6 @@ postgres:
   db: postgres
   ssl_mode: disable
   max_conns: 10
-  auto_migrate: false
 
 http:
   port: 7070
