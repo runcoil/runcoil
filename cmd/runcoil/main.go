@@ -62,10 +62,12 @@ func run() error {
 		return err
 	}
 
+	httpService := http.NewService(cfg.HTTP, logger, pool, dispatcherService)
+
 	// The dispatcher stops first: its streams end, so the HTTP server can drain the
 	// unary calls without waiting for them.
 	manager := service.NewManager(
-		http.NewService(cfg.HTTP, logger, pool, dispatcherService),
+		httpService,
 		dispatcherService,
 	)
 
