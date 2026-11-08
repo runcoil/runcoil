@@ -59,7 +59,7 @@ func run() error {
 
 	dispatcherService, err := dispatcher.NewService(cfg.Dispatcher, logger, workerStore, runStore)
 	if err != nil {
-		return err
+		return fmt.Errorf("new dispatcher service: %w", err)
 	}
 
 	httpService := http.NewService(cfg.HTTP, logger, pool, dispatcherService)
