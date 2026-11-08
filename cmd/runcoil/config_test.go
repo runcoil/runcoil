@@ -40,6 +40,9 @@ func TestValidateNamesTheSection(t *testing.T) {
 		{name: "log", modify: func(c *Config) { c.Log.Format = "xml" }, want: "log: format must be text or json"},
 		{name: "postgres", modify: func(c *Config) { c.Postgres.Port = 0 }, want: "postgres: port must be between 1 and 65535"},
 		{name: "http", modify: func(c *Config) { c.HTTP.Port = 0 }, want: "http: port must be between 1 and 65535"},
+		{name: "engine", modify: func(c *Config) { c.Engine.PollInterval = 0 }, want: "engine: poll interval must be greater than 0"},
+		{name: "worker", modify: func(c *Config) { c.Worker.TTL = c.Worker.HeartbeatInterval }, want: "worker: ttl must be longer than the heartbeat interval"},
+		{name: "bootstrap", modify: func(c *Config) { c.Bootstrap.APIKey = "key" }, want: "bootstrap: api key must start with rc_api_"},
 	}
 
 	for _, tt := range tests {

@@ -37,6 +37,17 @@ tasks:
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
 
+  sqlc-gen:
+    desc: Generate the Go code of the SQL queries
+    sources:
+      - internal/storage/postgres/sqlc/sqlc.yml
+      - internal/storage/postgres/sqlc/*.sql
+      - internal/storage/postgres/migration/*.sql
+    generates:
+      - internal/storage/postgres/sqlc/*.go
+    cmds:
+      - go tool -modfile=tools/go.mod sqlc generate -f internal/storage/postgres/sqlc/sqlc.yml
+
   migrate-up:
     desc: Apply every pending migration
     cmds:
@@ -61,6 +72,32 @@ tasks:
     desc: 'Create a migration: task migrate-create -- <name>'
     cmds:
       - '{{.GOOSE}} create {{.CLI_ARGS}} sql'
+
+  worker-call:
+    desc: "Call the worker protocol of the local server: task worker-call METHOD=Register TOKEN=<key or token> DATA='{...}'"
+    dir: proto
+    vars:
+      DATA: '{{.DATA | default "{}"}}'
+    requires:
+      vars: [METHOD, TOKEN]
+    cmds:
+      - >-
+        go tool -modfile=../tools/go.mod buf curl --schema . --protocol connect --http2-prior-knowledge
+        -H 'Authorization: Bearer {{.TOKEN}}' -d '{{.DATA}}'
+        http://localhost:7070/runcoil.v1.WorkerService/{{.METHOD}}
+
+  dev-run-create:
+    desc: "Create a Run in the Compose database: task dev-run-create APP=shop TASK=charge INPUT='{}'"
+    vars:
+      APP: '{{.APP | default "shop"}}'
+      TASK: '{{.TASK | default "charge"}}'
+      INPUT: '{{.INPUT | default "{}"}}'
+    cmds:
+      - >-
+        docker compose exec -T postgres
+        psql -U postgres -At -v ON_ERROR_STOP=1
+        -v app='{{.APP}}' -v task='{{.TASK}}' -v input='{{.INPUT}}'
+        < scripts/dev-run-create.sql
 
   test:
     desc: Run the tests with the race detector

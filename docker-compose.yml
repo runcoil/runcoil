@@ -28,6 +28,7 @@ services:
       POSTGRES_SSL_MODE: disable
       POSTGRES_MAX_CONNS: 10
       HTTP_PORT: 7070
+      BOOTSTRAP_API_KEY: rc_api_local_dev
     ports:
       - 7070:7070
     depends_on:

@@ -11,7 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/validate"
 	"github.com/spf13/pflag"
+
+	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
 
 const (
@@ -43,23 +48,25 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// Service serves the health checks, and later the APIs, on one port.
+// Service serves the worker protocol and the health checks on one port.
 type Service struct {
-	cfg    Config
-	logger *slog.Logger
-	db     Pinger
+	cfg        Config
+	logger     *slog.Logger
+	db         Pinger
+	dispatcher Dispatcher
 
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
 // NewService creates the HTTP service.
-func NewService(cfg Config, logger *slog.Logger, db Pinger) *Service {
+func NewService(cfg Config, logger *slog.Logger, db Pinger, dispatcher Dispatcher) *Service {
 	return &Service{
-		cfg:     cfg,
-		logger:  logger,
-		db:      db,
-		stopped: make(chan struct{}),
+		cfg:        cfg,
+		logger:     logger,
+		db:         db,
+		dispatcher: dispatcher,
+		stopped:    make(chan struct{}),
 	}
 }
 
@@ -108,7 +115,14 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) newHTTPServer() *http.Server {
+	server := connect.NewServer(
+		errorInterceptor{logger: s.logger}.wrap,
+		validate.NewServerInterceptor(),
+	)
+	runcoilv1connect.RegisterWorkerServiceHandler(server, workerProtocol{dispatcher: s.dispatcher})
+
 	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server)
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 

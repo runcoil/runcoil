@@ -15,3 +15,13 @@ postgres:
 
 http:
   port: 7070
+
+engine:
+  poll_interval: 1s
+
+worker:
+  heartbeat_interval: 10s
+  ttl: 30s
+
+bootstrap:
+  api_key: ""

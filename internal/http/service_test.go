@@ -34,7 +34,7 @@ func (p *fakePinger) Ping(ctx context.Context) error {
 }
 
 func newTestService(db Pinger) *Service {
-	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db)
+	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db, nil)
 }
 
 func get(s *Service, path string) *httptest.ResponseRecorder {
@@ -183,7 +183,7 @@ func TestUnencryptedHTTP2(t *testing.T) {
 }
 
 func TestRunListenError(t *testing.T) {
-	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{})
+	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{}, nil)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }

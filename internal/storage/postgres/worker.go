@@ -1,0 +1,328 @@
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
+)
+
+// WorkerStore keeps the worker sessions, the Tasks they declare, the dispatchers, and
+// the claim of queued Runs.
+type WorkerStore struct {
+	db DB
+	q  *sqlc.Queries
+}
+
+// NewWorkerStore creates a WorkerStore on db.
+func NewWorkerStore(db DB) *WorkerStore {
+	return &WorkerStore{db: db, q: sqlc.New()}
+}
+
+// Register stores the Tasks of the registration and the worker session, in one
+// transaction. It returns domain.ErrNotFound when no API key has keyHash.
+func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, w domain.NewWorker) (domain.Worker, error) {
+	var worker domain.Worker
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		key, err := s.q.ApiKeyGetForRegister(ctx, tx, keyHash)
+		if isNoRowsError(err) {
+			return domain.ErrNotFound
+		}
+
+		if err != nil {
+			return fmt.Errorf("get api key: %w", err)
+		}
+
+		reg := w.Registration
+		taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
+		for i, def := range reg.Tasks {
+			params, err := taskUpsertParams(w.TaskIDs[i], key.ProjectID, reg.App, def)
+			if err != nil {
+				return err
+			}
+
+			id, err := s.q.TaskUpsert(ctx, tx, params)
+			if err != nil {
+				return fmt.Errorf("upsert task %q: %w", def.Name, err)
+			}
+
+			taskIDs = append(taskIDs, id)
+		}
+
+		err = s.q.WorkerCreate(ctx, tx, sqlc.WorkerCreateParams{
+			ID:        w.ID,
+			ProjectID: key.ProjectID,
+			ApiKeyID:  key.ID,
+			TokenHash: w.TokenHash,
+			App:       reg.App,
+			TaskIds:   taskIDs,
+			Slots:     int32(reg.Slots), //nolint:gosec // The engine bounds the slots.
+		})
+		if err != nil {
+			return fmt.Errorf("create worker: %w", err)
+		}
+
+		worker = domain.Worker{
+			ID:        w.ID,
+			ProjectID: key.ProjectID,
+			App:       reg.App,
+			TaskIDs:   taskIDs,
+			Slots:     reg.Slots,
+		}
+
+		return nil
+	})
+
+	return worker, err
+}
+
+// retryPolicyJSON is how tasks.retry_policy stores a policy.
+type retryPolicyJSON struct {
+	MaxAttempts int      `json:"max_attempts,omitempty"`
+	Delays      []string `json:"delays,omitempty"`
+}
+
+func taskUpsertParams(id, projectID uuid.UUID, app string, def domain.TaskDefinition) (sqlc.TaskUpsertParams, error) {
+	params := sqlc.TaskUpsertParams{
+		ID:            id,
+		ProjectID:     projectID,
+		App:           app,
+		Name:          def.Name,
+		StartDeadline: interval(def.StartDeadline),
+	}
+
+	if def.Retry != nil {
+		policy := retryPolicyJSON{MaxAttempts: def.Retry.MaxAttempts}
+		for _, d := range def.Retry.Delays {
+			policy.Delays = append(policy.Delays, d.String())
+		}
+
+		raw, err := json.Marshal(policy)
+		if err != nil {
+			return sqlc.TaskUpsertParams{}, fmt.Errorf("encode retry policy: %w", err)
+		}
+
+		msg := json.RawMessage(raw)
+		params.RetryPolicy = &msg
+	}
+
+	return params, nil
+}
+
+// WorkerBySessionToken returns the live session whose token has tokenHash, or
+// domain.ErrNotFound.
+func (s *WorkerStore) WorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error) {
+	row, err := s.q.WorkerGetBySessionToken(ctx, s.db, tokenHash)
+	if isNoRowsError(err) {
+		return domain.Worker{}, domain.ErrNotFound
+	}
+
+	if err != nil {
+		return domain.Worker{}, fmt.Errorf("get worker: %w", err)
+	}
+
+	return domain.Worker{
+		ID:        row.ID,
+		ProjectID: row.ProjectID,
+		App:       row.App,
+		TaskIDs:   row.TaskIds,
+		Slots:     int(row.Slots),
+	}, nil
+}
+
+// AttachStream moves the worker to a new stream and reconciles its leases, in one
+// transaction: the leases it does not report go back to the queue, and the reported
+// Runs it no longer holds are returned. attached gets them while the worker row is
+// still locked, before the commit. It returns domain.ErrNotFound when the session has ended.
+func (s *WorkerStore) AttachStream(
+	ctx context.Context,
+	workerID, dispatcherID, streamID uuid.UUID,
+	running []domain.Lease,
+	attached func(notHeld []domain.Lease),
+) ([]domain.Lease, error) {
+	runIDs := make([]uuid.UUID, 0, len(running))
+	epochs := make([]int64, 0, len(running))
+	for _, l := range running {
+		runIDs = append(runIDs, l.RunID)
+		epochs = append(epochs, l.Epoch)
+	}
+
+	var notHeld []domain.Lease
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		_, err := s.q.WorkerAttachStream(ctx, tx, sqlc.WorkerAttachStreamParams{
+			ID:           workerID,
+			DispatcherID: dispatcherID,
+			StreamID:     streamID,
+		})
+		if isNoRowsError(err) {
+			return domain.ErrNotFound
+		}
+
+		if err != nil {
+			return fmt.Errorf("attach stream: %w", err)
+		}
+
+		_, err = s.q.LeaseReleaseUnknown(ctx, tx, sqlc.LeaseReleaseUnknownParams{
+			WorkerID:   workerID,
+			HeldEpochs: epochs,
+		})
+		if err != nil {
+			return fmt.Errorf("release unknown leases: %w", err)
+		}
+
+		rows, err := s.q.LeaseListNotHeld(ctx, tx, sqlc.LeaseListNotHeldParams{
+			WorkerID:    workerID,
+			RunIds:      runIDs,
+			LeaseEpochs: epochs,
+		})
+		if err != nil {
+			return fmt.Errorf("list leases not held: %w", err)
+		}
+
+		notHeld = make([]domain.Lease, 0, len(rows))
+		for _, row := range rows {
+			notHeld = append(notHeld, domain.Lease{RunID: row.RunID, Epoch: row.LeaseEpoch})
+		}
+
+		attached(notHeld)
+
+		return nil
+	})
+
+	return notHeld, err
+}
+
+// FlushHeartbeats writes the last heartbeat of each worker. A time older than the stored
+// one is ignored.
+func (s *WorkerStore) FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error {
+	if err := s.q.WorkerFlushHeartbeats(ctx, s.db, sqlc.WorkerFlushHeartbeatsParams{Ids: ids, Beats: beats}); err != nil {
+		return fmt.Errorf("flush heartbeats: %w", err)
+	}
+
+	return nil
+}
+
+// BeatDispatcher records that the dispatcher is alive.
+func (s *WorkerStore) BeatDispatcher(ctx context.Context, id uuid.UUID) error {
+	if err := s.q.DispatcherBeat(ctx, s.db, id); err != nil {
+		return fmt.Errorf("beat dispatcher: %w", err)
+	}
+
+	return nil
+}
+
+// ClaimRuns leases up to slots queued Runs of taskIDs to the worker on the stream, in one
+// transaction, then reads what their attempts need. It returns domain.ErrStale when the
+// worker is no longer on this stream.
+func (s *WorkerStore) ClaimRuns(
+	ctx context.Context,
+	workerID, dispatcherID, streamID uuid.UUID,
+	taskIDs []uuid.UUID,
+	slots int,
+) ([]domain.Assign, error) {
+	var leases []sqlc.LeaseClaimRow
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		_, err := s.q.WorkerLockForClaim(ctx, tx, sqlc.WorkerLockForClaimParams{
+			ID:           workerID,
+			DispatcherID: dispatcherID,
+			StreamID:     streamID,
+		})
+		if isNoRowsError(err) {
+			return domain.ErrStale
+		}
+
+		if err != nil {
+			return fmt.Errorf("lock worker: %w", err)
+		}
+
+		leases, err = s.q.LeaseClaim(ctx, tx, sqlc.LeaseClaimParams{
+			WorkerID: workerID,
+			TaskIds:  taskIDs,
+			Slots:    int32(slots), //nolint:gosec // Slots come from the worker row, an integer.
+		})
+		if err != nil {
+			return fmt.Errorf("claim runs: %w", err)
+		}
+
+		if len(leases) == 0 {
+			return nil
+		}
+
+		if err := s.q.RunMarkStarted(ctx, tx, leaseRunIDs(leases)); err != nil {
+			return fmt.Errorf("mark runs started: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil || len(leases) == 0 {
+		return nil, err
+	}
+
+	return s.assigns(ctx, leases)
+}
+
+func leaseRunIDs(leases []sqlc.LeaseClaimRow) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(leases))
+	for _, l := range leases {
+		ids = append(ids, l.RunID)
+	}
+
+	return ids
+}
+
+// assigns reads the input and the journal of the claimed Runs, outside the claim.
+func (s *WorkerStore) assigns(ctx context.Context, leases []sqlc.LeaseClaimRow) ([]domain.Assign, error) {
+	ids := leaseRunIDs(leases)
+
+	runs, err := s.q.RunListForAssign(ctx, s.db, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list runs: %w", err)
+	}
+
+	steps, err := s.q.StepListForRuns(ctx, s.db, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list steps: %w", err)
+	}
+
+	journal := make(map[uuid.UUID][]domain.StepRecord, len(runs))
+	for _, st := range steps {
+		journal[st.RunID] = append(journal[st.RunID], stepRecord(st.StepID, st.Kind, st.Output, st.ErrorCode, st.ErrorMessage))
+	}
+
+	epochs := make(map[uuid.UUID]int64, len(leases))
+	for _, l := range leases {
+		epochs[l.RunID] = l.LeaseEpoch
+	}
+
+	assigns := make([]domain.Assign, 0, len(runs))
+	for _, r := range runs {
+		assigns = append(assigns, domain.Assign{
+			Lease:     domain.Lease{RunID: r.ID, Epoch: epochs[r.ID]},
+			TaskName:  r.TaskName,
+			Input:     r.Input,
+			Steps:     journal[r.ID],
+			CreatedAt: r.CreatedAt,
+		})
+	}
+
+	return assigns, nil
+}
+
+// stepRecord builds a Step record from its row. A row with an error code failed for good.
+func stepRecord(stepID, kind string, output []byte, errorCode, errorMessage *string) domain.StepRecord {
+	record := domain.StepRecord{StepID: stepID, Kind: domain.StepKind(kind), Output: output}
+	if errorCode != nil {
+		record.Output = nil
+		record.Failure = &domain.Failure{Code: domain.FailureCode(*errorCode)}
+		if errorMessage != nil {
+			record.Failure.Message = *errorMessage
+		}
+	}
+
+	return record
+}

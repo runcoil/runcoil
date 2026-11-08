@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/bootstrap"
+	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
@@ -52,8 +54,25 @@ func run() error {
 		}
 	}
 
+	db := postgres.NewClient(pool)
+	projectStore := postgres.NewProjectStore(db)
+	workerStore := postgres.NewWorkerStore(db)
+	runStore := postgres.NewRunStore(db)
+
+	if err := bootstrap.Run(ctx, cfg.Bootstrap, logger, projectStore); err != nil {
+		return err
+	}
+
+	dispatcherService, err := dispatcher.NewService(cfg.Engine, cfg.Worker, logger, workerStore, runStore)
+	if err != nil {
+		return err
+	}
+
+	// The dispatcher stops first: its streams end, so the HTTP server can drain the
+	// unary calls without waiting for them.
 	manager := service.NewManager(
-		http.NewService(cfg.HTTP, logger, pool),
+		http.NewService(cfg.HTTP, logger, pool, dispatcherService),
+		dispatcherService,
 	)
 
 	logger.InfoContext(ctx, "server is started")
