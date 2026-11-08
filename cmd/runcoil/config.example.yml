@@ -1,3 +1,5 @@
+auto_migrate: false
+
 log:
   level: info
   format: text

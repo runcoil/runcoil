@@ -948,7 +948,7 @@ func (*CompleteStepResponse_RetryScheduled) isCompleteStepResponse_Result() {}
 type RetryScheduled struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NextAttemptAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=next_attempt_at,json=nextAttemptAt,proto3" json:"next_attempt_at,omitempty"`
-	TriesUsed     uint32                 `protobuf:"varint,2,opt,name=tries_used,json=triesUsed,proto3" json:"tries_used,omitempty"`
+	TryCount      uint32                 `protobuf:"varint,2,opt,name=try_count,json=tryCount,proto3" json:"try_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -990,9 +990,9 @@ func (x *RetryScheduled) GetNextAttemptAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *RetryScheduled) GetTriesUsed() uint32 {
+func (x *RetryScheduled) GetTryCount() uint32 {
 	if x != nil {
-		return x.TriesUsed
+		return x.TryCount
 	}
 	return 0
 }
@@ -1324,11 +1324,10 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x14CompleteStepResponse\x120\n" +
 	"\x06record\x18\x01 \x01(\v2\x16.runcoil.v1.StepRecordH\x00R\x06record\x12E\n" +
 	"\x0fretry_scheduled\x18\x02 \x01(\v2\x1a.runcoil.v1.RetryScheduledH\x00R\x0eretryScheduledB\b\n" +
-	"\x06result\"s\n" +
+	"\x06result\"q\n" +
 	"\x0eRetryScheduled\x12B\n" +
-	"\x0fnext_attempt_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\rnextAttemptAt\x12\x1d\n" +
-	"\n" +
-	"tries_used\x18\x02 \x01(\rR\ttriesUsed\"\x9e\x01\n" +
+	"\x0fnext_attempt_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\rnextAttemptAt\x12\x1b\n" +
+	"\ttry_count\x18\x02 \x01(\rR\btryCount\"\x9e\x01\n" +
 	"\x12CompleteRunRequest\x12/\n" +
 	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseB\x06\xbaH\x03\xc8\x01\x01R\x05lease\x12\x18\n" +
 	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12,\n" +

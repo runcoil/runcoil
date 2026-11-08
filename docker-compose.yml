@@ -17,6 +17,7 @@ services:
       dockerfile: docker/app/runcoil.dockerfile
     restart: unless-stopped
     environment:
+      AUTO_MIGRATE: true
       LOG_LEVEL: info
       LOG_FORMAT: text
       POSTGRES_HOST: postgres

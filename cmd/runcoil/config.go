@@ -7,18 +7,20 @@ import (
 
 	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
-	"github.com/runcoil/runcoil/internal/postgres"
+	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
 
 // Config is the configuration of the server.
 type Config struct {
-	Log      log.Config
-	Postgres postgres.Config
-	HTTP     http.Config
+	AutoMigrate bool
+	Log         log.Config
+	Postgres    postgres.Config
+	HTTP        http.Config
 }
 
 // RegisterFlags registers the flags of every section.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
+	fs.BoolVar(&c.AutoMigrate, "auto-migrate", false, "Apply the pending migrations at boot.")
 	c.Log.RegisterFlags(fs)
 	c.Postgres.RegisterFlags(fs)
 	c.HTTP.RegisterFlags(fs)

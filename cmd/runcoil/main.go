@@ -10,7 +10,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
-	"github.com/runcoil/runcoil/internal/postgres"
+	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/service"
 )
@@ -43,6 +43,14 @@ func run() error {
 		return fmt.Errorf("new pgx pool: %w", err)
 	}
 	defer pool.Close()
+
+	if cfg.AutoMigrate {
+		logger.InfoContext(ctx, "running migrations")
+
+		if err := postgres.Migrate(pool); err != nil {
+			return fmt.Errorf("run migrations: %w", err)
+		}
+	}
 
 	manager := service.NewManager(
 		http.NewService(cfg.HTTP, logger, pool),
