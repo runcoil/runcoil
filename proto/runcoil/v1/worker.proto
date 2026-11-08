@@ -87,8 +87,7 @@ message StepError {
   string message = 1;
   bool non_retriable = 2;
   google.protobuf.Duration retry_after = 3;
-  // ERROR, PANIC or OUTPUT_NOT_ENCODABLE.
-  FailureCode code = 4;
+  ErrorKind kind = 4;
 }
 
 message CompleteStepResponse {
@@ -108,8 +107,15 @@ message CompleteRunRequest {
   oneof result {
     option (buf.validate.oneof).required = true;
     bytes output = 2;
-    Failure failure = 3;
+    RunError error = 3;
   }
+}
+
+message RunError {
+  ErrorKind kind = 1;
+  string message = 2;
+  // Set when the handler returned a Step's final error.
+  string step_id = 3;
 }
 
 message CompleteRunResponse {}
@@ -119,6 +125,13 @@ message DeregisterRequest {
 }
 
 message DeregisterResponse {}
+
+enum ErrorKind {
+  ERROR_KIND_UNSPECIFIED = 0;
+  ERROR_KIND_ERROR = 1;
+  ERROR_KIND_PANIC = 2;
+  ERROR_KIND_OUTPUT_NOT_ENCODABLE = 3;
+}
 
 enum CancelReason {
   CANCEL_REASON_UNSPECIFIED = 0;
