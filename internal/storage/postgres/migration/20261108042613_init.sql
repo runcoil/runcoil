@@ -90,7 +90,7 @@ CREATE TABLE steps (
     output        bytea,
     error_code    text,
     error_message text,
-    tries         integer NOT NULL DEFAULT 1,
+    try_count     integer NOT NULL DEFAULT 1,
     created_at    timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT steps_pkey PRIMARY KEY (run_id, step_id),
     CONSTRAINT steps_kind_check CHECK (kind IN ('do')),
