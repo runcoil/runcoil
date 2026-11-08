@@ -29,6 +29,16 @@ tasks:
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
 
+  migrate:
+    desc: Apply the database migrations
+    cmds:
+      - go run ./cmd/migrate {{.CLI_ARGS}}
+
+  migrate-create:
+    desc: 'Create a migration: task migrate-create -- <name>'
+    cmds:
+      - go tool -modfile=tools/go.mod goose -dir internal/storage/postgres/migration create {{.CLI_ARGS}} sql
+
   test:
     desc: Run the tests with the race detector
     cmds:

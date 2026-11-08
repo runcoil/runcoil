@@ -7,7 +7,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
-	"github.com/runcoil/runcoil/internal/postgres"
+	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
 
 // Config is the configuration of the server.

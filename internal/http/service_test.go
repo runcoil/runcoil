@@ -33,8 +33,17 @@ func (p *fakePinger) Ping(ctx context.Context) error {
 	return p.err
 }
 
+type fakeMigrations struct {
+	pending bool
+	err     error
+}
+
+func (m fakeMigrations) HasPending(context.Context) (bool, error) {
+	return m.pending, m.err
+}
+
 func newTestService(db Pinger) *Service {
-	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db)
+	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db, fakeMigrations{})
 }
 
 func get(s *Service, path string) *httptest.ResponseRecorder {
@@ -67,19 +76,23 @@ func TestLivez(t *testing.T) {
 
 func TestReadyz(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      error
-		stopping bool
-		want     int
+		name       string
+		err        error
+		migrations fakeMigrations
+		stopping   bool
+		want       int
+		body       string
 	}{
-		{name: "healthy", want: http.StatusOK},
-		{name: "database fails", err: errors.New("down"), want: http.StatusServiceUnavailable},
-		{name: "stopping", stopping: true, want: http.StatusServiceUnavailable},
+		{name: "healthy", want: http.StatusOK, body: "ok"},
+		{name: "database fails", err: errors.New("down"), want: http.StatusServiceUnavailable, body: "database unavailable"},
+		{name: "migrations pending", migrations: fakeMigrations{pending: true}, want: http.StatusServiceUnavailable, body: "migrations pending"},
+		{name: "migration check fails", migrations: fakeMigrations{err: errors.New("down")}, want: http.StatusServiceUnavailable, body: "database unavailable"},
+		{name: "stopping", stopping: true, want: http.StatusServiceUnavailable, body: "shutting down"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newTestService(&fakePinger{err: tt.err})
+			s := NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), &fakePinger{err: tt.err}, tt.migrations)
 			if tt.stopping {
 				s.Stop()
 			}
@@ -87,6 +100,7 @@ func TestReadyz(t *testing.T) {
 			rec := get(s, "/readyz")
 
 			assert.Equal(t, tt.want, rec.Code)
+			assert.Equal(t, tt.body, rec.Body.String())
 		})
 	}
 }
@@ -183,7 +197,7 @@ func TestUnencryptedHTTP2(t *testing.T) {
 }
 
 func TestRunListenError(t *testing.T) {
-	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{})
+	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{}, fakeMigrations{})
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }

@@ -6,7 +6,7 @@
 - [Task](https://taskfile.dev)
 - Docker, for Compose and the image
 
-The Go tools (golangci-lint, govulncheck) are pinned in `tools/go.mod` and run
+The Go tools (golangci-lint, govulncheck, goose, buf) are pinned in `tools/go.mod` and run
 through `go tool`. Nothing else is installed globally.
 
 ## Development
@@ -14,15 +14,27 @@ through `go tool`. Nothing else is installed globally.
 ```sh
 task setup    # download the modules and build the Go tools
 task build    # build the server
-task test     # tests with the race detector
+task test     # tests with the race detector; needs Docker
 task lint     # golangci-lint
 task tidy     # fail when go.mod or go.sum is not tidy
 task vuln     # govulncheck
 task check    # lint, test, tidy and vuln
 ```
 
-The tests open no database. Every tool call runs with `GOWORK=off`, because
-`go tool -modfile` does not work in workspace mode.
+The store tests start PostgreSQL in Docker with testcontainers, capped at 2 vCPUs
+and 4 GiB. They use `postgres:18-alpine`; set `POSTGRES_IMAGE` to test another
+version, as CI does for 15 and 18. Every tool call runs with `GOWORK=off`,
+because `go tool -modfile` does not work in workspace mode.
+
+## Database
+
+The migrations are goose SQL files in `internal/storage/postgres/migration`,
+embedded in the `migrate` binary.
+
+```sh
+task migrate                     # apply the migrations to the PostgreSQL of Compose
+task migrate-create -- <name>    # add a migration
+```
 
 ## Protocol
 
@@ -39,7 +51,7 @@ task proto:check    # lint, format check, generated-code check, build and tidy
 ## Running
 
 ```sh
-docker compose up -d     # PostgreSQL 18 and the server
+docker compose up -d     # PostgreSQL 18, the migrations, then the server
 docker compose down
 task run                 # the server on the host, against the PostgreSQL of Compose
 ```
@@ -47,7 +59,8 @@ task run                 # the server on the host, against the PostgreSQL of Com
 The server listens on port `7070`:
 
 - `/livez`: the process is alive
-- `/readyz`: the database answers and the server is not shutting down
+- `/readyz`: the database answers, every migration is applied, and the server
+  is not shutting down
 
 ## Configuration
 
@@ -63,4 +76,5 @@ Build the image from the root of the repository:
 
 ```sh
 docker build -f docker/app/runcoil.dockerfile -t runcoil:local .
+docker build -f docker/app/migrate.dockerfile -t runcoil-migrate:local .
 ```

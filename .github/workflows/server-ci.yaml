@@ -39,9 +39,15 @@ jobs:
       - run: task lint
 
   test:
-    name: Test
+    name: Test (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['15', '18']
+    env:
+      POSTGRES_IMAGE: postgres:${{ matrix.postgres }}-alpine
     steps:
       - uses: actions/checkout@v7
         with:
@@ -96,4 +102,9 @@ jobs:
         with:
           context: .
           file: docker/app/runcoil.dockerfile
+          push: false
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/app/migrate.dockerfile
           push: false
