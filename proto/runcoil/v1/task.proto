@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package runcoil.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+
+message TaskDefinition {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 255
+  }];
+  RetryPolicy retry = 2;
+  google.protobuf.Duration start_deadline = 3;
+}
+
+message RetryPolicy {
+  // The first attempt included.
+  uint32 max_attempts = 1;
+  // The last delay repeats.
+  repeated google.protobuf.Duration delays = 2;
+}

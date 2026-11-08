@@ -24,6 +24,18 @@ task check    # lint, test, tidy and vuln
 The tests open no database. Every tool call runs with `GOWORK=off`, because
 `go tool -modfile` does not work in workspace mode.
 
+## Protocol
+
+The worker protocol is in `proto/`, a Buf module and its own Go module,
+`github.com/runcoil/runcoil/proto`. The generated Go code is committed under
+`proto/gen/go`.
+
+```sh
+task proto:gen      # generate the Go code after changing a .proto file
+task proto:format   # format the protos
+task proto:check    # lint, format check, generated-code check, build and tidy
+```
+
 ## Running
 
 ```sh

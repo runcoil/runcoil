@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package runcoil.v1;
+
+message ErrorDetail {
+  ErrorCode code = 1;
+  string task_name = 2;
+}
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_REQUEST = 1;
+  ERROR_CODE_UNAUTHENTICATED = 2;
+  ERROR_CODE_INVALID_REGISTRATION = 3;
+  ERROR_CODE_STALE_LEASE = 4;
+}

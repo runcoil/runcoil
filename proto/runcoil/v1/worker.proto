@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package runcoil.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "runcoil/v1/run.proto";
+import "runcoil/v1/task.proto";
+
+// Register takes the API key; the other calls take the session token that Register returns.
+service WorkerService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Listen(ListenRequest) returns (stream ListenResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc CompleteStep(CompleteStepRequest) returns (CompleteStepResponse);
+  rpc CompleteRun(CompleteRunRequest) returns (CompleteRunResponse);
+  rpc Deregister(DeregisterRequest) returns (DeregisterResponse);
+}
+
+message Lease {
+  string run_id = 1 [(buf.validate.field).string.uuid = true];
+  int64 epoch = 2;
+}
+
+message RegisterRequest {
+  string app = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 255
+  }];
+  repeated TaskDefinition tasks = 2;
+  uint32 slots = 3;
+}
+
+message RegisterResponse {
+  string worker_id = 1;
+  string session_token = 2;
+  google.protobuf.Duration heartbeat_interval = 3;
+}
+
+message ListenRequest {
+  // The attempts this process is running now. Empty on the first Listen.
+  repeated Lease running = 1;
+}
+
+message ListenResponse {
+  oneof kind {
+    Assign assign = 1;
+    Cancel cancel = 2;
+    Keepalive keepalive = 3;
+  }
+}
+
+message Assign {
+  Lease lease = 1;
+  string task_name = 2;
+  bytes input = 3;
+  repeated StepRecord steps = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message Cancel {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_LEASE_LOST = 1;
+  }
+
+  Lease lease = 1;
+  Reason reason = 2;
+}
+
+message Keepalive {}
+
+message HeartbeatRequest {}
+
+message HeartbeatResponse {}
+
+message CompleteStepRequest {
+  Lease lease = 1 [(buf.validate.field).required = true];
+  string step_id = 2 [(buf.validate.field).string.min_len = 1];
+  oneof outcome {
+    option (buf.validate.oneof).required = true;
+    bytes output = 3;
+    StepError error = 4;
+  }
+  RetryPolicy retry = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+}
+
+message StepError {
+  string message = 1;
+  bool non_retriable = 2;
+  google.protobuf.Duration retry_after = 3;
+  ErrorKind kind = 4;
+}
+
+message CompleteStepResponse {
+  oneof result {
+    StepRecord record = 1;
+    RetryScheduled retry_scheduled = 2;
+  }
+}
+
+message RetryScheduled {
+  google.protobuf.Timestamp next_attempt_at = 1;
+  uint32 tries_used = 2;
+}
+
+message CompleteRunRequest {
+  Lease lease = 1 [(buf.validate.field).required = true];
+  oneof result {
+    option (buf.validate.oneof).required = true;
+    bytes output = 2;
+    RunError error = 3;
+  }
+}
+
+message RunError {
+  ErrorKind kind = 1;
+  string message = 2;
+  // Set when the handler returned a Step's final error.
+  string step_id = 3;
+}
+
+message CompleteRunResponse {}
+
+message DeregisterRequest {
+  string reason = 1;
+}
+
+message DeregisterResponse {}
+
+enum ErrorKind {
+  ERROR_KIND_UNSPECIFIED = 0;
+  ERROR_KIND_ERROR = 1;
+  ERROR_KIND_PANIC = 2;
+  ERROR_KIND_OUTPUT_NOT_ENCODABLE = 3;
+}

@@ -3,6 +3,11 @@ version: '3'
 env:
   GOWORK: 'off'
 
+includes:
+  proto:
+    taskfile: ./proto/Taskfile.yml
+    dir: ./proto
+
 tasks:
   setup:
     desc: Download the modules and build the Go tools
@@ -10,6 +15,8 @@ tasks:
       - go mod download
       - cmd: go mod download
         dir: tools
+      - cmd: go mod download
+        dir: proto
       - go build -modfile=tools/go.mod tool
 
   build:
