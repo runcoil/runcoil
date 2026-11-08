@@ -13,10 +13,11 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// streamBuffer is how many messages wait for a stream beyond its slots.
-const streamBuffer = 16
+// streamBuffer is how many messages wait for a stream: an Assign for every slot a worker
+// may have, and room for the other messages.
+const streamBuffer = domain.MaxSlots + 16
 
-// stream is the Listen stream of one worker on this server. The fields after out are
+// stream is the Listen stream of one worker on this server. The fields after ended are
 // guarded by Service.mu.
 type stream struct {
 	id       uuid.UUID
@@ -24,6 +25,8 @@ type stream struct {
 	taskIDs  []uuid.UUID
 	slots    int
 	out      chan domain.StreamMessage
+	// ended is closed when the dispatcher ends the stream, so its Listen returns.
+	ended chan struct{}
 
 	free int
 }
@@ -60,7 +63,8 @@ func (s *Service) Listen(
 		workerID: worker.ID,
 		taskIDs:  worker.TaskIDs,
 		slots:    worker.Slots,
-		out:      make(chan domain.StreamMessage, worker.Slots+streamBuffer),
+		out:      make(chan domain.StreamMessage, streamBuffer),
+		ended:    make(chan struct{}),
 	}
 
 	// The stream goes in the map while the worker row is locked, so the map follows the
@@ -103,6 +107,8 @@ func (s *Service) Listen(
 			return nil
 		case <-s.stopped:
 			return nil
+		case <-st.ended:
+			return errStreamEnded
 		case msg := <-st.out:
 			if err := send(msg); err != nil {
 				return fmt.Errorf("send message: %w", err)
@@ -134,6 +140,24 @@ func (s *Service) drop(workerID, streamID uuid.UUID) {
 	}
 }
 
+// end removes the worker's stream if it is still streamID and ends its Listen. The worker
+// reconnects, and the reconcile of its next Listen requeues the attempts it was never
+// sent.
+func (s *Service) end(workerID, streamID uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if st, ok := s.streams[workerID]; ok && st.id == streamID {
+		s.endLocked(st)
+	}
+}
+
+// endLocked is end for a caller that holds s.mu.
+func (s *Service) endLocked(st *stream) {
+	delete(s.streams, st.workerID)
+	close(st.ended)
+}
+
 // claimable returns the streams with free slots.
 func (s *Service) claimable() []claimTarget {
 	s.mu.Lock()
@@ -154,9 +178,9 @@ func (s *Service) claimable() []claimTarget {
 	return targets
 }
 
-// push sends the claimed attempts to the stream that claimed them. An attempt that cannot
-// be sent keeps its lease: the worker does not report it at its next Listen, so the
-// reconcile puts it back in the queue.
+// push sends the claimed attempts to the stream that claimed them. When one cannot be
+// sent, the stream ends: the worker reconnects without reporting it, so the reconcile
+// puts it back in the queue.
 func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assigns []domain.Assign) {
 	if len(assigns) == 0 {
 		return
@@ -180,10 +204,13 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 		select {
 		case st.out <- domain.StreamMessage{Assign: &a}:
 		default:
-			s.logger.WarnContext(ctx, "stream buffer full",
+			s.logger.WarnContext(ctx, "stream buffer full, ending the stream",
 				slog.String("worker_id", workerID.String()),
 				slog.String("run_id", a.Lease.RunID.String()),
 			)
+			s.endLocked(st)
+
+			return
 		}
 	}
 }
@@ -197,6 +224,8 @@ func (s *Service) release(workerID uuid.UUID) {
 		st.free++
 	}
 }
+
+var errStreamEnded = apierr.Unavailable("", "stream ended, reconnect")
 
 func attachError(err error) error {
 	if errors.Is(err, domain.ErrSessionEnded) {

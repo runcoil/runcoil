@@ -2,7 +2,7 @@ package domain
 
 import "github.com/google/uuid"
 
-// StepKind is the kind of a Step record. Its values are stored as text.
+// StepKind is what a Step record records.
 type StepKind string
 
 // The kinds of Step.
@@ -10,7 +10,7 @@ const (
 	StepKindDo StepKind = "do"
 )
 
-// StepStatus is the status of a Step record. Its values are stored as text.
+// StepStatus says whether a Step succeeded or failed.
 type StepStatus string
 
 // The statuses of a Step record.

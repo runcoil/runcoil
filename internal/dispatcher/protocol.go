@@ -112,7 +112,7 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
 	record, err := s.runStore.CompleteStep(ctx, params)
 	if errors.Is(err, domain.ErrStaleLease) {
-		return domain.StepRecord{}, errStaleLease.WithDetail("run_id", params.Lease.RunID.String())
+		return domain.StepRecord{}, errStaleLease
 	}
 
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, result.End())
 	if errors.Is(err, domain.ErrStaleLease) {
-		return errStaleLease.WithDetail("run_id", lease.RunID.String())
+		return errStaleLease
 	}
 
 	if err != nil {

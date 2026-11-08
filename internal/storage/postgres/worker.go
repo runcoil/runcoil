@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,7 +42,8 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session doma
 
 		reg := session.Registration
 		taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
-		for i, def := range reg.Tasks {
+		for _, i := range byTaskName(reg.Tasks) {
+			def := reg.Tasks[i]
 			params, err := taskUpsertParams(session.TaskIDs[i], key.ProjectID, reg.App, def)
 			if err != nil {
 				return fmt.Errorf("task %q: %w", def.Name, err)
@@ -61,7 +64,7 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session doma
 			TokenHash: session.TokenHash,
 			App:       reg.App,
 			TaskIds:   taskIDs,
-			Slots:     int32(reg.Slots), //nolint:gosec // The engine bounds the slots.
+			Slots:     int32(reg.Slots), //nolint:gosec // Registration.Validate caps the slots at domain.MaxSlots.
 		})
 		if err != nil {
 			return fmt.Errorf("create worker: %w", err)
@@ -82,6 +85,19 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session doma
 	}
 
 	return worker, nil
+}
+
+// byTaskName returns the indexes of tasks in name order. Every Register locks the Task
+// rows in this order, so two Registers of the same Tasks cannot deadlock.
+func byTaskName(tasks []domain.TaskDefinition) []int {
+	order := make([]int, len(tasks))
+	for i := range order {
+		order[i] = i
+	}
+
+	slices.SortFunc(order, func(a, b int) int { return strings.Compare(tasks[a].Name, tasks[b].Name) })
+
+	return order
 }
 
 // retryPolicyJSON is how tasks.retry_policy stores a policy.

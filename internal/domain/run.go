@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RunStatus is the status of a Run. Its values are stored as text.
+// RunStatus is where a Run is in its life.
 type RunStatus string
 
 // The statuses of a Run.

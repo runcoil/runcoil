@@ -16,7 +16,8 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// shutdownTimeout bounds how long a stop waits for the open calls to return.
+// shutdownTimeout bounds how long a stop waits for the open calls to return and the last
+// heartbeats to be written.
 const shutdownTimeout = 10 * time.Second
 
 // Config is the port of the worker protocol, and the timing of the dispatcher and of the
@@ -149,16 +150,19 @@ func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 
 	err := s.loop(ctx, served)
 
-	// The streams end when stopped is closed, so the shutdown does not wait for them.
+	// The streams end when stopped is closed, so the shutdown does not wait for them. One
+	// drain context bounds the shutdown and the last flush, which runs after the shutdown
+	// so it writes the heartbeats that arrived during it.
 	s.Stop()
-	s.flushHeartbeats(context.WithoutCancel(ctx))
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()
 
-	if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+	if shutdownErr := srv.Shutdown(drainCtx); shutdownErr != nil {
 		err = errors.Join(err, fmt.Errorf("shutdown http: %w", errors.Join(shutdownErr, srv.Close())))
 	}
+
+	s.flushHeartbeats(drainCtx)
 
 	return err
 }
@@ -236,16 +240,19 @@ func (s *Service) claimAll(ctx context.Context) {
 				slog.String("worker_id", c.workerID.String()),
 				slog.String("stream_id", c.streamID.String()),
 			)
-			s.drop(c.workerID, c.streamID)
+			s.end(c.workerID, c.streamID)
 
 			continue
 		}
 
+		// The claim may have committed before the error, so the worker reconnects and the
+		// reconcile requeues what it was never sent.
 		if err != nil {
-			s.logger.ErrorContext(ctx, "claim runs failed",
+			s.logger.ErrorContext(ctx, "claim runs failed, ending the stream",
 				slog.String("worker_id", c.workerID.String()),
 				slog.Any("error", err),
 			)
+			s.end(c.workerID, c.streamID)
 
 			continue
 		}

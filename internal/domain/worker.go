@@ -7,6 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxSlots is the most Runs one worker process may run at once.
+const MaxSlots = 100
+
 // Registration is what one worker process declares at Register.
 type Registration struct {
 	App   string
@@ -28,8 +31,8 @@ func (e *RegistrationError) Error() string {
 // Validate checks what the request rules cannot: the slots, and that each Task is
 // declared once.
 func (r Registration) Validate() error {
-	if r.Slots < 1 {
-		return &RegistrationError{Message: "slots must be at least 1"}
+	if r.Slots < 1 || r.Slots > MaxSlots {
+		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
 	}
 
 	if len(r.Tasks) == 0 {

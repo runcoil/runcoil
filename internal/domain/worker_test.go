@@ -16,7 +16,9 @@ func TestRegistrationValidate(t *testing.T) {
 		want *RegistrationError
 	}{
 		{name: "valid", reg: Registration{App: "shop", Slots: 1, Tasks: []TaskDefinition{task("a")}}},
-		{name: "no slots", reg: Registration{App: "shop", Tasks: []TaskDefinition{task("a")}}, want: &RegistrationError{Message: "slots must be at least 1"}},
+		{name: "no slots", reg: Registration{App: "shop", Tasks: []TaskDefinition{task("a")}}, want: &RegistrationError{Message: "slots must be between 1 and 100"}},
+		{name: "most slots", reg: Registration{App: "shop", Slots: MaxSlots, Tasks: []TaskDefinition{task("a")}}},
+		{name: "too many slots", reg: Registration{App: "shop", Slots: MaxSlots + 1, Tasks: []TaskDefinition{task("a")}}, want: &RegistrationError{Message: "slots must be between 1 and 100"}},
 		{name: "no tasks", reg: Registration{App: "shop", Slots: 1}, want: &RegistrationError{Message: "a registration needs at least one task"}},
 		{
 			name: "task twice",
@@ -58,5 +60,5 @@ func TestNewWorkerSessionValidates(t *testing.T) {
 
 	regErr, ok := AsRegistrationError(err)
 	require.True(t, ok)
-	assert.Equal(t, "slots must be at least 1", regErr.Message)
+	assert.Equal(t, "slots must be between 1 and 100", regErr.Message)
 }

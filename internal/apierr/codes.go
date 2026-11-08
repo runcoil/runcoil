@@ -1,10 +1,11 @@
 package apierr
 
-// Code is the stable identifier of an API error. The engine maps each Code to
-// the schema's ErrorCode, which carries it to the client in the error detail.
+// Code is the stable identifier of an API error. The transport maps each Code to the
+// schema's ErrorCode, which carries it to the client in the error detail.
 type Code string
 
-// The codes of the API. Every one has a matching ErrorCode in the schema.
+// The codes of the API. A Code gets its ErrorCode in the schema in the phase that first
+// returns it.
 const (
 	CodeInvalidRequest       Code = "INVALID_REQUEST"
 	CodeUnauthenticated      Code = "UNAUTHENTICATED"
