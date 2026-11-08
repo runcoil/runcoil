@@ -76,50 +76,50 @@ func (ErrorKind) EnumDescriptor() ([]byte, []int) {
 	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{0}
 }
 
-type CancelReason int32
+type Cancel_Reason int32
 
 const (
-	CancelReason_CANCEL_REASON_UNSPECIFIED CancelReason = 0
-	CancelReason_CANCEL_REASON_LEASE_LOST  CancelReason = 1
+	Cancel_REASON_UNSPECIFIED Cancel_Reason = 0
+	Cancel_REASON_LEASE_LOST  Cancel_Reason = 1
 )
 
-// Enum value maps for CancelReason.
+// Enum value maps for Cancel_Reason.
 var (
-	CancelReason_name = map[int32]string{
-		0: "CANCEL_REASON_UNSPECIFIED",
-		1: "CANCEL_REASON_LEASE_LOST",
+	Cancel_Reason_name = map[int32]string{
+		0: "REASON_UNSPECIFIED",
+		1: "REASON_LEASE_LOST",
 	}
-	CancelReason_value = map[string]int32{
-		"CANCEL_REASON_UNSPECIFIED": 0,
-		"CANCEL_REASON_LEASE_LOST":  1,
+	Cancel_Reason_value = map[string]int32{
+		"REASON_UNSPECIFIED": 0,
+		"REASON_LEASE_LOST":  1,
 	}
 )
 
-func (x CancelReason) Enum() *CancelReason {
-	p := new(CancelReason)
+func (x Cancel_Reason) Enum() *Cancel_Reason {
+	p := new(Cancel_Reason)
 	*p = x
 	return p
 }
 
-func (x CancelReason) String() string {
+func (x Cancel_Reason) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (CancelReason) Descriptor() protoreflect.EnumDescriptor {
+func (Cancel_Reason) Descriptor() protoreflect.EnumDescriptor {
 	return file_runcoil_v1_worker_proto_enumTypes[1].Descriptor()
 }
 
-func (CancelReason) Type() protoreflect.EnumType {
+func (Cancel_Reason) Type() protoreflect.EnumType {
 	return &file_runcoil_v1_worker_proto_enumTypes[1]
 }
 
-func (x CancelReason) Number() protoreflect.EnumNumber {
+func (x Cancel_Reason) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use CancelReason.Descriptor instead.
-func (CancelReason) EnumDescriptor() ([]byte, []int) {
-	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use Cancel_Reason.Descriptor instead.
+func (Cancel_Reason) EnumDescriptor() ([]byte, []int) {
+	return file_runcoil_v1_worker_proto_rawDescGZIP(), []int{6, 0}
 }
 
 type Lease struct {
@@ -516,7 +516,7 @@ func (x *Assign) GetCreatedAt() *timestamppb.Timestamp {
 type Cancel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Lease         *Lease                 `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
-	Reason        CancelReason           `protobuf:"varint,2,opt,name=reason,proto3,enum=runcoil.v1.CancelReason" json:"reason,omitempty"`
+	Reason        Cancel_Reason          `protobuf:"varint,2,opt,name=reason,proto3,enum=runcoil.v1.Cancel_Reason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -558,11 +558,11 @@ func (x *Cancel) GetLease() *Lease {
 	return nil
 }
 
-func (x *Cancel) GetReason() CancelReason {
+func (x *Cancel) GetReason() Cancel_Reason {
 	if x != nil {
 		return x.Reason
 	}
-	return CancelReason_CANCEL_REASON_UNSPECIFIED
+	return Cancel_REASON_UNSPECIFIED
 }
 
 type Keepalive struct {
@@ -1295,10 +1295,13 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x05input\x18\x03 \x01(\fR\x05input\x12,\n" +
 	"\x05steps\x18\x04 \x03(\v2\x16.runcoil.v1.StepRecordR\x05steps\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"c\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x9d\x01\n" +
 	"\x06Cancel\x12'\n" +
-	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseR\x05lease\x120\n" +
-	"\x06reason\x18\x02 \x01(\x0e2\x18.runcoil.v1.CancelReasonR\x06reason\"\v\n" +
+	"\x05lease\x18\x01 \x01(\v2\x11.runcoil.v1.LeaseR\x05lease\x121\n" +
+	"\x06reason\x18\x02 \x01(\x0e2\x19.runcoil.v1.Cancel.ReasonR\x06reason\"7\n" +
+	"\x06Reason\x12\x16\n" +
+	"\x12REASON_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11REASON_LEASE_LOST\x10\x01\"\v\n" +
 	"\tKeepalive\"\x12\n" +
 	"\x10HeartbeatRequest\"\x13\n" +
 	"\x11HeartbeatResponse\"\xe4\x02\n" +
@@ -1343,10 +1346,7 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x16ERROR_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10ERROR_KIND_ERROR\x10\x01\x12\x14\n" +
 	"\x10ERROR_KIND_PANIC\x10\x02\x12#\n" +
-	"\x1fERROR_KIND_OUTPUT_NOT_ENCODABLE\x10\x03*K\n" +
-	"\fCancelReason\x12\x1d\n" +
-	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18CANCEL_REASON_LEASE_LOST\x10\x012\xd3\x03\n" +
+	"\x1fERROR_KIND_OUTPUT_NOT_ENCODABLE\x10\x032\xd3\x03\n" +
 	"\rWorkerService\x12E\n" +
 	"\bRegister\x12\x1b.runcoil.v1.RegisterRequest\x1a\x1c.runcoil.v1.RegisterResponse\x12A\n" +
 	"\x06Listen\x12\x19.runcoil.v1.ListenRequest\x1a\x1a.runcoil.v1.ListenResponse0\x01\x12H\n" +
@@ -1375,7 +1375,7 @@ var file_runcoil_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_runcoil_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_runcoil_v1_worker_proto_goTypes = []any{
 	(ErrorKind)(0),                // 0: runcoil.v1.ErrorKind
-	(CancelReason)(0),             // 1: runcoil.v1.CancelReason
+	(Cancel_Reason)(0),            // 1: runcoil.v1.Cancel.Reason
 	(*Lease)(nil),                 // 2: runcoil.v1.Lease
 	(*RegisterRequest)(nil),       // 3: runcoil.v1.RegisterRequest
 	(*RegisterResponse)(nil),      // 4: runcoil.v1.RegisterResponse
@@ -1412,7 +1412,7 @@ var file_runcoil_v1_worker_proto_depIdxs = []int32{
 	23, // 7: runcoil.v1.Assign.steps:type_name -> runcoil.v1.StepRecord
 	24, // 8: runcoil.v1.Assign.created_at:type_name -> google.protobuf.Timestamp
 	2,  // 9: runcoil.v1.Cancel.lease:type_name -> runcoil.v1.Lease
-	1,  // 10: runcoil.v1.Cancel.reason:type_name -> runcoil.v1.CancelReason
+	1,  // 10: runcoil.v1.Cancel.reason:type_name -> runcoil.v1.Cancel.Reason
 	2,  // 11: runcoil.v1.CompleteStepRequest.lease:type_name -> runcoil.v1.Lease
 	13, // 12: runcoil.v1.CompleteStepRequest.error:type_name -> runcoil.v1.StepError
 	25, // 13: runcoil.v1.CompleteStepRequest.retry:type_name -> runcoil.v1.RetryPolicy

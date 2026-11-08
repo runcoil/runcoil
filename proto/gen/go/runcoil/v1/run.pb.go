@@ -21,117 +21,117 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type StepKind int32
+type StepRecord_Kind int32
 
 const (
-	StepKind_STEP_KIND_UNSPECIFIED StepKind = 0
-	StepKind_STEP_KIND_DO          StepKind = 1
+	StepRecord_KIND_UNSPECIFIED StepRecord_Kind = 0
+	StepRecord_KIND_DO          StepRecord_Kind = 1
 )
 
-// Enum value maps for StepKind.
+// Enum value maps for StepRecord_Kind.
 var (
-	StepKind_name = map[int32]string{
-		0: "STEP_KIND_UNSPECIFIED",
-		1: "STEP_KIND_DO",
+	StepRecord_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "KIND_DO",
 	}
-	StepKind_value = map[string]int32{
-		"STEP_KIND_UNSPECIFIED": 0,
-		"STEP_KIND_DO":          1,
+	StepRecord_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"KIND_DO":          1,
 	}
 )
 
-func (x StepKind) Enum() *StepKind {
-	p := new(StepKind)
+func (x StepRecord_Kind) Enum() *StepRecord_Kind {
+	p := new(StepRecord_Kind)
 	*p = x
 	return p
 }
 
-func (x StepKind) String() string {
+func (x StepRecord_Kind) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (StepKind) Descriptor() protoreflect.EnumDescriptor {
+func (StepRecord_Kind) Descriptor() protoreflect.EnumDescriptor {
 	return file_runcoil_v1_run_proto_enumTypes[0].Descriptor()
 }
 
-func (StepKind) Type() protoreflect.EnumType {
+func (StepRecord_Kind) Type() protoreflect.EnumType {
 	return &file_runcoil_v1_run_proto_enumTypes[0]
 }
 
-func (x StepKind) Number() protoreflect.EnumNumber {
+func (x StepRecord_Kind) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use StepKind.Descriptor instead.
-func (StepKind) EnumDescriptor() ([]byte, []int) {
-	return file_runcoil_v1_run_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use StepRecord_Kind.Descriptor instead.
+func (StepRecord_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_runcoil_v1_run_proto_rawDescGZIP(), []int{0, 0}
 }
 
-type FailureCode int32
+type Failure_Code int32
 
 const (
-	FailureCode_FAILURE_CODE_UNSPECIFIED          FailureCode = 0
-	FailureCode_FAILURE_CODE_ERROR                FailureCode = 1
-	FailureCode_FAILURE_CODE_PANIC                FailureCode = 2
-	FailureCode_FAILURE_CODE_STEP_FAILED          FailureCode = 3
-	FailureCode_FAILURE_CODE_ATTEMPT_LOST         FailureCode = 4
-	FailureCode_FAILURE_CODE_START_DEADLINE       FailureCode = 5
-	FailureCode_FAILURE_CODE_OUTPUT_NOT_ENCODABLE FailureCode = 6
+	Failure_CODE_UNSPECIFIED          Failure_Code = 0
+	Failure_CODE_ERROR                Failure_Code = 1
+	Failure_CODE_PANIC                Failure_Code = 2
+	Failure_CODE_STEP_FAILED          Failure_Code = 3
+	Failure_CODE_ATTEMPT_LOST         Failure_Code = 4
+	Failure_CODE_START_DEADLINE       Failure_Code = 5
+	Failure_CODE_OUTPUT_NOT_ENCODABLE Failure_Code = 6
 )
 
-// Enum value maps for FailureCode.
+// Enum value maps for Failure_Code.
 var (
-	FailureCode_name = map[int32]string{
-		0: "FAILURE_CODE_UNSPECIFIED",
-		1: "FAILURE_CODE_ERROR",
-		2: "FAILURE_CODE_PANIC",
-		3: "FAILURE_CODE_STEP_FAILED",
-		4: "FAILURE_CODE_ATTEMPT_LOST",
-		5: "FAILURE_CODE_START_DEADLINE",
-		6: "FAILURE_CODE_OUTPUT_NOT_ENCODABLE",
+	Failure_Code_name = map[int32]string{
+		0: "CODE_UNSPECIFIED",
+		1: "CODE_ERROR",
+		2: "CODE_PANIC",
+		3: "CODE_STEP_FAILED",
+		4: "CODE_ATTEMPT_LOST",
+		5: "CODE_START_DEADLINE",
+		6: "CODE_OUTPUT_NOT_ENCODABLE",
 	}
-	FailureCode_value = map[string]int32{
-		"FAILURE_CODE_UNSPECIFIED":          0,
-		"FAILURE_CODE_ERROR":                1,
-		"FAILURE_CODE_PANIC":                2,
-		"FAILURE_CODE_STEP_FAILED":          3,
-		"FAILURE_CODE_ATTEMPT_LOST":         4,
-		"FAILURE_CODE_START_DEADLINE":       5,
-		"FAILURE_CODE_OUTPUT_NOT_ENCODABLE": 6,
+	Failure_Code_value = map[string]int32{
+		"CODE_UNSPECIFIED":          0,
+		"CODE_ERROR":                1,
+		"CODE_PANIC":                2,
+		"CODE_STEP_FAILED":          3,
+		"CODE_ATTEMPT_LOST":         4,
+		"CODE_START_DEADLINE":       5,
+		"CODE_OUTPUT_NOT_ENCODABLE": 6,
 	}
 )
 
-func (x FailureCode) Enum() *FailureCode {
-	p := new(FailureCode)
+func (x Failure_Code) Enum() *Failure_Code {
+	p := new(Failure_Code)
 	*p = x
 	return p
 }
 
-func (x FailureCode) String() string {
+func (x Failure_Code) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (FailureCode) Descriptor() protoreflect.EnumDescriptor {
+func (Failure_Code) Descriptor() protoreflect.EnumDescriptor {
 	return file_runcoil_v1_run_proto_enumTypes[1].Descriptor()
 }
 
-func (FailureCode) Type() protoreflect.EnumType {
+func (Failure_Code) Type() protoreflect.EnumType {
 	return &file_runcoil_v1_run_proto_enumTypes[1]
 }
 
-func (x FailureCode) Number() protoreflect.EnumNumber {
+func (x Failure_Code) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use FailureCode.Descriptor instead.
-func (FailureCode) EnumDescriptor() ([]byte, []int) {
-	return file_runcoil_v1_run_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use Failure_Code.Descriptor instead.
+func (Failure_Code) EnumDescriptor() ([]byte, []int) {
+	return file_runcoil_v1_run_proto_rawDescGZIP(), []int{1, 0}
 }
 
 type StepRecord struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	StepId string                 `protobuf:"bytes,1,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	Kind   StepKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=runcoil.v1.StepKind" json:"kind,omitempty"`
+	Kind   StepRecord_Kind        `protobuf:"varint,2,opt,name=kind,proto3,enum=runcoil.v1.StepRecord_Kind" json:"kind,omitempty"`
 	// Types that are valid to be assigned to Result:
 	//
 	//	*StepRecord_Output
@@ -178,11 +178,11 @@ func (x *StepRecord) GetStepId() string {
 	return ""
 }
 
-func (x *StepRecord) GetKind() StepKind {
+func (x *StepRecord) GetKind() StepRecord_Kind {
 	if x != nil {
 		return x.Kind
 	}
-	return StepKind_STEP_KIND_UNSPECIFIED
+	return StepRecord_KIND_UNSPECIFIED
 }
 
 func (x *StepRecord) GetResult() isStepRecord_Result {
@@ -228,7 +228,7 @@ func (*StepRecord_Failure) isStepRecord_Result() {}
 
 type Failure struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          FailureCode            `protobuf:"varint,1,opt,name=code,proto3,enum=runcoil.v1.FailureCode" json:"code,omitempty"`
+	Code          Failure_Code           `protobuf:"varint,1,opt,name=code,proto3,enum=runcoil.v1.Failure_Code" json:"code,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	StepId        string                 `protobuf:"bytes,3,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -265,11 +265,11 @@ func (*Failure) Descriptor() ([]byte, []int) {
 	return file_runcoil_v1_run_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Failure) GetCode() FailureCode {
+func (x *Failure) GetCode() Failure_Code {
 	if x != nil {
 		return x.Code
 	}
-	return FailureCode_FAILURE_CODE_UNSPECIFIED
+	return Failure_CODE_UNSPECIFIED
 }
 
 func (x *Failure) GetMessage() string {
@@ -291,29 +291,31 @@ var File_runcoil_v1_run_proto protoreflect.FileDescriptor
 const file_runcoil_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14runcoil/v1/run.proto\x12\n" +
-	"runcoil.v1\"\xa4\x01\n" +
+	"runcoil.v1\"\xd6\x01\n" +
 	"\n" +
 	"StepRecord\x12\x17\n" +
-	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12(\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x14.runcoil.v1.StepKindR\x04kind\x12\x18\n" +
+	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12/\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1b.runcoil.v1.StepRecord.KindR\x04kind\x12\x18\n" +
 	"\x06output\x18\x03 \x01(\fH\x00R\x06output\x12/\n" +
-	"\afailure\x18\x04 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailureB\b\n" +
-	"\x06result\"i\n" +
-	"\aFailure\x12+\n" +
-	"\x04code\x18\x01 \x01(\x0e2\x17.runcoil.v1.FailureCodeR\x04code\x12\x18\n" +
+	"\afailure\x18\x04 \x01(\v2\x13.runcoil.v1.FailureH\x00R\afailure\")\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aKIND_DO\x10\x01B\b\n" +
+	"\x06result\"\x8e\x02\n" +
+	"\aFailure\x12,\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x18.runcoil.v1.Failure.CodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
-	"\astep_id\x18\x03 \x01(\tR\x06stepId*7\n" +
-	"\bStepKind\x12\x19\n" +
-	"\x15STEP_KIND_UNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fSTEP_KIND_DO\x10\x01*\xe0\x01\n" +
-	"\vFailureCode\x12\x1c\n" +
-	"\x18FAILURE_CODE_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12FAILURE_CODE_ERROR\x10\x01\x12\x16\n" +
-	"\x12FAILURE_CODE_PANIC\x10\x02\x12\x1c\n" +
-	"\x18FAILURE_CODE_STEP_FAILED\x10\x03\x12\x1d\n" +
-	"\x19FAILURE_CODE_ATTEMPT_LOST\x10\x04\x12\x1f\n" +
-	"\x1bFAILURE_CODE_START_DEADLINE\x10\x05\x12%\n" +
-	"!FAILURE_CODE_OUTPUT_NOT_ENCODABLE\x10\x06B\xa1\x01\n" +
+	"\astep_id\x18\x03 \x01(\tR\x06stepId\"\xa1\x01\n" +
+	"\x04Code\x12\x14\n" +
+	"\x10CODE_UNSPECIFIED\x10\x00\x12\x0e\n" +
+	"\n" +
+	"CODE_ERROR\x10\x01\x12\x0e\n" +
+	"\n" +
+	"CODE_PANIC\x10\x02\x12\x14\n" +
+	"\x10CODE_STEP_FAILED\x10\x03\x12\x15\n" +
+	"\x11CODE_ATTEMPT_LOST\x10\x04\x12\x17\n" +
+	"\x13CODE_START_DEADLINE\x10\x05\x12\x1d\n" +
+	"\x19CODE_OUTPUT_NOT_ENCODABLE\x10\x06B\xa1\x01\n" +
 	"\x0ecom.runcoil.v1B\bRunProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +
 	"Runcoil\\V1\xe2\x02\x16Runcoil\\V1\\GPBMetadata\xea\x02\vRuncoil::V1b\x06proto3"
@@ -333,15 +335,15 @@ func file_runcoil_v1_run_proto_rawDescGZIP() []byte {
 var file_runcoil_v1_run_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_runcoil_v1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_runcoil_v1_run_proto_goTypes = []any{
-	(StepKind)(0),      // 0: runcoil.v1.StepKind
-	(FailureCode)(0),   // 1: runcoil.v1.FailureCode
-	(*StepRecord)(nil), // 2: runcoil.v1.StepRecord
-	(*Failure)(nil),    // 3: runcoil.v1.Failure
+	(StepRecord_Kind)(0), // 0: runcoil.v1.StepRecord.Kind
+	(Failure_Code)(0),    // 1: runcoil.v1.Failure.Code
+	(*StepRecord)(nil),   // 2: runcoil.v1.StepRecord
+	(*Failure)(nil),      // 3: runcoil.v1.Failure
 }
 var file_runcoil_v1_run_proto_depIdxs = []int32{
-	0, // 0: runcoil.v1.StepRecord.kind:type_name -> runcoil.v1.StepKind
+	0, // 0: runcoil.v1.StepRecord.kind:type_name -> runcoil.v1.StepRecord.Kind
 	3, // 1: runcoil.v1.StepRecord.failure:type_name -> runcoil.v1.Failure
-	1, // 2: runcoil.v1.Failure.code:type_name -> runcoil.v1.FailureCode
+	1, // 2: runcoil.v1.Failure.code:type_name -> runcoil.v1.Failure.Code
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

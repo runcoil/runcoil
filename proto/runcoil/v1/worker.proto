@@ -60,8 +60,13 @@ message Assign {
 }
 
 message Cancel {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_LEASE_LOST = 1;
+  }
+
   Lease lease = 1;
-  CancelReason reason = 2;
+  Reason reason = 2;
 }
 
 message Keepalive {}
@@ -131,9 +136,4 @@ enum ErrorKind {
   ERROR_KIND_ERROR = 1;
   ERROR_KIND_PANIC = 2;
   ERROR_KIND_OUTPUT_NOT_ENCODABLE = 3;
-}
-
-enum CancelReason {
-  CANCEL_REASON_UNSPECIFIED = 0;
-  CANCEL_REASON_LEASE_LOST = 1;
 }

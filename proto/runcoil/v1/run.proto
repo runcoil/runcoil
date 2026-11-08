@@ -3,8 +3,13 @@ syntax = "proto3";
 package runcoil.v1;
 
 message StepRecord {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_DO = 1;
+  }
+
   string step_id = 1;
-  StepKind kind = 2;
+  Kind kind = 2;
   oneof result {
     bytes output = 3;
     Failure failure = 4;
@@ -12,22 +17,17 @@ message StepRecord {
 }
 
 message Failure {
-  FailureCode code = 1;
+  enum Code {
+    CODE_UNSPECIFIED = 0;
+    CODE_ERROR = 1;
+    CODE_PANIC = 2;
+    CODE_STEP_FAILED = 3;
+    CODE_ATTEMPT_LOST = 4;
+    CODE_START_DEADLINE = 5;
+    CODE_OUTPUT_NOT_ENCODABLE = 6;
+  }
+
+  Code code = 1;
   string message = 2;
   string step_id = 3;
-}
-
-enum StepKind {
-  STEP_KIND_UNSPECIFIED = 0;
-  STEP_KIND_DO = 1;
-}
-
-enum FailureCode {
-  FAILURE_CODE_UNSPECIFIED = 0;
-  FAILURE_CODE_ERROR = 1;
-  FAILURE_CODE_PANIC = 2;
-  FAILURE_CODE_STEP_FAILED = 3;
-  FAILURE_CODE_ATTEMPT_LOST = 4;
-  FAILURE_CODE_START_DEADLINE = 5;
-  FAILURE_CODE_OUTPUT_NOT_ENCODABLE = 6;
 }
