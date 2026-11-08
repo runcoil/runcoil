@@ -17,13 +17,14 @@ var sslModes = []string{"disable", "require", "verify-full"}
 
 // Config is the PostgreSQL connection configuration.
 type Config struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	DB       string
-	SSLMode  string
-	MaxConns int32
+	Host        string
+	Port        int
+	User        string
+	Password    string
+	DB          string
+	SSLMode     string
+	MaxConns    int32
+	AutoMigrate bool
 }
 
 // RegisterFlags declares every key with its default and help text.
@@ -35,6 +36,7 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.DB, "postgres.db", "postgres", "PostgreSQL database.")
 	fs.StringVar(&c.SSLMode, "postgres.ssl-mode", "disable", "TLS mode: "+strings.Join(sslModes, ", ")+".")
 	fs.Int32Var(&c.MaxConns, "postgres.max-conns", 10, "Most connections in the pool.")
+	fs.BoolVar(&c.AutoMigrate, "postgres.auto-migrate", false, "Apply the pending migrations at boot.")
 }
 
 // Validate checks the configuration.

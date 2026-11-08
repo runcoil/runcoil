@@ -14,25 +14,28 @@ through `go tool`. Nothing else is installed globally.
 ```sh
 task setup    # download the modules and build the Go tools
 task build    # build the server
-task test     # tests with the race detector; needs Docker
+task test     # tests with the race detector
 task lint     # golangci-lint
 task tidy     # fail when go.mod or go.sum is not tidy
 task vuln     # govulncheck
 task check    # lint, test, tidy and vuln
 ```
 
-The store tests start PostgreSQL in Docker with testcontainers, capped at 2 vCPUs
-and 4 GiB. They use `postgres:18-alpine`; set `POSTGRES_IMAGE` to test another
-version, as CI does for 15 and 18. Every tool call runs with `GOWORK=off`,
-because `go tool -modfile` does not work in workspace mode.
+The tests open no database. Every tool call runs with `GOWORK=off`, because
+`go tool -modfile` does not work in workspace mode.
 
 ## Database
 
 The migrations are goose SQL files in `internal/storage/postgres/migration`,
-embedded in the `migrate` binary.
+embedded in the server. With `postgres.auto-migrate` set, the server applies the
+pending ones at boot; Compose sets it. The tasks run goose against the PostgreSQL
+of Compose, or against `GOOSE_DBSTRING` when it is set.
 
 ```sh
-task migrate                     # apply the migrations to the PostgreSQL of Compose
+task migrate-up                  # apply every pending migration
+task migrate-down                # roll back the last one
+task migrate-reset               # roll back every migration
+task migrate-status              # show which are applied
 task migrate-create -- <name>    # add a migration
 ```
 
@@ -51,7 +54,7 @@ task proto:check    # lint, format check, generated-code check, build and tidy
 ## Running
 
 ```sh
-docker compose up -d     # PostgreSQL 18, the migrations, then the server
+docker compose up -d     # PostgreSQL 18 and the server, which migrates at boot
 docker compose down
 task run                 # the server on the host, against the PostgreSQL of Compose
 ```
@@ -59,8 +62,7 @@ task run                 # the server on the host, against the PostgreSQL of Com
 The server listens on port `7070`:
 
 - `/livez`: the process is alive
-- `/readyz`: the database answers, every migration is applied, and the server
-  is not shutting down
+- `/readyz`: the database answers and the server is not shutting down
 
 ## Configuration
 
@@ -76,5 +78,4 @@ Build the image from the root of the repository:
 
 ```sh
 docker build -f docker/app/runcoil.dockerfile -t runcoil:local .
-docker build -f docker/app/migrate.dockerfile -t runcoil-migrate:local .
 ```

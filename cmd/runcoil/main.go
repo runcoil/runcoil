@@ -44,13 +44,16 @@ func run() error {
 	}
 	defer pool.Close()
 
-	migrator, err := postgres.NewMigrator(pool)
-	if err != nil {
-		return fmt.Errorf("new migrator: %w", err)
+	if cfg.Postgres.AutoMigrate {
+		logger.InfoContext(ctx, "running migrations")
+
+		if err := postgres.Migrate(pool); err != nil {
+			return fmt.Errorf("run migrations: %w", err)
+		}
 	}
 
 	manager := service.NewManager(
-		http.NewService(cfg.HTTP, logger, pool, migrator),
+		http.NewService(cfg.HTTP, logger, pool),
 	)
 
 	logger.InfoContext(ctx, "server is started")

@@ -43,30 +43,23 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// Migrations reports whether the database still lacks a migration.
-type Migrations interface {
-	HasPending(ctx context.Context) (bool, error)
-}
-
 // Service serves the health checks, and later the APIs, on one port.
 type Service struct {
-	cfg        Config
-	logger     *slog.Logger
-	db         Pinger
-	migrations Migrations
+	cfg    Config
+	logger *slog.Logger
+	db     Pinger
 
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
 // NewService creates the HTTP service.
-func NewService(cfg Config, logger *slog.Logger, db Pinger, migrations Migrations) *Service {
+func NewService(cfg Config, logger *slog.Logger, db Pinger) *Service {
 	return &Service{
-		cfg:        cfg,
-		logger:     logger,
-		db:         db,
-		migrations: migrations,
-		stopped:    make(chan struct{}),
+		cfg:     cfg,
+		logger:  logger,
+		db:      db,
+		stopped: make(chan struct{}),
 	}
 }
 
@@ -147,18 +140,6 @@ func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.Ping(ctx); err != nil {
 		s.logger.WarnContext(ctx, "database ping failed", slog.Any("error", err))
 		writeHealth(w, http.StatusServiceUnavailable, "database unavailable")
-		return
-	}
-
-	pending, err := s.migrations.HasPending(ctx)
-	if err != nil {
-		s.logger.WarnContext(ctx, "migration check failed", slog.Any("error", err))
-		writeHealth(w, http.StatusServiceUnavailable, "database unavailable")
-		return
-	}
-
-	if pending {
-		writeHealth(w, http.StatusServiceUnavailable, "migrations pending")
 		return
 	}
 

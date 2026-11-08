@@ -3,6 +3,14 @@ version: '3'
 env:
   GOWORK: 'off'
 
+vars:
+  GOOSE_DBSTRING: '{{.GOOSE_DBSTRING | default "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"}}'
+  GOOSE: >-
+    GOOSE_DRIVER=postgres
+    GOOSE_DBSTRING='{{.GOOSE_DBSTRING}}'
+    GOOSE_MIGRATION_DIR=internal/storage/postgres/migration
+    go tool -modfile=tools/go.mod goose
+
 includes:
   proto:
     taskfile: ./proto/Taskfile.yml
@@ -29,15 +37,30 @@ tasks:
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
 
-  migrate:
-    desc: Apply the database migrations
+  migrate-up:
+    desc: Apply every pending migration
     cmds:
-      - go run ./cmd/migrate {{.CLI_ARGS}}
+      - '{{.GOOSE}} up'
+
+  migrate-down:
+    desc: Roll back the last migration
+    cmds:
+      - '{{.GOOSE}} down'
+
+  migrate-reset:
+    desc: Roll back every migration
+    cmds:
+      - '{{.GOOSE}} reset'
+
+  migrate-status:
+    desc: Show which migrations are applied
+    cmds:
+      - '{{.GOOSE}} status'
 
   migrate-create:
     desc: 'Create a migration: task migrate-create -- <name>'
     cmds:
-      - go tool -modfile=tools/go.mod goose -dir internal/storage/postgres/migration create {{.CLI_ARGS}} sql
+      - '{{.GOOSE}} create {{.CLI_ARGS}} sql'
 
   test:
     desc: Run the tests with the race detector
