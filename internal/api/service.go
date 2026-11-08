@@ -1,4 +1,4 @@
-package http
+package api
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+
+	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 
 const (
@@ -19,14 +21,14 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// Config is the HTTP server configuration.
+// Config is the configuration of the API server.
 type Config struct {
 	Port int
 }
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
-	fs.IntVar(&c.Port, "http.port", 7070, "Port of the APIs and the health checks.")
+	fs.IntVar(&c.Port, "api.port", 8080, "Port of the API and the health checks.")
 }
 
 // Validate checks the configuration.
@@ -38,35 +40,23 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Pinger checks that the database answers.
-type Pinger interface {
-	Ping(ctx context.Context) error
-}
-
-// RPCHandler is a Connect service served on the same port, under its path.
-type RPCHandler interface {
-	Handler() (string, http.Handler)
-}
-
-// Service serves the health checks, and the worker protocol of the dispatcher, on one port.
+// Service serves the API and the health checks of the process.
 type Service struct {
-	cfg       Config
-	logger    *slog.Logger
-	db        Pinger
-	workerRPC RPCHandler
+	cfg    Config
+	logger *slog.Logger
+	checks *healthutil.Checks
 
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
-// NewService creates the HTTP service.
-func NewService(cfg Config, logger *slog.Logger, db Pinger, workerRPC RPCHandler) *Service {
+// New creates the API service. Its /readyz runs checks.
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks) *Service {
 	return &Service{
-		cfg:       cfg,
-		logger:    logger,
-		db:        db,
-		workerRPC: workerRPC,
-		stopped:   make(chan struct{}),
+		cfg:     cfg,
+		logger:  logger,
+		checks:  checks,
+		stopped: make(chan struct{}),
 	}
 }
 
@@ -88,7 +78,7 @@ func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 		served <- srv.Serve(listener)
 	}()
 
-	s.logger.InfoContext(ctx, "http server listening", slog.String("addr", listener.Addr().String()))
+	s.logger.InfoContext(ctx, "api server listening", slog.String("addr", listener.Addr().String()))
 
 	select {
 	case <-s.stopped:
@@ -116,18 +106,11 @@ func (s *Service) Stop() {
 
 func (s *Service) newHTTPServer() *http.Server {
 	mux := http.NewServeMux()
-	mux.Handle(s.workerRPC.Handler())
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 
-	// HTTP/1.1 for plain requests, and HTTP/2 without TLS for the Connect streams.
-	protocols := new(http.Protocols)
-	protocols.SetHTTP1(true)
-	protocols.SetUnencryptedHTTP2(true)
-
 	return &http.Server{
 		Handler:           mux,
-		Protocols:         protocols,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 }
@@ -145,9 +128,9 @@ func (s *Service) readyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
 	defer cancel()
 
-	if err := s.db.Ping(ctx); err != nil {
-		s.logger.WarnContext(ctx, "database ping failed", slog.Any("error", err))
-		writeHealth(w, http.StatusServiceUnavailable, "database unavailable")
+	if err := s.checks.Ready(ctx); err != nil {
+		s.logger.WarnContext(ctx, "readiness check failed", slog.Any("error", err))
+		writeHealth(w, http.StatusServiceUnavailable, "not ready")
 		return
 	}
 

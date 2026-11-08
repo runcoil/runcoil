@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/api"
 	"github.com/runcoil/runcoil/internal/dispatcher"
-	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
@@ -16,7 +16,7 @@ type Config struct {
 	AutoMigrate bool
 	Log         log.Config
 	Postgres    postgres.Config
-	HTTP        http.Config
+	API         api.Config
 	Dispatcher  dispatcher.Config
 }
 
@@ -25,7 +25,7 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&c.AutoMigrate, "auto-migrate", false, "Apply the pending migrations at boot.")
 	c.Log.RegisterFlags(fs)
 	c.Postgres.RegisterFlags(fs)
-	c.HTTP.RegisterFlags(fs)
+	c.API.RegisterFlags(fs)
 	c.Dispatcher.RegisterFlags(fs)
 }
 
@@ -39,8 +39,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("postgres: %w", err)
 	}
 
-	if err := c.HTTP.Validate(); err != nil {
-		return fmt.Errorf("http: %w", err)
+	if err := c.API.Validate(); err != nil {
+		return fmt.Errorf("api: %w", err)
 	}
 
 	if err := c.Dispatcher.Validate(); err != nil {

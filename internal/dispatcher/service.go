@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,8 +16,13 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Config is the timing of the dispatcher and of the worker sessions it holds.
+// shutdownTimeout bounds how long a stop waits for the open calls to return.
+const shutdownTimeout = 10 * time.Second
+
+// Config is the port of the worker protocol, and the timing of the dispatcher and of the
+// worker sessions it holds.
 type Config struct {
+	Port              int
 	ClaimInterval     time.Duration
 	HeartbeatInterval time.Duration
 	WorkerTTL         time.Duration
@@ -23,6 +30,7 @@ type Config struct {
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
+	fs.IntVar(&c.Port, "dispatcher.port", 7070, "Port of the worker protocol.")
 	fs.DurationVar(&c.ClaimInterval, "dispatcher.claim-interval", time.Second, "How often the dispatcher claims queued Runs for the workers with free slots.")
 	fs.DurationVar(&c.HeartbeatInterval, "dispatcher.heartbeat-interval", 10*time.Second, "How often a worker sends a heartbeat, and the server a keepalive.")
 	fs.DurationVar(&c.WorkerTTL, "dispatcher.worker-ttl", 30*time.Second, "With no heartbeat for longer than this, a worker session ends.")
@@ -30,6 +38,10 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 
 // Validate checks the configuration.
 func (c *Config) Validate() error {
+	if c.Port < 1 || c.Port > 65535 {
+		return errors.New("port must be between 1 and 65535")
+	}
+
 	if c.ClaimInterval <= 0 {
 		return errors.New("claim interval must be greater than 0")
 	}
@@ -61,8 +73,9 @@ type RunStore interface {
 	FinishRun(ctx context.Context, workerID uuid.UUID, lease domain.Lease, end domain.RunEnd) (bool, error)
 }
 
-// Service holds the streams of the connected workers, claims queued Runs for the ones
-// with free slots, and flushes their heartbeats.
+// Service serves the worker protocol on its own port. It holds the streams of the
+// connected workers, claims queued Runs for the ones with free slots, and flushes their
+// heartbeats.
 type Service struct {
 	cfg         Config
 	logger      *slog.Logger
@@ -79,12 +92,13 @@ type Service struct {
 	beatsMu sync.Mutex
 	beats   map[uuid.UUID]time.Time
 
+	serving  atomic.Bool
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
-// NewService creates the dispatcher. It claims nothing until Run.
-func NewService(cfg Config, logger *slog.Logger, workerStore WorkerStore, runStore RunStore) (*Service, error) {
+// New creates the dispatcher. It serves and claims nothing until Run.
+func New(cfg Config, logger *slog.Logger, workerStore WorkerStore, runStore RunStore) (*Service, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, fmt.Errorf("new dispatcher id: %w", err)
@@ -102,15 +116,55 @@ func NewService(cfg Config, logger *slog.Logger, workerStore WorkerStore, runSto
 	}, nil
 }
 
-// Run claims, flushes heartbeats and records that this dispatcher is alive until Stop is
-// called or ctx ends.
+// Run serves the worker protocol, claims, flushes heartbeats and records that this
+// dispatcher is alive until Stop is called or ctx ends.
 func (s *Service) Run(ctx context.Context) error {
-	if err := s.workerStore.BeatDispatcher(ctx, s.id); err != nil {
-		return err
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.Port))
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	s.logger.InfoContext(ctx, "dispatcher started", slog.String("dispatcher_id", s.id.String()))
+	return s.serve(ctx, listener)
+}
 
+func (s *Service) serve(ctx context.Context, listener net.Listener) error {
+	if err := s.workerStore.BeatDispatcher(ctx, s.id); err != nil {
+		return errors.Join(err, listener.Close())
+	}
+
+	srv := s.newHTTPServer()
+
+	served := make(chan error, 1)
+	go func() {
+		served <- srv.Serve(listener)
+	}()
+
+	s.serving.Store(true)
+	defer s.serving.Store(false)
+
+	s.logger.InfoContext(ctx, "dispatcher listening",
+		slog.String("addr", listener.Addr().String()),
+		slog.String("dispatcher_id", s.id.String()),
+	)
+
+	err := s.loop(ctx, served)
+
+	// The streams end when stopped is closed, so the shutdown does not wait for them.
+	s.Stop()
+	s.flushHeartbeats(context.WithoutCancel(ctx))
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+		err = errors.Join(err, fmt.Errorf("shutdown http: %w", errors.Join(shutdownErr, srv.Close())))
+	}
+
+	return err
+}
+
+// loop claims, flushes and beats until Stop is called, ctx ends or the server fails.
+func (s *Service) loop(ctx context.Context, served <-chan error) error {
 	claim := time.NewTicker(s.cfg.ClaimInterval)
 	defer claim.Stop()
 
@@ -123,11 +177,11 @@ func (s *Service) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-s.stopped:
-			s.flushHeartbeats(context.WithoutCancel(ctx))
 			return nil
 		case <-ctx.Done():
-			s.flushHeartbeats(context.WithoutCancel(ctx))
 			return nil
+		case err := <-served:
+			return fmt.Errorf("serve http: %w", err)
 		case <-claim.C:
 			s.claimAll(ctx)
 		case <-flush.C:
@@ -138,6 +192,19 @@ func (s *Service) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// Ready reports whether the dispatcher takes workers: it serves and is not stopping.
+func (s *Service) Ready(_ context.Context) error {
+	if s.isStopping() {
+		return errors.New("shutting down")
+	}
+
+	if !s.serving.Load() {
+		return errors.New("not serving")
+	}
+
+	return nil
 }
 
 // Stop ends the streams and the loops. It is safe to call more than once, and before Run.

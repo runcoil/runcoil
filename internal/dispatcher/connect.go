@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -18,9 +19,9 @@ import (
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
 
-// Handler returns the worker protocol and the path it is served under, for the server's
-// mux. The dispatcher holds the workers' streams, so it serves their calls too.
-func (s *Service) Handler() (string, http.Handler) {
+// newHTTPServer returns the server of the worker protocol. The dispatcher holds the
+// workers' streams, so it serves their calls too.
+func (s *Service) newHTTPServer() *http.Server {
 	server := connect.NewServer(
 		errorInterceptor{logger: s.logger}.wrap,
 		validate.NewServerInterceptor(),
@@ -30,7 +31,16 @@ func (s *Service) Handler() (string, http.Handler) {
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, server)
 
-	return "/" + runcoilv1connect.WorkerServiceName + "/", mux
+	// HTTP/1.1 for plain requests, and HTTP/2 without TLS for the Listen streams.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
+	return &http.Server{
+		Handler:           mux,
+		Protocols:         protocols,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 }
 
 // internalMessage is the only text a client sees for an unexpected failure.

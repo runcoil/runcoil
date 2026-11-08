@@ -23,7 +23,7 @@ lose the work, because each finished Step is saved and the function replays past
 
 ```sh
 docker compose up -d
-curl localhost:7070/readyz
+curl localhost:8080/readyz
 ```
 
 ## Contributing

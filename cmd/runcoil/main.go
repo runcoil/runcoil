@@ -8,11 +8,12 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/api"
 	"github.com/runcoil/runcoil/internal/dispatcher"
-	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/pkg/configutil"
+	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/pkg/service"
 )
 
@@ -57,17 +58,21 @@ func run() error {
 	workerStore := postgres.NewWorkerStore(db)
 	runStore := postgres.NewRunStore(db)
 
-	dispatcherService, err := dispatcher.NewService(cfg.Dispatcher, logger, workerStore, runStore)
+	dispatcherService, err := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
 	if err != nil {
 		return fmt.Errorf("new dispatcher service: %w", err)
 	}
 
-	httpService := http.NewService(cfg.HTTP, logger, pool, dispatcherService)
+	// The API serves the health checks of the whole process, so the probes call one port.
+	checks := healthutil.New()
+	checks.Add("postgres", pool.Ping)
+	checks.Add("dispatcher", dispatcherService.Ready)
 
-	// The dispatcher stops first: its streams end, so the HTTP server can drain the
-	// unary calls without waiting for them.
+	apiService := api.New(cfg.API, logger, checks)
+
+	// The dispatcher stops first, so /readyz fails while the API still answers it.
 	manager := service.NewManager(
-		httpService,
+		apiService,
 		dispatcherService,
 	)
 

@@ -69,67 +69,13 @@ docker compose down
 task run                 # the server on the host, against the PostgreSQL of Compose
 ```
 
-The server listens on port `7070`:
+The server listens on two ports:
 
-- `/livez`: the process is alive
-- `/readyz`: the database answers and the server is not shutting down
-
-The same port serves the worker protocol, `runcoil.v1.WorkerService`.
-
-## A Run by hand
-
-Until the SDK and the client API exist, a Run can be followed by playing the worker
-with `task worker-call`, which sends one call with `buf curl`. `task db-seed` adds the
-project `default` and the API key `rc_api_local_dev` to the Compose database. `bytes`
-fields such as `input` and `output` are base64 in JSON.
-
-1. Start the server, seed the database and register a worker. Keep the
-   `sessionToken` it returns:
-
-   ```sh
-   docker compose up -d --build
-   task db-seed
-   task worker-call METHOD=Register TOKEN=rc_api_local_dev \
-     DATA='{"app":"shop","slots":2,"tasks":[{"name":"charge"}]}'
-   ```
-
-2. Open the stream in a second terminal. It prints an `assign` for each Run the
-   server gives the worker, and a `keepalive` every heartbeat interval:
-
-   ```sh
-   task worker-call METHOD=Listen TOKEN=<session token>
-   ```
-
-3. Create a Run of the Task. It is assigned within `dispatcher.claim-interval`:
-
-   ```sh
-   task dev-run-create APP=shop TASK_NAME=charge INPUT='{"orderId":42}'
-   ```
-
-4. Record a Step and end the Run with the `lease` of the `assign`:
-
-   ```sh
-   task worker-call METHOD=CompleteStep TOKEN=<session token> \
-     DATA='{"lease":{"runId":"<run id>","epoch":"1"},"stepId":"charge","output":"eyJvayI6dHJ1ZX0="}'
-   task worker-call METHOD=CompleteRun TOKEN=<session token> \
-     DATA='{"lease":{"runId":"<run id>","epoch":"1"},"output":"eyJvayI6dHJ1ZX0="}'
-   task worker-call METHOD=Heartbeat TOKEN=<session token>
-   ```
-
-5. Look at the tables:
-
-   ```sh
-   docker compose exec postgres psql -U postgres \
-     -c 'select id, status, error_code from runs' \
-     -c 'select run_id, step_id, status from steps' \
-     -c 'select run_id, lease_epoch from run_leases'
-   ```
-
-A Step error is `"error":{"kind":"ERROR_KIND_ERROR","message":"..."}`, a Run error the
-same with `"stepId"` when it is a Step's final error. A call with an old `epoch` fails
-with `STALE_LEASE`. Stopping Listen and opening it again with
-`DATA='{"running":[<lease>]}'` reconciles: a lease the worker does not report goes
-back to the queue, and a reported one it no longer holds gets a `cancel`.
+- `8080`, the API port, with the health checks of the whole process:
+  - `/livez`: the process is alive
+  - `/readyz`: the database answers, the dispatcher takes workers, and the server is
+    not shutting down
+- `7070`, the dispatcher port, with the worker protocol, `runcoil.v1.WorkerService`
 
 ## Configuration
 
