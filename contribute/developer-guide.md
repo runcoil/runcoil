@@ -46,6 +46,10 @@ The worker protocol is in `proto/`, a Buf module and its own Go module,
 `github.com/runcoil/runcoil/proto`. The generated Go code is committed under
 `proto/gen/go`.
 
+Each merge to `main` that changes `proto/` tags a new patch version,
+`proto/vX.Y.Z`, through `proto-release.yaml`; `#minor` or `#major` in the commit
+message bumps that part instead. The Go SDK and other users import a tag.
+
 ```sh
 task proto:gen      # generate the Go code after changing a .proto file
 task proto:format   # format the protos
