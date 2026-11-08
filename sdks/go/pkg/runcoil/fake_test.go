@@ -2,6 +2,7 @@ package runcoil
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -24,6 +25,14 @@ const (
 	testSession = "session-1"
 )
 
+// set changes the fake's behaviour under its lock.
+func (f *fakeServer) set(change func(f *fakeServer)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	change(f)
+}
+
 // fakeServer is an in-process WorkerService. Each Listen gets the next stream script from
 // streams, sends its messages, and then waits until the script ends it or the client goes.
 type fakeServer struct {
@@ -38,7 +47,14 @@ type fakeServer struct {
 	listenAuth []string
 	steps      []*runcoilv1.CompleteStepRequest
 	runs       []*runcoilv1.CompleteRunRequest
+	heartbeats int
+	sessions   int
 	stepAnswer func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error)
+	runAnswer  func(context.Context) error
+	beatAnswer func() error
+
+	// hbInterval is the heartbeat interval Register returns.
+	hbInterval time.Duration
 
 	completed chan *runcoilv1.CompleteRunRequest
 }
@@ -57,9 +73,10 @@ func newFakeServer(t *testing.T) (*fakeServer, string) {
 	t.Helper()
 
 	f := &fakeServer{
-		t:         t,
-		streams:   make(chan *fakeStream, 8),
-		completed: make(chan *runcoilv1.CompleteRunRequest, 8),
+		t:          t,
+		streams:    make(chan *fakeStream, 8),
+		completed:  make(chan *runcoilv1.CompleteRunRequest, 8),
+		hbInterval: time.Hour,
 	}
 
 	server := connect.NewServer()
@@ -86,15 +103,18 @@ func bearer(ctx context.Context) string {
 	return strings.TrimPrefix(info.RequestHeader().Get("Authorization"), "Bearer ")
 }
 
+// Register opens session-1, session-2, ... in turn.
 func (f *fakeServer) Register(ctx context.Context, _ *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.registers = append(f.registers, bearer(ctx))
-	f.mu.Unlock()
+	f.sessions++
 
 	return &runcoilv1.RegisterResponse{
 		WorkerId:          "worker-1",
-		SessionToken:      testSession,
-		HeartbeatInterval: durationpb.New(time.Hour),
+		SessionToken:      fmt.Sprintf("session-%d", f.sessions),
+		HeartbeatInterval: durationpb.New(f.hbInterval),
 	}, nil
 }
 
@@ -132,6 +152,17 @@ func (f *fakeServer) Listen(ctx context.Context, req *runcoilv1.ListenRequest, o
 }
 
 func (f *fakeServer) Heartbeat(context.Context, *runcoilv1.HeartbeatRequest) (*runcoilv1.HeartbeatResponse, error) {
+	f.mu.Lock()
+	f.heartbeats++
+	answer := f.beatAnswer
+	f.mu.Unlock()
+
+	if answer != nil {
+		if err := answer(); err != nil {
+			return nil, err
+		}
+	}
+
 	return &runcoilv1.HeartbeatResponse{}, nil
 }
 
@@ -148,10 +179,17 @@ func (f *fakeServer) CompleteStep(_ context.Context, req *runcoilv1.CompleteStep
 	return &runcoilv1.CompleteStepResponse{Result: &runcoilv1.CompleteStepResponse_Record{Record: storedRecord(req)}}, nil
 }
 
-func (f *fakeServer) CompleteRun(_ context.Context, req *runcoilv1.CompleteRunRequest) (*runcoilv1.CompleteRunResponse, error) {
+func (f *fakeServer) CompleteRun(ctx context.Context, req *runcoilv1.CompleteRunRequest) (*runcoilv1.CompleteRunResponse, error) {
 	f.mu.Lock()
 	f.runs = append(f.runs, req)
+	answer := f.runAnswer
 	f.mu.Unlock()
+
+	if answer != nil {
+		if err := answer(ctx); err != nil {
+			return nil, err
+		}
+	}
 
 	f.completed <- req
 

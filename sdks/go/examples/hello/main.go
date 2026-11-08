@@ -49,21 +49,21 @@ func run() error {
 
 	client, err := runcoil.NewClient(runcoil.Logger(logger))
 	if err != nil {
-		return err
+		return fmt.Errorf("new client: %w", err)
 	}
 
 	worker, err := runcoil.NewWorker(client, runcoil.App("hello"), runcoil.Slots(2))
 	if err != nil {
-		return err
+		return fmt.Errorf("new worker: %w", err)
 	}
 
 	t := &tasks{logger: logger}
 	if err := worker.NewTask("greet", runcoil.HandlerFunc(t.greet)); err != nil {
-		return err
+		return fmt.Errorf("new task: %w", err)
 	}
 
 	if err := worker.Start(ctx); err != nil {
-		return err
+		return fmt.Errorf("start worker: %w", err)
 	}
 
 	<-ctx.Done()
@@ -71,7 +71,11 @@ func run() error {
 	drainCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return worker.Shutdown(drainCtx)
+	if err := worker.Shutdown(drainCtx); err != nil {
+		return fmt.Errorf("shutdown worker: %w", err)
+	}
+
+	return nil
 }
 
 func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
@@ -83,7 +87,7 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 		return strings.TrimSpace(in.Name), nil
 	})
 	if err != nil {
-		return greetOutput{}, err
+		return greetOutput{}, fmt.Errorf("step: %w", err)
 	}
 
 	greeting, err := step.Do(ctx, "compose", func(ctx context.Context) (string, error) {
@@ -92,13 +96,13 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 		}
 
 		if err := pause(ctx, in.Pause); err != nil {
-			return "", err
+			return "", fmt.Errorf("pause: %w", err)
 		}
 
 		return fmt.Sprintf("Hello, %s!", name), nil
 	})
 	if err != nil {
-		return greetOutput{}, err
+		return greetOutput{}, fmt.Errorf("step: %w", err)
 	}
 
 	_, err = step.Do(ctx, "log", func(ctx context.Context) (bool, error) {
@@ -115,7 +119,7 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 		return true, nil
 	})
 	if err != nil {
-		return greetOutput{}, err
+		return greetOutput{}, fmt.Errorf("step: %w", err)
 	}
 
 	return greetOutput{Greeting: greeting}, nil
@@ -136,6 +140,6 @@ func pause(ctx context.Context, d string) error {
 	case <-time.After(wait):
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("pause: %w", ctx.Err())
 	}
 }

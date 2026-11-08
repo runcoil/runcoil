@@ -331,7 +331,7 @@ func TestShutdownGivesUpAtItsDeadline(t *testing.T) {
 	defer cancel()
 
 	err := w.Shutdown(ctx)
-	assert.EqualError(t, err, "shutdown: gave up 1 runs before they finished: [run-1]")
+	assert.EqualError(t, err, "shutdown: gave up 1 runs before their result was sent: [run-1]")
 
 	f.noRun(t)
 }
@@ -354,4 +354,194 @@ func TestRetryable(t *testing.T) {
 	assert.True(t, retryable(connect.NewError(connect.CodeUnavailable, "down")))
 	assert.False(t, retryable(connect.NewError(connect.CodeInvalidArgument, "bad")))
 	assert.False(t, retryable(codedError(t, connect.CodeFailedPrecondition, runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE, "stale")))
+}
+
+func TestReconnectReportsAnAttemptWhoseResultIsBeingSent(t *testing.T) {
+	f, url := newFakeServer(t)
+	first, second := newFakeStream(), newFakeStream()
+	f.streams <- first
+	f.streams <- second
+
+	release := make(chan struct{})
+	sending := make(chan struct{}, 1)
+	f.set(func(f *fakeServer) {
+		f.runAnswer = func(ctx context.Context) error {
+			sending <- struct{}{}
+			select {
+			case <-release:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{Receipt: "done"}, nil }),
+	})
+
+	first.send <- assignMsg("run-1", 4, "order", `{}`)
+	<-sending
+	close(first.send)
+
+	require.Eventually(t, func() bool {
+		_, listens, _, _ := f.snapshot()
+		return len(listens) == 2
+	}, 5*time.Second, 10*time.Millisecond)
+
+	_, listens, _, _ := f.snapshot()
+	require.Len(t, listens[1].GetRunning(), 1, "an attempt whose result is being sent keeps its lease")
+	assert.Equal(t, &runcoilv1.Lease{RunId: "run-1", Epoch: 4}, listens[1].GetRunning()[0])
+
+	close(release)
+	f.waitRun(t)
+}
+
+func TestARefusedHeartbeatRegistersAgain(t *testing.T) {
+	f, url := newFakeServer(t)
+	first, second := newFakeStream(), newFakeStream()
+	f.streams <- first
+	f.streams <- second
+
+	ended := codedError(t, connect.CodeUnauthenticated, runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "invalid session token")
+	f.set(func(f *fakeServer) {
+		f.hbInterval = 50 * time.Millisecond
+		f.beatAnswer = func() error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+
+			if f.sessions < 2 {
+				return ended
+			}
+
+			return nil
+		}
+	})
+
+	// The server keeps a stream open after its session ends, with keepalives.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		keepalive := &runcoilv1.ListenResponse{Kind: &runcoilv1.ListenResponse_Keepalive{Keepalive: &runcoilv1.Keepalive{}}}
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(20 * time.Millisecond):
+				select {
+				case first.send <- keepalive:
+				default:
+				}
+			}
+		}
+	}()
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+	})
+
+	require.Eventually(t, func() bool {
+		registers, listens, _, _ := f.snapshot()
+		return len(registers) == 2 && len(listens) == 2
+	}, 5*time.Second, 10*time.Millisecond)
+
+	_, _, listenAuth, _ := f.snapshot()
+	assert.Equal(t, []string{"session-1", "session-2"}, listenAuth, "the new Listen sends the new session token")
+}
+
+func TestAStaleStepEndsTheAttempt(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	stale := codedError(t, connect.CodeFailedPrecondition, runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE, "lease is no longer this attempt's")
+	f.set(func(f *fakeServer) {
+		f.stepAnswer = func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error) { return nil, stale }
+	})
+
+	var after atomic.Bool
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			_, err := step.Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil })
+			after.Store(true)
+
+			return orderOutput{}, err
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+
+	f.noRun(t)
+	assert.False(t, after.Load(), "the handler does not run past a refused Step")
+
+	_, _, _, steps := f.snapshot()
+	assert.Len(t, steps, 1, "a stale Step report is not sent again")
+}
+
+func TestAssignsOfTheSameRun(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	var calls atomic.Int32
+	firstEnded := make(chan struct{})
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+			if calls.Add(1) == 1 {
+				<-ctx.Done()
+				close(firstEnded)
+
+				return orderOutput{}, ctx.Err()
+			}
+
+			return orderOutput{Receipt: "second"}, nil
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	st.send <- assignMsg("run-1", 2, "order", `{}`)
+
+	select {
+	case <-firstEnded:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "a newer epoch did not end the held attempt")
+	}
+
+	run := f.waitRun(t)
+	assert.Equal(t, int64(2), run.GetLease().GetEpoch())
+	assert.Equal(t, int32(2), calls.Load(), "the repeated Assign of epoch 1 is ignored")
+	f.noRun(t)
+}
+
+func TestShutdownCutsAResultStillBeingSent(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	sending := make(chan struct{}, 1)
+	f.set(func(f *fakeServer) {
+		f.runAnswer = func(ctx context.Context) error {
+			sending <- struct{}{}
+			<-ctx.Done()
+
+			return ctx.Err()
+		}
+	})
+
+	w := startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	<-sending
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := w.Shutdown(ctx)
+
+	assert.EqualError(t, err, "shutdown: gave up 1 runs before their result was sent: [run-1]")
+	assert.Less(t, time.Since(start), 3*handlerWait, "Shutdown does not wait for the report's whole budget")
 }

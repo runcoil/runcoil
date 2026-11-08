@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,7 +36,7 @@ const (
 )
 
 // reminderEvery is how often an outage repeats its warning while it lasts.
-var reminderEvery = time.Minute
+const reminderEvery = time.Minute
 
 // WorkerOption configures a Worker in NewWorker.
 type WorkerOption func(*workerCfg)
@@ -86,6 +88,15 @@ type Worker struct {
 	slots   chan struct{}  // one token per running handler
 	running sync.WaitGroup // one count per attempt until its goroutine ends
 
+	// reportCtx bounds the sending of results. Shutdown cancels it once its drain is over.
+	reportCtx  context.Context
+	reportStop context.CancelFunc
+
+	// streamCancel ends the open Listen stream, and sessionEnded tells the listen loop that
+	// it ended because the session did.
+	streamCancel context.CancelFunc
+	sessionEnded atomic.Bool
+
 	listenStop context.CancelFunc
 	listenDone chan struct{}
 	beatStop   context.CancelFunc
@@ -132,6 +143,7 @@ func NewWorker(client *Client, opts ...WorkerOption) (*Worker, error) {
 		attempts: map[string]*attempt{},
 		slots:    make(chan struct{}, cfg.slots),
 	}
+	w.reportCtx, w.reportStop = context.WithCancel(context.Background())
 	w.rpc = runcoilv1connect.NewWorkerServiceClient(connect.NewClient(client.transport, w.authenticate))
 
 	return w, nil
@@ -246,6 +258,8 @@ func (w *Worker) Shutdown(drainCtx context.Context) error {
 }
 
 func (w *Worker) shutdown(drainCtx context.Context) error {
+	defer w.reportStop()
+
 	w.mu.Lock()
 	w.stopped = true
 	listenStop, listenDone := w.listenStop, w.listenDone
@@ -280,32 +294,52 @@ func (w *Worker) shutdown(drainCtx context.Context) error {
 	return err
 }
 
-// giveUp ends a drain that has reached its deadline. It cancels every attempt that has
-// not reported and gives the handlers handlerWait to return.
+// giveUp ends a drain that has reached its deadline. It cancels every handler that is
+// still running and gives the handlers handlerWait to return. Then it cuts short the
+// results still being sent, and waits handlerWait again. It returns an error naming the
+// Runs whose result was not sent.
 func (w *Worker) giveUp(drained <-chan struct{}) error {
+	given := map[string]bool{}
+
 	w.mu.Lock()
-	var given []string
 	for _, a := range w.attempts {
-		if a.claim() {
-			a.cancel()
-			given = append(given, a.runID)
+		if a.end() {
+			given[a.runID] = true
 		}
 	}
 	w.mu.Unlock()
 
-	timer := time.NewTimer(handlerWait)
-	defer timer.Stop()
+	if !wait(drained, handlerWait) {
+		w.mu.Lock()
+		for _, a := range w.attempts {
+			given[a.runID] = true
+		}
+		w.mu.Unlock()
 
-	select {
-	case <-drained:
-	case <-timer.C:
+		w.reportStop()
+		wait(drained, handlerWait)
 	}
 
 	if len(given) == 0 {
 		return nil
 	}
 
-	return fmt.Errorf("shutdown: gave up %d runs before they finished: %v", len(given), given)
+	runs := slices.Sorted(maps.Keys(given))
+
+	return fmt.Errorf("shutdown: gave up %d runs before their result was sent: %v", len(runs), runs)
+}
+
+// wait waits for done for at most d, and reports whether done was closed.
+func wait(done <-chan struct{}, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 // authenticate puts the bearer token on every call: the API key on Register, and the
@@ -364,6 +398,8 @@ func (w *Worker) register(ctx context.Context) error {
 	w.hbInterval = hb
 	w.mu.Unlock()
 
+	w.sessionEnded.Store(false)
+
 	w.logger.InfoContext(ctx, "worker registered",
 		slog.String("app", w.app),
 		slog.String("worker_id", resp.GetWorkerId()),
@@ -398,8 +434,8 @@ func (w *Worker) listenLoop(ctx context.Context, done chan<- struct{}) {
 		switch {
 		case err == nil:
 			w.logger.DebugContext(ctx, "listen stream ended by the server")
-		case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED:
-			w.logger.DebugContext(ctx, "listen stream refused: session ended", slog.Any("error", err))
+		case errors.Is(err, errSessionEnded) || errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED:
+			w.logger.DebugContext(ctx, "session ended; registering again", slog.Any("error", err))
 
 			if rerr := w.register(ctx); rerr != nil {
 				w.conn.failed(ctx, rerr, delay)
@@ -455,6 +491,10 @@ func (w *Worker) listenOnce(ctx context.Context) (bool, error) {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	w.mu.Lock()
+	w.streamCancel = cancel
+	w.mu.Unlock()
+
 	var stalled atomic.Bool
 	watchdog := time.AfterFunc(silence, func() {
 		stalled.Store(true)
@@ -485,6 +525,10 @@ func (w *Worker) listenOnce(ctx context.Context) (bool, error) {
 
 	if errors.Is(streamErr, io.EOF) {
 		streamErr = nil
+	}
+
+	if w.sessionEnded.Load() {
+		return received, errSessionEnded
 	}
 
 	if stalled.Load() {
@@ -526,7 +570,7 @@ func (w *Worker) accept(ctx context.Context, assign *runcoilv1.Assign) {
 			return
 		}
 
-		held.abandon()
+		held.end()
 	}
 
 	attemptCtx, cancel := context.WithCancel(context.Background())
@@ -534,7 +578,6 @@ func (w *Worker) accept(ctx context.Context, assign *runcoilv1.Assign) {
 		runID:  lease.GetRunId(),
 		epoch:  lease.GetEpoch(),
 		cancel: cancel,
-		done:   make(chan struct{}),
 	}
 
 	st := runstate.NewState(records(assign.GetSteps()))
@@ -585,7 +628,7 @@ func (w *Worker) abandon(ctx context.Context, lease *runcoilv1.Lease) {
 	}
 
 	w.logger.InfoContext(ctx, "attempt taken back by the server", slog.String("run_id", a.runID))
-	a.abandon()
+	a.end()
 }
 
 // heartbeatLoop sends a heartbeat at the interval the server gave in Register, until ctx
@@ -606,21 +649,53 @@ func (w *Worker) heartbeatLoop(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-// heartbeat tells the server the worker process is alive. A session that ended is left to
-// the listen loop, which registers again.
+// heartbeat tells the server the worker process is alive.
 func (w *Worker) heartbeat(ctx context.Context) {
 	callCtx, cancel := context.WithTimeout(ctx, w.callTimeout())
 	defer cancel()
 
+	session := w.sessionToken()
 	if _, err := w.rpc.Heartbeat(callCtx, &runcoilv1.HeartbeatRequest{}); err != nil {
-		if ctx.Err() == nil {
-			w.conn.failed(ctx, err, w.heartbeatInterval())
+		if w.endSession(ctx, session, err) || ctx.Err() != nil {
+			return
 		}
+
+		w.conn.failed(ctx, err, w.heartbeatInterval())
 
 		return
 	}
 
 	w.conn.ok(ctx)
+}
+
+// errSessionEnded is what listenOnce returns when it ended its stream because the session
+// ended.
+var errSessionEnded = errors.New("worker session ended")
+
+// endSession handles an answer to a call made with session. When the server says the
+// session has ended, it ends the open Listen stream, so the listen loop registers again,
+// and reports true. The server keeps a stream open after its session ends, so a call
+// such as a heartbeat may be the first to learn it.
+func (w *Worker) endSession(ctx context.Context, session string, err error) bool {
+	if errorCode(err) != runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED {
+		return false
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// A session that registering again has already replaced ends nothing.
+	if session != w.session {
+		return true
+	}
+
+	w.logger.InfoContext(ctx, "worker session ended; registering again", slog.Any("error", err))
+	w.sessionEnded.Store(true)
+	if w.streamCancel != nil {
+		w.streamCancel()
+	}
+
+	return true
 }
 
 // heartbeatInterval returns the interval of the last registration, or the registration

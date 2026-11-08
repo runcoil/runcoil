@@ -28,41 +28,50 @@ type attempt struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// done is closed when the attempt's goroutine has returned.
-	done chan struct{}
-
-	mu     sync.Mutex
-	closed bool
+	mu sync.Mutex
+	// claimed is set by the one caller that sends the result or ends the attempt.
+	claimed bool
+	// ended is set once the attempt is no longer this worker's.
+	ended bool
 }
 
-// claim returns true for the first caller only. That caller sends the attempt's result,
-// or ends it; every later caller must send nothing.
+// claim returns true for the first caller only. That caller sends the attempt's result;
+// every later caller must send nothing.
 func (a *attempt) claim() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.closed {
+	if a.claimed {
 		return false
 	}
 
-	a.closed = true
+	a.claimed = true
 
 	return true
 }
 
-// open reports whether no caller has claimed the attempt yet.
+// open reports whether the attempt is still this worker's. An attempt whose result is
+// being sent is open: Listen still reports it, so the server keeps its lease.
 func (a *attempt) open() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	return !a.closed
+	return !a.ended
 }
 
-// abandon ends an attempt that is no longer this worker's. Its result would be refused,
-// so none is sent, and its handler's context is cancelled.
-func (a *attempt) abandon() {
-	a.claim()
+// end makes the attempt no longer this worker's. Its result would be refused, so none is
+// sent, and its handler's context is cancelled. It reports whether this call ended an
+// attempt whose result was not claimed yet.
+func (a *attempt) end() bool {
+	a.mu.Lock()
+	unclaimed := !a.claimed
+	a.claimed = true
+	a.ended = true
+	a.mu.Unlock()
+
 	a.cancel()
+
+	return unclaimed
 }
 
 func (a *attempt) lease() *runcoilv1.Lease {
@@ -81,7 +90,6 @@ func (e *panicError) Error() string { return fmt.Sprintf("handler panicked: %v",
 // goroutine, one per attempt.
 func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 	defer w.running.Done()
-	defer close(a.done)
 	defer w.forget(a)
 	defer a.cancel()
 
@@ -137,23 +145,30 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) {
 
 	req.Lease = a.lease()
 
-	// The attempt is claimed, so its context no longer ends it: the report runs on its own.
-	ctx := context.WithoutCancel(a.ctx)
+	// The attempt is claimed, so its context no longer ends it: the report runs until it
+	// is sent, or until Shutdown cuts it short.
+	ctx := w.reportCtx
+	session := w.sessionToken()
 	err := w.retryCall(ctx, w.reportBudget(), func(ctx context.Context) error {
-		_, err := w.rpc.CompleteRun(ctx, req)
-		return err
+		if _, err := w.rpc.CompleteRun(ctx, req); err != nil {
+			return fmt.Errorf("complete run: %w", err)
+		}
+
+		return nil
 	})
 	if err == nil {
 		return
 	}
 
 	logger := w.logger.With(slog.String("run_id", a.runID))
-	if errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE {
+	switch {
+	case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE:
 		logger.InfoContext(ctx, "run result refused: lease is stale")
-		return
+	case w.endSession(ctx, session, err):
+		logger.WarnContext(ctx, "run result refused: worker session ended")
+	default:
+		logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
 	}
-
-	logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
 }
 
 // forget drops the attempt from the held set, so Listen stops reporting it.
@@ -242,19 +257,26 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 	}
 
 	var resp *runcoilv1.CompleteStepResponse
+	session := w.sessionToken()
 	err := w.retryCall(a.ctx, w.reportBudget(), func(ctx context.Context) error {
 		var err error
-		resp, err = w.rpc.CompleteStep(ctx, req)
-		return err
+		if resp, err = w.rpc.CompleteStep(ctx, req); err != nil {
+			return fmt.Errorf("complete step: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		if errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE {
+		switch {
+		case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE:
 			logger.InfoContext(a.ctx, "step report refused: lease is stale")
-		} else if a.ctx.Err() == nil {
+		case w.endSession(a.ctx, session, err):
+			logger.WarnContext(a.ctx, "step report refused: worker session ended; attempt ended")
+		case a.ctx.Err() == nil:
 			logger.ErrorContext(a.ctx, "step report failed; attempt ended", slog.Any("error", err))
 		}
 
-		a.abandon()
+		a.end()
 
 		return runstate.Record{}, false
 	}
@@ -262,7 +284,7 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 	rec := resp.GetRecord()
 	if rec == nil {
 		logger.ErrorContext(a.ctx, "step report answered without a record; attempt ended")
-		a.abandon()
+		a.end()
 
 		return runstate.Record{}, false
 	}
