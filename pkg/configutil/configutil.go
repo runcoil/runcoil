@@ -26,7 +26,7 @@ func Load(name string, cfg Registerer, args []string, lookup func(string) (strin
 	cfg.RegisterFlags(fs)
 
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("parse flags: %w", err)
 	}
 
 	var errs []error

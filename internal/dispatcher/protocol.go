@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/runcoil/runcoil/internal/apierr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
@@ -38,54 +36,34 @@ type RegisterResult struct {
 
 // Register stores the Tasks a worker process declares and opens its session.
 func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Registration) (RegisterResult, error) {
-	if err := reg.Validate(); err != nil {
-		return RegisterResult{}, registrationError(err)
-	}
-
-	workerID, err := uuid.NewV7()
-	if err != nil {
-		return RegisterResult{}, fmt.Errorf("new worker id: %w", err)
-	}
-
-	taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
-	for range reg.Tasks {
-		id, err := uuid.NewV7()
-		if err != nil {
-			return RegisterResult{}, fmt.Errorf("new task id: %w", err)
-		}
-
-		taskIDs = append(taskIDs, id)
-	}
-
 	token, tokenHash, err := newSessionToken()
 	if err != nil {
-		return RegisterResult{}, err
+		return RegisterResult{}, fmt.Errorf("new session token: %w", err)
+	}
+
+	session, err := domain.NewWorkerSession(reg, tokenHash)
+	if regErr, ok := domain.AsRegistrationError(err); ok {
+		return RegisterResult{}, registrationError(regErr)
+	}
+
+	if err != nil {
+		return RegisterResult{}, fmt.Errorf("new worker session: %w", err)
 	}
 
 	keyHash := sha256.Sum256([]byte(apiKey))
-	worker, err := s.workerStore.Register(ctx, keyHash[:], domain.NewWorker{
-		ID:           workerID,
-		TokenHash:    tokenHash,
-		Registration: reg,
-		TaskIDs:      taskIDs,
-	})
-	if isNotFound(err) {
+	worker, err := s.workerStore.Register(ctx, keyHash[:], session)
+	if errors.Is(err, domain.ErrAPIKeyNotFound) {
 		return RegisterResult{}, errInvalidAPIKey
 	}
 
 	if err != nil {
-		return RegisterResult{}, err
+		return RegisterResult{}, fmt.Errorf("register worker: %w", err)
 	}
 
 	return RegisterResult{Worker: worker, SessionToken: token}, nil
 }
 
-func registrationError(err error) error {
-	regErr, ok := domain.AsRegistrationError(err)
-	if !ok {
-		return err
-	}
-
+func registrationError(regErr *domain.RegistrationError) error {
 	apiErr := apierr.Invalid(apierr.CodeInvalidRegistration, regErr.Message)
 	if regErr.TaskName != "" {
 		apiErr = apiErr.WithDetail("task_name", regErr.TaskName)
@@ -97,7 +75,7 @@ func registrationError(err error) error {
 func newSessionToken() (string, []byte, error) {
 	raw := make([]byte, sessionTokenBytes)
 	if _, err := rand.Read(raw); err != nil {
-		return "", nil, fmt.Errorf("new session token: %w", err)
+		return "", nil, fmt.Errorf("read random bytes: %w", err)
 	}
 
 	token := base64.RawURLEncoding.EncodeToString(raw)
@@ -110,11 +88,15 @@ func newSessionToken() (string, []byte, error) {
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.Worker, error) {
 	hash := sha256.Sum256([]byte(token))
 	worker, err := s.workerStore.WorkerBySessionToken(ctx, hash[:])
-	if isNotFound(err) {
+	if errors.Is(err, domain.ErrSessionEnded) {
 		return domain.Worker{}, errInvalidSessionToken
 	}
 
-	return worker, err
+	if err != nil {
+		return domain.Worker{}, fmt.Errorf("get worker by session token: %w", err)
+	}
+
+	return worker, nil
 }
 
 // Heartbeat records that the worker process is alive. The next flush writes it.
@@ -129,22 +111,26 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 // failed Step is not tried again yet: its failure is final.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
 	record, err := s.runStore.CompleteStep(ctx, params)
-	if errors.Is(err, domain.ErrStale) {
+	if errors.Is(err, domain.ErrStaleLease) {
 		return domain.StepRecord{}, errStaleLease.WithDetail("run_id", params.Lease.RunID.String())
 	}
 
-	return record, err
+	if err != nil {
+		return domain.StepRecord{}, fmt.Errorf("complete step: %w", err)
+	}
+
+	return record, nil
 }
 
 // CompleteRun ends the attempt with the handler's result.
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, result.End())
-	if errors.Is(err, domain.ErrStale) {
+	if errors.Is(err, domain.ErrStaleLease) {
 		return errStaleLease.WithDetail("run_id", lease.RunID.String())
 	}
 
 	if err != nil {
-		return err
+		return fmt.Errorf("finish run: %w", err)
 	}
 
 	if ended {
@@ -152,8 +138,4 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 	}
 
 	return nil
-}
-
-func isNotFound(err error) bool {
-	return errors.Is(err, domain.ErrNotFound)
 }

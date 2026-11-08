@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -55,13 +56,37 @@ func AsRegistrationError(err error) (*RegistrationError, bool) {
 	return regErr, ok
 }
 
-// NewWorker is a worker session to store at Register. TaskIDs holds a new ID per Task,
-// used only for a Task stored for the first time.
-type NewWorker struct {
+// WorkerSession is a worker session to store at Register. TaskIDs holds a new ID per
+// Task, used only for a Task stored for the first time.
+type WorkerSession struct {
 	ID           uuid.UUID
 	TokenHash    []byte
 	Registration Registration
 	TaskIDs      []uuid.UUID
+}
+
+// NewWorkerSession checks the registration and gives the session and each Task a new ID.
+func NewWorkerSession(reg Registration, tokenHash []byte) (WorkerSession, error) {
+	if err := reg.Validate(); err != nil {
+		return WorkerSession{}, fmt.Errorf("validate registration: %w", err)
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return WorkerSession{}, fmt.Errorf("new worker id: %w", err)
+	}
+
+	taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
+	for range reg.Tasks {
+		taskID, err := uuid.NewV7()
+		if err != nil {
+			return WorkerSession{}, fmt.Errorf("new task id: %w", err)
+		}
+
+		taskIDs = append(taskIDs, taskID)
+	}
+
+	return WorkerSession{ID: id, TokenHash: tokenHash, Registration: reg, TaskIDs: taskIDs}, nil
 }
 
 // Worker is a live worker session.

@@ -31,9 +31,9 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, server)
 
-	// HTTP/1.1 for plain requests, and HTTP/2 without TLS for the Listen streams.
+	// HTTP/2 only: without TLS locally, and over TLS behind a terminating proxy. HTTP/1.1
+	// comes back with the serverless workers.
 	protocols := new(http.Protocols)
-	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 
 	return &http.Server{

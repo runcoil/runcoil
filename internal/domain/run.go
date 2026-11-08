@@ -22,8 +22,7 @@ func (s RunStatus) Ended() bool {
 	return s == RunStatusSucceeded || s == RunStatusFailed
 }
 
-// FailureCode says why a Step or a Run failed. The values are the names of Failure.Code
-// in run.proto, and what runs.error_code and steps.error_code hold.
+// FailureCode says why a Step or a Run failed.
 type FailureCode string
 
 // The failure codes.

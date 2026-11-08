@@ -15,38 +15,38 @@ import (
 // WorkerStore keeps the worker sessions, the Tasks they declare, the dispatchers, and
 // the claim of queued Runs.
 type WorkerStore struct {
-	db DB
-	q  *sqlc.Queries
+	db      DB
+	queries sqlc.Queries
 }
 
-// NewWorkerStore creates a WorkerStore on db.
-func NewWorkerStore(db DB) *WorkerStore {
-	return &WorkerStore{db: db, q: sqlc.New()}
+// NewWorkerStore creates a WorkerStore on db. Every store shares the one queries value.
+func NewWorkerStore(db DB, queries sqlc.Queries) *WorkerStore {
+	return &WorkerStore{db: db, queries: queries}
 }
 
 // Register stores the Tasks of the registration and the worker session, in one
-// transaction. It returns domain.ErrNotFound when no API key has keyHash.
-func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, w domain.NewWorker) (domain.Worker, error) {
+// transaction. It returns domain.ErrAPIKeyNotFound when no API key has keyHash.
+func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error) {
 	var worker domain.Worker
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		key, err := s.q.ApiKeyGetForRegister(ctx, tx, keyHash)
+		key, err := s.queries.ApiKeyGetForRegister(ctx, tx, keyHash)
 		if isNoRowsError(err) {
-			return domain.ErrNotFound
+			return domain.ErrAPIKeyNotFound
 		}
 
 		if err != nil {
 			return fmt.Errorf("get api key: %w", err)
 		}
 
-		reg := w.Registration
+		reg := session.Registration
 		taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
 		for i, def := range reg.Tasks {
-			params, err := taskUpsertParams(w.TaskIDs[i], key.ProjectID, reg.App, def)
+			params, err := taskUpsertParams(session.TaskIDs[i], key.ProjectID, reg.App, def)
 			if err != nil {
-				return err
+				return fmt.Errorf("task %q: %w", def.Name, err)
 			}
 
-			id, err := s.q.TaskUpsert(ctx, tx, params)
+			id, err := s.queries.TaskUpsert(ctx, tx, params)
 			if err != nil {
 				return fmt.Errorf("upsert task %q: %w", def.Name, err)
 			}
@@ -54,11 +54,11 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, w domain.New
 			taskIDs = append(taskIDs, id)
 		}
 
-		err = s.q.WorkerCreate(ctx, tx, sqlc.WorkerCreateParams{
-			ID:        w.ID,
+		err = s.queries.WorkerCreate(ctx, tx, sqlc.WorkerCreateParams{
+			ID:        session.ID,
 			ProjectID: key.ProjectID,
 			ApiKeyID:  key.ID,
-			TokenHash: w.TokenHash,
+			TokenHash: session.TokenHash,
 			App:       reg.App,
 			TaskIds:   taskIDs,
 			Slots:     int32(reg.Slots), //nolint:gosec // The engine bounds the slots.
@@ -68,7 +68,7 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, w domain.New
 		}
 
 		worker = domain.Worker{
-			ID:        w.ID,
+			ID:        session.ID,
 			ProjectID: key.ProjectID,
 			App:       reg.App,
 			TaskIDs:   taskIDs,
@@ -77,8 +77,11 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, w domain.New
 
 		return nil
 	})
+	if err != nil {
+		return domain.Worker{}, fmt.Errorf("register in transaction: %w", err)
+	}
 
-	return worker, err
+	return worker, nil
 }
 
 // retryPolicyJSON is how tasks.retry_policy stores a policy.
@@ -115,11 +118,11 @@ func taskUpsertParams(id, projectID uuid.UUID, app string, def domain.TaskDefini
 }
 
 // WorkerBySessionToken returns the live session whose token has tokenHash, or
-// domain.ErrNotFound.
+// domain.ErrSessionEnded.
 func (s *WorkerStore) WorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error) {
-	row, err := s.q.WorkerGetBySessionToken(ctx, s.db, tokenHash)
+	row, err := s.queries.WorkerGetBySessionToken(ctx, s.db, tokenHash)
 	if isNoRowsError(err) {
-		return domain.Worker{}, domain.ErrNotFound
+		return domain.Worker{}, domain.ErrSessionEnded
 	}
 
 	if err != nil {
@@ -137,8 +140,8 @@ func (s *WorkerStore) WorkerBySessionToken(ctx context.Context, tokenHash []byte
 
 // AttachStream moves the worker to a new stream and reconciles its leases, in one
 // transaction: the leases it does not report go back to the queue, and the reported
-// Runs it no longer holds are returned. It returns domain.ErrNotFound when the session
-// has ended.
+// Runs it no longer holds are returned. It returns domain.ErrSessionEnded when the
+// session has ended.
 func (s *WorkerStore) AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error) {
 	runIDs := make([]uuid.UUID, 0, len(params.Running))
 	epochs := make([]int64, 0, len(params.Running))
@@ -149,20 +152,20 @@ func (s *WorkerStore) AttachStream(ctx context.Context, params domain.AttachStre
 
 	var notHeld []domain.Lease
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		_, err := s.q.WorkerAttachStream(ctx, tx, sqlc.WorkerAttachStreamParams{
+		_, err := s.queries.WorkerAttachStream(ctx, tx, sqlc.WorkerAttachStreamParams{
 			ID:           params.WorkerID,
 			DispatcherID: params.DispatcherID,
 			StreamID:     params.StreamID,
 		})
 		if isNoRowsError(err) {
-			return domain.ErrNotFound
+			return domain.ErrSessionEnded
 		}
 
 		if err != nil {
 			return fmt.Errorf("attach stream: %w", err)
 		}
 
-		_, err = s.q.LeaseReleaseUnknown(ctx, tx, sqlc.LeaseReleaseUnknownParams{
+		_, err = s.queries.LeaseReleaseUnknown(ctx, tx, sqlc.LeaseReleaseUnknownParams{
 			WorkerID:   params.WorkerID,
 			HeldEpochs: epochs,
 		})
@@ -170,7 +173,7 @@ func (s *WorkerStore) AttachStream(ctx context.Context, params domain.AttachStre
 			return fmt.Errorf("release unknown leases: %w", err)
 		}
 
-		rows, err := s.q.LeaseListNotHeld(ctx, tx, sqlc.LeaseListNotHeldParams{
+		rows, err := s.queries.LeaseListNotHeld(ctx, tx, sqlc.LeaseListNotHeldParams{
 			WorkerID:    params.WorkerID,
 			RunIds:      runIDs,
 			LeaseEpochs: epochs,
@@ -188,14 +191,17 @@ func (s *WorkerStore) AttachStream(ctx context.Context, params domain.AttachStre
 
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("attach stream in transaction: %w", err)
+	}
 
-	return notHeld, err
+	return notHeld, nil
 }
 
 // FlushHeartbeats writes the last heartbeat of each worker. A time older than the stored
 // one is ignored.
 func (s *WorkerStore) FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error {
-	if err := s.q.WorkerFlushHeartbeats(ctx, s.db, sqlc.WorkerFlushHeartbeatsParams{Ids: ids, Beats: beats}); err != nil {
+	if err := s.queries.WorkerFlushHeartbeats(ctx, s.db, sqlc.WorkerFlushHeartbeatsParams{Ids: ids, Beats: beats}); err != nil {
 		return fmt.Errorf("flush heartbeats: %w", err)
 	}
 
@@ -204,7 +210,7 @@ func (s *WorkerStore) FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beat
 
 // BeatDispatcher records that the dispatcher is alive.
 func (s *WorkerStore) BeatDispatcher(ctx context.Context, id uuid.UUID) error {
-	if err := s.q.DispatcherBeat(ctx, s.db, id); err != nil {
+	if err := s.queries.DispatcherBeat(ctx, s.db, id); err != nil {
 		return fmt.Errorf("beat dispatcher: %w", err)
 	}
 
@@ -212,24 +218,25 @@ func (s *WorkerStore) BeatDispatcher(ctx context.Context, id uuid.UUID) error {
 }
 
 // ClaimRuns leases queued Runs to the worker in one transaction, then reads what their
-// attempts need. It returns domain.ErrStale when the worker is no longer on the stream.
+// attempts need. It returns domain.ErrStreamFenced when the worker is no longer on the
+// stream.
 func (s *WorkerStore) ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error) {
 	var leases []sqlc.LeaseClaimRow
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		_, err := s.q.WorkerLockForClaim(ctx, tx, sqlc.WorkerLockForClaimParams{
+		_, err := s.queries.WorkerLockForClaim(ctx, tx, sqlc.WorkerLockForClaimParams{
 			ID:           params.WorkerID,
 			DispatcherID: params.DispatcherID,
 			StreamID:     params.StreamID,
 		})
 		if isNoRowsError(err) {
-			return domain.ErrStale
+			return domain.ErrStreamFenced
 		}
 
 		if err != nil {
 			return fmt.Errorf("lock worker: %w", err)
 		}
 
-		leases, err = s.q.LeaseClaim(ctx, tx, sqlc.LeaseClaimParams{
+		leases, err = s.queries.LeaseClaim(ctx, tx, sqlc.LeaseClaimParams{
 			WorkerID: params.WorkerID,
 			TaskIds:  params.TaskIDs,
 			Slots:    int32(params.Slots), //nolint:gosec // Slots come from the worker row, an integer.
@@ -242,17 +249,26 @@ func (s *WorkerStore) ClaimRuns(ctx context.Context, params domain.ClaimRunsPara
 			return nil
 		}
 
-		if err := s.q.RunMarkStarted(ctx, tx, leaseRunIDs(leases)); err != nil {
+		if err := s.queries.RunMarkStarted(ctx, tx, leaseRunIDs(leases)); err != nil {
 			return fmt.Errorf("mark runs started: %w", err)
 		}
 
 		return nil
 	})
-	if err != nil || len(leases) == 0 {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("claim in transaction: %w", err)
 	}
 
-	return s.assigns(ctx, leases)
+	if len(leases) == 0 {
+		return nil, nil
+	}
+
+	assigns, err := s.assigns(ctx, leases)
+	if err != nil {
+		return nil, fmt.Errorf("read assigns: %w", err)
+	}
+
+	return assigns, nil
 }
 
 func leaseRunIDs(leases []sqlc.LeaseClaimRow) []uuid.UUID {
@@ -268,12 +284,12 @@ func leaseRunIDs(leases []sqlc.LeaseClaimRow) []uuid.UUID {
 func (s *WorkerStore) assigns(ctx context.Context, leases []sqlc.LeaseClaimRow) ([]domain.Assign, error) {
 	ids := leaseRunIDs(leases)
 
-	runs, err := s.q.RunListForAssign(ctx, s.db, ids)
+	runs, err := s.queries.RunListForAssign(ctx, s.db, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list runs: %w", err)
 	}
 
-	steps, err := s.q.StepListForRuns(ctx, s.db, ids)
+	steps, err := s.queries.StepListForRuns(ctx, s.db, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list steps: %w", err)
 	}

@@ -61,10 +61,10 @@ func (c *Client) WithTx(ctx context.Context, txFunc func(DB) error) (err error) 
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		err = fmt.Errorf("commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return err
+	return nil
 }
 
 func (t *txWrapper) WithTx(_ context.Context, txFunc func(DB) error) error {

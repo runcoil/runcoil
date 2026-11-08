@@ -2,10 +2,10 @@ package domain
 
 import "errors"
 
-// The outcomes a store reports. Only the engine knows what is missing or stale, so it
-// picks the error the client sees.
+// The outcomes a store reports. The dispatcher picks what the client sees.
 var (
-	ErrNotFound = errors.New("not found")
-	ErrConflict = errors.New("conflict")
-	ErrStale    = errors.New("stale")
+	ErrAPIKeyNotFound = errors.New("api key not found")
+	ErrSessionEnded   = errors.New("worker session has ended")
+	ErrStaleLease     = errors.New("lease is no longer the attempt's")
+	ErrStreamFenced   = errors.New("worker's stream is no longer this one")
 )

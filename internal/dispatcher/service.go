@@ -59,7 +59,7 @@ func (c *Config) Validate() error {
 
 // WorkerStore keeps the worker sessions and claims queued Runs.
 type WorkerStore interface {
-	Register(ctx context.Context, keyHash []byte, w domain.NewWorker) (domain.Worker, error)
+	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
 	WorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
 	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
@@ -129,7 +129,7 @@ func (s *Service) Run(ctx context.Context) error {
 
 func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 	if err := s.workerStore.BeatDispatcher(ctx, s.id); err != nil {
-		return errors.Join(err, listener.Close())
+		return fmt.Errorf("beat dispatcher: %w", errors.Join(err, listener.Close()))
 	}
 
 	srv := s.newHTTPServer()
@@ -231,7 +231,7 @@ func (s *Service) claimAll(ctx context.Context) {
 			TaskIDs:      c.taskIDs,
 			Slots:        c.free,
 		})
-		if errors.Is(err, domain.ErrStale) {
+		if errors.Is(err, domain.ErrStreamFenced) {
 			s.logger.InfoContext(ctx, "stream fenced",
 				slog.String("worker_id", c.workerID.String()),
 				slog.String("stream_id", c.streamID.String()),

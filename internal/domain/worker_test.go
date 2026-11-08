@@ -39,3 +39,24 @@ func TestRegistrationValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestNewWorkerSession(t *testing.T) {
+	reg := Registration{App: "shop", Slots: 2, Tasks: []TaskDefinition{{Name: "a"}, {Name: "b"}}}
+
+	session, err := NewWorkerSession(reg, []byte("hash"))
+	require.NoError(t, err)
+
+	assert.NotEqual(t, [16]byte{}, [16]byte(session.ID))
+	assert.Equal(t, []byte("hash"), session.TokenHash)
+	assert.Equal(t, reg, session.Registration)
+	require.Len(t, session.TaskIDs, 2)
+	assert.NotEqual(t, session.TaskIDs[0], session.TaskIDs[1])
+}
+
+func TestNewWorkerSessionValidates(t *testing.T) {
+	_, err := NewWorkerSession(Registration{App: "shop", Tasks: []TaskDefinition{{Name: "a"}}}, nil)
+
+	regErr, ok := AsRegistrationError(err)
+	require.True(t, ok)
+	assert.Equal(t, "slots must be at least 1", regErr.Message)
+}

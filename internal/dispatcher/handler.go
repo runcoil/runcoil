@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -15,24 +16,23 @@ import (
 
 var _ runcoilv1connect.WorkerServiceHandler = workerHandler{}
 
-// workerHandler serves the WorkerService. It maps messages to the Service's calls and
-// back, and holds no logic of its own. Register takes the API key as its bearer token; every
-// other call takes the session token.
+// workerHandler serves the WorkerService: it maps messages to the Service's calls and back.
 type workerHandler struct {
 	runcoilv1connect.UnimplementedWorkerServiceHandler
 
 	s *Service
 }
 
+// Register takes the API key as its bearer token.
 func (h workerHandler) Register(ctx context.Context, req *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
 	apiKey, err := bearerToken(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read api key: %w", err)
 	}
 
 	result, err := h.s.Register(ctx, apiKey, registrationFromProto(req))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("register: %w", err)
 	}
 
 	return &runcoilv1.RegisterResponse{
@@ -49,28 +49,33 @@ func (h workerHandler) Listen(
 ) error {
 	worker, err := h.authenticate(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("authenticate: %w", err)
 	}
 
 	running := make([]domain.Lease, 0, len(req.GetRunning()))
 	for _, l := range req.GetRunning() {
 		lease, err := leaseFromProto(l)
 		if err != nil {
-			return err
+			return fmt.Errorf("read running lease: %w", err)
 		}
 
 		running = append(running, lease)
 	}
 
-	return h.s.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
+	err = h.s.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
 		return out.Send(listenResponse(msg))
 	})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	return nil
 }
 
 func (h workerHandler) Heartbeat(ctx context.Context, _ *runcoilv1.HeartbeatRequest) (*runcoilv1.HeartbeatResponse, error) {
 	worker, err := h.authenticate(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authenticate: %w", err)
 	}
 
 	h.s.Heartbeat(worker)
@@ -84,12 +89,12 @@ func (h workerHandler) CompleteStep(
 ) (*runcoilv1.CompleteStepResponse, error) {
 	worker, err := h.authenticate(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authenticate: %w", err)
 	}
 
 	lease, err := leaseFromProto(req.GetLease())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read lease: %w", err)
 	}
 
 	outcome := domain.StepOutcome{Output: req.GetOutput()}
@@ -107,7 +112,7 @@ func (h workerHandler) CompleteStep(
 		Outcome:  outcome,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("complete step: %w", err)
 	}
 
 	return &runcoilv1.CompleteStepResponse{
@@ -121,12 +126,12 @@ func (h workerHandler) CompleteRun(
 ) (*runcoilv1.CompleteRunResponse, error) {
 	worker, err := h.authenticate(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authenticate: %w", err)
 	}
 
 	lease, err := leaseFromProto(req.GetLease())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read lease: %w", err)
 	}
 
 	result := domain.RunResult{Output: req.GetOutput()}
@@ -139,19 +144,26 @@ func (h workerHandler) CompleteRun(
 	}
 
 	if err := h.s.CompleteRun(ctx, worker, lease, result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("complete run: %w", err)
 	}
 
 	return &runcoilv1.CompleteRunResponse{}, nil
 }
 
+// authenticate returns the session of the request. Every call but Register takes the
+// session token as its bearer token.
 func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) {
 	token, err := bearerToken(ctx)
 	if err != nil {
-		return domain.Worker{}, err
+		return domain.Worker{}, fmt.Errorf("read session token: %w", err)
 	}
 
-	return h.s.Authenticate(ctx, token)
+	worker, err := h.s.Authenticate(ctx, token)
+	if err != nil {
+		return domain.Worker{}, fmt.Errorf("look up session: %w", err)
+	}
+
+	return worker, nil
 }
 
 func registrationFromProto(req *runcoilv1.RegisterRequest) domain.Registration {

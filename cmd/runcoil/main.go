@@ -12,6 +12,7 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
+	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/pkg/service"
@@ -55,8 +56,9 @@ func run() error {
 	}
 
 	db := postgres.NewClient(pool)
-	workerStore := postgres.NewWorkerStore(db)
-	runStore := postgres.NewRunStore(db)
+	queries := sqlc.Queries{}
+	workerStore := postgres.NewWorkerStore(db, queries)
+	runStore := postgres.NewRunStore(db, queries)
 
 	dispatcherService, err := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
 	if err != nil {

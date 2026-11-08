@@ -12,29 +12,29 @@ import (
 
 // RunStore keeps the Runs, their leases and their journal.
 type RunStore struct {
-	db DB
-	q  *sqlc.Queries
+	db      DB
+	queries sqlc.Queries
 }
 
-// NewRunStore creates a RunStore on db.
-func NewRunStore(db DB) *RunStore {
-	return &RunStore{db: db, q: sqlc.New()}
+// NewRunStore creates a RunStore on db. Every store shares the one queries value.
+func NewRunStore(db DB, queries sqlc.Queries) *RunStore {
+	return &RunStore{db: db, queries: queries}
 }
 
 // CompleteStep stores the outcome of a Do Step in one transaction and returns the stored
 // record. A record of the same kind already stored is returned as it is: a resend
-// changes nothing. It returns domain.ErrStale when the lease is not this attempt's.
+// changes nothing. It returns domain.ErrStaleLease when the lease is not this attempt's.
 func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
 	lease := params.Lease
 	var record domain.StepRecord
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		held, err := s.q.LeaseLock(ctx, tx, sqlc.LeaseLockParams{
+		held, err := s.queries.LeaseLock(ctx, tx, sqlc.LeaseLockParams{
 			RunID:      lease.RunID,
 			LeaseEpoch: lease.Epoch,
 			WorkerID:   params.WorkerID,
 		})
 		if isNoRowsError(err) {
-			return domain.ErrStale
+			return domain.ErrStaleLease
 		}
 
 		if err != nil {
@@ -43,7 +43,7 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 
 		stored, found, err := s.step(ctx, tx, lease.RunID, params.StepID)
 		if err != nil {
-			return err
+			return fmt.Errorf("read step: %w", err)
 		}
 
 		if found && stored.Kind == domain.StepKindDo {
@@ -70,11 +70,11 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 			step.ErrorMessage = &failure.Message
 		}
 
-		if _, err := s.q.StepCreate(ctx, tx, step); err != nil {
+		if _, err := s.queries.StepCreate(ctx, tx, step); err != nil {
 			return fmt.Errorf("create step: %w", err)
 		}
 
-		err = s.q.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: lease.RunID, StepID: params.StepID})
+		err = s.queries.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: lease.RunID, StepID: params.StepID})
 		if err != nil {
 			return fmt.Errorf("reset step retry: %w", err)
 		}
@@ -90,12 +90,15 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 
 		return nil
 	})
+	if err != nil {
+		return domain.StepRecord{}, fmt.Errorf("complete step in transaction: %w", err)
+	}
 
-	return record, err
+	return record, nil
 }
 
 func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID string) (domain.StepRecord, bool, error) {
-	row, err := s.q.StepGet(ctx, tx, sqlc.StepGetParams{RunID: runID, StepID: stepID})
+	row, err := s.queries.StepGet(ctx, tx, sqlc.StepGetParams{RunID: runID, StepID: stepID})
 	if isNoRowsError(err) {
 		return domain.StepRecord{}, false, nil
 	}
@@ -109,7 +112,7 @@ func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID stri
 
 // FinishRun ends the Run of the attempt that holds lease and reports whether this call
 // ended it. A Run that has already ended is not changed, and the call succeeds, so a
-// resend is safe. It returns domain.ErrStale when the lease is not this attempt's and
+// resend is safe. It returns domain.ErrStaleLease when the lease is not this attempt's and
 // the Run has not ended.
 func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease domain.Lease, end domain.RunEnd) (bool, error) {
 	params := sqlc.RunFinishParams{
@@ -126,7 +129,7 @@ func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease doma
 		params.ErrorMessage = &end.Failure.Message
 	}
 
-	_, err := s.q.RunFinish(ctx, s.db, params)
+	_, err := s.queries.RunFinish(ctx, s.db, params)
 	if err == nil {
 		return true, nil
 	}
@@ -135,9 +138,9 @@ func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease doma
 		return false, fmt.Errorf("finish run: %w", err)
 	}
 
-	status, err := s.q.RunGetStatus(ctx, s.db, lease.RunID)
+	status, err := s.queries.RunGetStatus(ctx, s.db, lease.RunID)
 	if isNoRowsError(err) {
-		return false, domain.ErrStale
+		return false, domain.ErrStaleLease
 	}
 
 	if err != nil {
@@ -145,7 +148,7 @@ func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease doma
 	}
 
 	if !domain.RunStatus(status).Ended() {
-		return false, domain.ErrStale
+		return false, domain.ErrStaleLease
 	}
 
 	return false, nil

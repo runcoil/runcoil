@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -89,7 +90,7 @@ func (s *Service) Listen(
 
 	for _, l := range notHeld {
 		if err := send(domain.StreamMessage{LeaseLost: &l}); err != nil {
-			return err
+			return fmt.Errorf("send lease lost: %w", err)
 		}
 	}
 
@@ -104,11 +105,11 @@ func (s *Service) Listen(
 			return nil
 		case msg := <-st.out:
 			if err := send(msg); err != nil {
-				return err
+				return fmt.Errorf("send message: %w", err)
 			}
 		case <-keepalive.C:
 			if err := send(domain.StreamMessage{Keepalive: true}); err != nil {
-				return err
+				return fmt.Errorf("send keepalive: %w", err)
 			}
 		}
 	}
@@ -198,13 +199,9 @@ func (s *Service) release(workerID uuid.UUID) {
 }
 
 func attachError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	if isNotFound(err) {
+	if errors.Is(err, domain.ErrSessionEnded) {
 		return apierr.Unauthenticated(apierr.CodeUnauthenticated, "worker session has ended, register again")
 	}
 
-	return err
+	return fmt.Errorf("attach stream: %w", err)
 }

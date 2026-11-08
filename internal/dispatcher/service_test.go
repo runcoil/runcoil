@@ -101,7 +101,30 @@ func TestStopShutsTheServerDown(t *testing.T) {
 	s.Stop()
 	require.NoError(t, wait(t, done))
 
-	_, err := http.Get(base + "/")
+	_, err := h2Client().Get(base + "/")
+	assert.Error(t, err)
+}
+
+func h2Client() *http.Client {
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+
+	return &http.Client{Transport: &http.Transport{Protocols: protocols}}
+}
+
+func TestHTTP1IsRefused(t *testing.T) {
+	s := newTestService(t, 7070)
+	base, done := start(t, s)
+	defer func() {
+		s.Stop()
+		assert.NoError(t, wait(t, done))
+	}()
+
+	resp, err := http.Get(base + "/")
+	if err == nil {
+		resp.Body.Close()
+	}
+
 	assert.Error(t, err)
 }
 
@@ -113,11 +136,7 @@ func TestUnencryptedHTTP2(t *testing.T) {
 		assert.NoError(t, wait(t, done))
 	}()
 
-	protocols := new(http.Protocols)
-	protocols.SetUnencryptedHTTP2(true)
-	client := &http.Client{Transport: &http.Transport{Protocols: protocols}}
-
-	resp, err := client.Get(base + "/")
+	resp, err := h2Client().Get(base + "/")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
