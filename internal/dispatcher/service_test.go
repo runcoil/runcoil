@@ -7,15 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWorkerConfigValidate(t *testing.T) {
+func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  WorkerConfig
+		cfg  Config
 		want string
 	}{
-		{name: "defaults", cfg: WorkerConfig{HeartbeatInterval: 10 * time.Second, TTL: 30 * time.Second}},
-		{name: "no interval", cfg: WorkerConfig{TTL: time.Second}, want: "heartbeat interval must be greater than 0"},
-		{name: "ttl too short", cfg: WorkerConfig{HeartbeatInterval: time.Second, TTL: time.Second}, want: "ttl must be longer than the heartbeat interval"},
+		{name: "defaults", cfg: Config{PollInterval: time.Second, HeartbeatInterval: 10 * time.Second, WorkerTTL: 30 * time.Second}},
+		{name: "no poll interval", cfg: Config{HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second}, want: "poll interval must be greater than 0"},
+		{name: "no heartbeat interval", cfg: Config{PollInterval: time.Second, WorkerTTL: time.Second}, want: "heartbeat interval must be greater than 0"},
+		{name: "ttl too short", cfg: Config{PollInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: time.Second}, want: "worker ttl must be longer than the heartbeat interval"},
 	}
 
 	for _, tt := range tests {

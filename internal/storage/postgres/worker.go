@@ -137,17 +137,12 @@ func (s *WorkerStore) WorkerBySessionToken(ctx context.Context, tokenHash []byte
 
 // AttachStream moves the worker to a new stream and reconciles its leases, in one
 // transaction: the leases it does not report go back to the queue, and the reported
-// Runs it no longer holds are returned. attached gets them while the worker row is
-// still locked, before the commit. It returns domain.ErrNotFound when the session has ended.
-func (s *WorkerStore) AttachStream(
-	ctx context.Context,
-	workerID, dispatcherID, streamID uuid.UUID,
-	running []domain.Lease,
-	attached func(notHeld []domain.Lease),
-) ([]domain.Lease, error) {
-	runIDs := make([]uuid.UUID, 0, len(running))
-	epochs := make([]int64, 0, len(running))
-	for _, l := range running {
+// Runs it no longer holds are returned. It returns domain.ErrNotFound when the session
+// has ended.
+func (s *WorkerStore) AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error) {
+	runIDs := make([]uuid.UUID, 0, len(params.Running))
+	epochs := make([]int64, 0, len(params.Running))
+	for _, l := range params.Running {
 		runIDs = append(runIDs, l.RunID)
 		epochs = append(epochs, l.Epoch)
 	}
@@ -155,9 +150,9 @@ func (s *WorkerStore) AttachStream(
 	var notHeld []domain.Lease
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		_, err := s.q.WorkerAttachStream(ctx, tx, sqlc.WorkerAttachStreamParams{
-			ID:           workerID,
-			DispatcherID: dispatcherID,
-			StreamID:     streamID,
+			ID:           params.WorkerID,
+			DispatcherID: params.DispatcherID,
+			StreamID:     params.StreamID,
 		})
 		if isNoRowsError(err) {
 			return domain.ErrNotFound
@@ -168,7 +163,7 @@ func (s *WorkerStore) AttachStream(
 		}
 
 		_, err = s.q.LeaseReleaseUnknown(ctx, tx, sqlc.LeaseReleaseUnknownParams{
-			WorkerID:   workerID,
+			WorkerID:   params.WorkerID,
 			HeldEpochs: epochs,
 		})
 		if err != nil {
@@ -176,7 +171,7 @@ func (s *WorkerStore) AttachStream(
 		}
 
 		rows, err := s.q.LeaseListNotHeld(ctx, tx, sqlc.LeaseListNotHeldParams{
-			WorkerID:    workerID,
+			WorkerID:    params.WorkerID,
 			RunIds:      runIDs,
 			LeaseEpochs: epochs,
 		})
@@ -189,7 +184,7 @@ func (s *WorkerStore) AttachStream(
 			notHeld = append(notHeld, domain.Lease{RunID: row.RunID, Epoch: row.LeaseEpoch})
 		}
 
-		attached(notHeld)
+		params.Attached(notHeld)
 
 		return nil
 	})
@@ -216,21 +211,15 @@ func (s *WorkerStore) BeatDispatcher(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// ClaimRuns leases up to slots queued Runs of taskIDs to the worker on the stream, in one
-// transaction, then reads what their attempts need. It returns domain.ErrStale when the
-// worker is no longer on this stream.
-func (s *WorkerStore) ClaimRuns(
-	ctx context.Context,
-	workerID, dispatcherID, streamID uuid.UUID,
-	taskIDs []uuid.UUID,
-	slots int,
-) ([]domain.Assign, error) {
+// ClaimRuns leases queued Runs to the worker in one transaction, then reads what their
+// attempts need. It returns domain.ErrStale when the worker is no longer on the stream.
+func (s *WorkerStore) ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error) {
 	var leases []sqlc.LeaseClaimRow
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		_, err := s.q.WorkerLockForClaim(ctx, tx, sqlc.WorkerLockForClaimParams{
-			ID:           workerID,
-			DispatcherID: dispatcherID,
-			StreamID:     streamID,
+			ID:           params.WorkerID,
+			DispatcherID: params.DispatcherID,
+			StreamID:     params.StreamID,
 		})
 		if isNoRowsError(err) {
 			return domain.ErrStale
@@ -241,9 +230,9 @@ func (s *WorkerStore) ClaimRuns(
 		}
 
 		leases, err = s.q.LeaseClaim(ctx, tx, sqlc.LeaseClaimParams{
-			WorkerID: workerID,
-			TaskIds:  taskIDs,
-			Slots:    int32(slots), //nolint:gosec // Slots come from the worker row, an integer.
+			WorkerID: params.WorkerID,
+			TaskIds:  params.TaskIDs,
+			Slots:    int32(params.Slots), //nolint:gosec // Slots come from the worker row, an integer.
 		})
 		if err != nil {
 			return fmt.Errorf("claim runs: %w", err)
@@ -291,7 +280,14 @@ func (s *WorkerStore) assigns(ctx context.Context, leases []sqlc.LeaseClaimRow) 
 
 	journal := make(map[uuid.UUID][]domain.StepRecord, len(runs))
 	for _, st := range steps {
-		journal[st.RunID] = append(journal[st.RunID], stepRecord(st.StepID, st.Kind, st.Output, st.ErrorCode, st.ErrorMessage))
+		journal[st.RunID] = append(journal[st.RunID], stepRecord(stepRecordParams{
+			StepID:       st.StepID,
+			Kind:         st.Kind,
+			Status:       st.Status,
+			Output:       st.Output,
+			ErrorCode:    st.ErrorCode,
+			ErrorMessage: st.ErrorMessage,
+		}))
 	}
 
 	epochs := make(map[uuid.UUID]int64, len(leases))
@@ -313,15 +309,31 @@ func (s *WorkerStore) assigns(ctx context.Context, leases []sqlc.LeaseClaimRow) 
 	return assigns, nil
 }
 
-// stepRecord builds a Step record from its row. A row with an error code failed for good.
-func stepRecord(stepID, kind string, output []byte, errorCode, errorMessage *string) domain.StepRecord {
-	record := domain.StepRecord{StepID: stepID, Kind: domain.StepKind(kind), Output: output}
-	if errorCode != nil {
-		record.Output = nil
-		record.Failure = &domain.Failure{Code: domain.FailureCode(*errorCode)}
-		if errorMessage != nil {
-			record.Failure.Message = *errorMessage
-		}
+// stepRecordParams is a row of steps, whichever query read it.
+type stepRecordParams struct {
+	StepID       string
+	Kind         string
+	Status       string
+	Output       []byte
+	ErrorCode    *string
+	ErrorMessage *string
+}
+
+// stepRecord builds a Step record from its row.
+func stepRecord(params stepRecordParams) domain.StepRecord {
+	record := domain.StepRecord{StepID: params.StepID, Kind: domain.StepKind(params.Kind), Output: params.Output}
+	if domain.StepStatus(params.Status) != domain.StepStatusFailed {
+		return record
+	}
+
+	record.Output = nil
+	record.Failure = &domain.Failure{}
+	if params.ErrorCode != nil {
+		record.Failure.Code = domain.FailureCode(*params.ErrorCode)
+	}
+
+	if params.ErrorMessage != nil {
+		record.Failure.Message = *params.ErrorMessage
 	}
 
 	return record

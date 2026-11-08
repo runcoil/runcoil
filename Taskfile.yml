@@ -5,6 +5,8 @@ env:
 
 vars:
   GOOSE_DBSTRING: '{{.GOOSE_DBSTRING | default "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"}}'
+  # The server makes IDs in Go; the dev tasks build a UUIDv7 in SQL.
+  UUID7: "encode(set_bit(set_bit(overlay(uuid_send(gen_random_uuid()) PLACING substring(int8send(floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint) FROM 3) FROM 1 FOR 6), 52, 1), 53, 1), 'hex')::uuid"
   GOOSE: >-
     GOOSE_DRIVER=postgres
     GOOSE_DBSTRING='{{.GOOSE_DBSTRING}}'
@@ -86,6 +88,22 @@ tasks:
         -H 'Authorization: Bearer {{.TOKEN}}' -d '{{.DATA}}'
         http://localhost:7070/runcoil.v1.WorkerService/{{.METHOD}}
 
+  db-seed:
+    desc: Add the project default and the API key rc_api_local_dev to the Compose database
+    cmds:
+      - |
+        docker compose exec -T postgres psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+        WITH p AS (
+            INSERT INTO projects (id, name) VALUES ({{.UUID7}}, 'default')
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id
+        )
+        INSERT INTO api_keys (id, project_id, name, key_hash)
+        SELECT {{.UUID7}}, p.id, 'local', sha256('rc_api_local_dev')
+        FROM p
+        ON CONFLICT (key_hash) DO NOTHING;
+        SQL
+
   dev-run-create:
     desc: "Create a Run in the Compose database: task dev-run-create APP=shop TASK=charge INPUT='{}'"
     vars:
@@ -93,11 +111,26 @@ tasks:
       TASK: '{{.TASK | default "charge"}}'
       INPUT: '{{.INPUT | default "{}"}}'
     cmds:
-      - >-
-        docker compose exec -T postgres
-        psql -U postgres -At -v ON_ERROR_STOP=1
-        -v app='{{.APP}}' -v task='{{.TASK}}' -v input='{{.INPUT}}'
-        < scripts/dev-run-create.sql
+      - |
+        docker compose exec -T postgres psql -U postgres -At -v ON_ERROR_STOP=1 \
+          -v app='{{.APP}}' -v task='{{.TASK}}' -v input='{{.INPUT}}' <<'SQL'
+        WITH t AS (
+            SELECT id, project_id, retry_policy, start_deadline
+            FROM tasks
+            WHERE app = :'app' AND name = :'task'
+        ), r AS (
+            INSERT INTO runs (id, created_at, project_id, task_id, status, input, config)
+            SELECT {{.UUID7}}, now(), project_id, id, 'queued', convert_to(:'input', 'UTF8'),
+                   jsonb_build_object('retry', retry_policy, 'start_deadline', start_deadline)
+            FROM t
+            RETURNING id, project_id, task_id
+        )
+        INSERT INTO run_queue (run_id, project_id, task_id, ready_at, start_deadline_at)
+        SELECT r.id, r.project_id, r.task_id, now(), now() + t.start_deadline
+        FROM r
+        JOIN t ON t.id = r.task_id
+        RETURNING run_id;
+        SQL
 
   test:
     desc: Run the tests with the race detector

@@ -11,39 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const apiKeyCreate = `-- name: ApiKeyCreate :exec
-INSERT INTO api_keys (id, project_id, name, key_hash)
-VALUES ($1::uuid, $2::uuid, $3::text, $4::bytea)
-`
-
-type ApiKeyCreateParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Name      string
-	KeyHash   []byte
-}
-
-func (q *Queries) ApiKeyCreate(ctx context.Context, db DBTX, arg ApiKeyCreateParams) error {
-	_, err := db.Exec(ctx, apiKeyCreate,
-		arg.ID,
-		arg.ProjectID,
-		arg.Name,
-		arg.KeyHash,
-	)
-	return err
-}
-
-const apiKeyExists = `-- name: ApiKeyExists :one
-SELECT EXISTS (SELECT 1 FROM api_keys WHERE key_hash = $1::bytea)
-`
-
-func (q *Queries) ApiKeyExists(ctx context.Context, db DBTX, keyHash []byte) (bool, error) {
-	row := db.QueryRow(ctx, apiKeyExists, keyHash)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const apiKeyGetForRegister = `-- name: ApiKeyGetForRegister :one
 SELECT id, project_id
 FROM api_keys

@@ -78,14 +78,16 @@ The same port serves the worker protocol, `runcoil.v1.WorkerService`.
 ## A Run by hand
 
 Until the SDK and the client API exist, a Run can be followed by playing the worker
-with `task worker-call`, which sends one call with `buf curl`. Compose adds the API
-key `rc_api_local_dev` to the project `default` at boot (`BOOTSTRAP_API_KEY`).
-`bytes` fields such as `input` and `output` are base64 in JSON.
+with `task worker-call`, which sends one call with `buf curl`. `task db-seed` adds the
+project `default` and the API key `rc_api_local_dev` to the Compose database. `bytes`
+fields such as `input` and `output` are base64 in JSON.
 
-1. Start the server and register a worker. Keep the `sessionToken` it returns:
+1. Start the server, seed the database and register a worker. Keep the
+   `sessionToken` it returns:
 
    ```sh
    docker compose up -d --build
+   task db-seed
    task worker-call METHOD=Register TOKEN=rc_api_local_dev \
      DATA='{"app":"shop","slots":2,"tasks":[{"name":"charge"}]}'
    ```
@@ -97,7 +99,7 @@ key `rc_api_local_dev` to the project `default` at boot (`BOOTSTRAP_API_KEY`).
    task worker-call METHOD=Listen TOKEN=<session token>
    ```
 
-3. Create a Run of the Task. It is assigned within `engine.poll-interval`:
+3. Create a Run of the Task. It is assigned within `dispatcher.poll-interval`:
 
    ```sh
    task dev-run-create APP=shop TASK=charge INPUT='{"orderId":42}'

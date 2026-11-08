@@ -21,23 +21,17 @@ func NewRunStore(db DB) *RunStore {
 	return &RunStore{db: db, q: sqlc.New()}
 }
 
-// CompleteStep stores the outcome of a Do Step for the attempt that holds lease, in one
-// transaction, and returns the stored record. A record of the same kind already stored
-// is returned as it is: a resend changes nothing. It returns domain.ErrStale when the
-// lease is not this attempt's.
-func (s *RunStore) CompleteStep(
-	ctx context.Context,
-	workerID uuid.UUID,
-	lease domain.Lease,
-	stepID string,
-	outcome domain.StepOutcome,
-) (domain.StepRecord, error) {
+// CompleteStep stores the outcome of a Do Step in one transaction and returns the stored
+// record. A record of the same kind already stored is returned as it is: a resend
+// changes nothing. It returns domain.ErrStale when the lease is not this attempt's.
+func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
+	lease := params.Lease
 	var record domain.StepRecord
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		held, err := s.q.LeaseLock(ctx, tx, sqlc.LeaseLockParams{
 			RunID:      lease.RunID,
 			LeaseEpoch: lease.Epoch,
-			WorkerID:   workerID,
+			WorkerID:   params.WorkerID,
 		})
 		if isNoRowsError(err) {
 			return domain.ErrStale
@@ -47,7 +41,7 @@ func (s *RunStore) CompleteStep(
 			return fmt.Errorf("lock lease: %w", err)
 		}
 
-		stored, found, err := s.step(ctx, tx, lease.RunID, stepID)
+		stored, found, err := s.step(ctx, tx, lease.RunID, params.StepID)
 		if err != nil {
 			return err
 		}
@@ -58,35 +52,41 @@ func (s *RunStore) CompleteStep(
 		}
 
 		tries := 1
-		if held.RetryStepID != nil && *held.RetryStepID == stepID {
+		if held.RetryStepID != nil && *held.RetryStepID == params.StepID {
 			tries = int(held.RetryCount) + 1
 		}
 
-		params := sqlc.StepCreateParams{
+		step := sqlc.StepCreateParams{
 			RunID:    lease.RunID,
-			StepID:   stepID,
-			Status:   "succeeded",
-			Output:   outcome.Output,
+			StepID:   params.StepID,
+			Status:   string(params.Outcome.Status()),
+			Output:   params.Outcome.Output,
 			TryCount: int32(tries), //nolint:gosec // retry_count is a smallint.
 		}
-		if outcome.Failure != nil {
-			code := string(outcome.Failure.Code)
-			params.Status = "failed"
-			params.Output = nil
-			params.ErrorCode = &code
-			params.ErrorMessage = &outcome.Failure.Message
+		if failure := params.Outcome.Failure; failure != nil {
+			code := string(failure.Code)
+			step.Output = nil
+			step.ErrorCode = &code
+			step.ErrorMessage = &failure.Message
 		}
 
-		if _, err := s.q.StepCreate(ctx, tx, params); err != nil {
+		if _, err := s.q.StepCreate(ctx, tx, step); err != nil {
 			return fmt.Errorf("create step: %w", err)
 		}
 
-		err = s.q.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: lease.RunID, StepID: stepID})
+		err = s.q.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: lease.RunID, StepID: params.StepID})
 		if err != nil {
 			return fmt.Errorf("reset step retry: %w", err)
 		}
 
-		record = stepRecord(stepID, string(domain.StepKindDo), params.Output, params.ErrorCode, params.ErrorMessage)
+		record = stepRecord(stepRecordParams{
+			StepID:       step.StepID,
+			Kind:         string(domain.StepKindDo),
+			Status:       step.Status,
+			Output:       step.Output,
+			ErrorCode:    step.ErrorCode,
+			ErrorMessage: step.ErrorMessage,
+		})
 
 		return nil
 	})
@@ -104,7 +104,7 @@ func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID stri
 		return domain.StepRecord{}, false, fmt.Errorf("get step: %w", err)
 	}
 
-	return stepRecord(row.StepID, row.Kind, row.Output, row.ErrorCode, row.ErrorMessage), true, nil
+	return stepRecord(stepRecordParams(row)), true, nil
 }
 
 // FinishRun ends the Run of the attempt that holds lease and reports whether this call
@@ -144,10 +144,9 @@ func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease doma
 		return false, fmt.Errorf("get run status: %w", err)
 	}
 
-	switch domain.RunStatus(status) {
-	case domain.RunStatusSucceeded, domain.RunStatusFailed:
-		return false, nil
-	default:
+	if !domain.RunStatus(status).Ended() {
 		return false, domain.ErrStale
 	}
+
+	return false, nil
 }

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/domain"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
@@ -17,17 +18,11 @@ import (
 // Dispatcher carries out the worker protocol.
 type Dispatcher interface {
 	HeartbeatInterval() time.Duration
-	Register(ctx context.Context, apiKey string, reg domain.Registration) (domain.Worker, string, error)
+	Register(ctx context.Context, apiKey string, reg domain.Registration) (dispatcher.RegisterResult, error)
 	Authenticate(ctx context.Context, token string) (domain.Worker, error)
 	Listen(ctx context.Context, worker domain.Worker, running []domain.Lease, send func(domain.StreamMessage) error) error
 	Heartbeat(worker domain.Worker)
-	CompleteStep(
-		ctx context.Context,
-		worker domain.Worker,
-		lease domain.Lease,
-		stepID string,
-		outcome domain.StepOutcome,
-	) (domain.StepRecord, error)
+	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error)
 	CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error
 }
 
@@ -48,14 +43,14 @@ func (h workerProtocol) Register(ctx context.Context, req *runcoilv1.RegisterReq
 		return nil, err
 	}
 
-	worker, token, err := h.dispatcher.Register(ctx, apiKey, registrationFromProto(req))
+	result, err := h.dispatcher.Register(ctx, apiKey, registrationFromProto(req))
 	if err != nil {
 		return nil, err
 	}
 
 	return &runcoilv1.RegisterResponse{
-		WorkerId:          worker.ID.String(),
-		SessionToken:      token,
+		WorkerId:          result.Worker.ID.String(),
+		SessionToken:      result.SessionToken,
 		HeartbeatInterval: durationpb.New(h.dispatcher.HeartbeatInterval()),
 	}, nil
 }
@@ -118,7 +113,12 @@ func (h workerProtocol) CompleteStep(
 		}}
 	}
 
-	record, err := h.dispatcher.CompleteStep(ctx, worker, lease, req.GetStepId(), outcome)
+	record, err := h.dispatcher.CompleteStep(ctx, domain.CompleteStepParams{
+		WorkerID: worker.ID,
+		Lease:    lease,
+		StepID:   req.GetStepId(),
+		Outcome:  outcome,
+	})
 	if err != nil {
 		return nil, err
 	}

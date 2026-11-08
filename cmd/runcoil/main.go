@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/runcoil/runcoil/internal/bootstrap"
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/http"
 	"github.com/runcoil/runcoil/internal/log"
@@ -55,15 +54,10 @@ func run() error {
 	}
 
 	db := postgres.NewClient(pool)
-	projectStore := postgres.NewProjectStore(db)
 	workerStore := postgres.NewWorkerStore(db)
 	runStore := postgres.NewRunStore(db)
 
-	if err := bootstrap.Run(ctx, cfg.Bootstrap, logger, projectStore); err != nil {
-		return err
-	}
-
-	dispatcherService, err := dispatcher.NewService(cfg.Engine, cfg.Worker, logger, workerStore, runStore)
+	dispatcherService, err := dispatcher.NewService(cfg.Dispatcher, logger, workerStore, runStore)
 	if err != nil {
 		return err
 	}

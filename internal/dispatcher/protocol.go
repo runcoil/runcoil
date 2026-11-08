@@ -26,26 +26,32 @@ var (
 
 // HeartbeatInterval is how often a worker sends a heartbeat.
 func (s *Service) HeartbeatInterval() time.Duration {
-	return s.worker.HeartbeatInterval
+	return s.cfg.HeartbeatInterval
 }
 
-// Register stores the Tasks a worker process declares and opens its session. It returns
-// the session and its token, which the worker sends on every other call.
-func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Registration) (domain.Worker, string, error) {
-	if err := validateRegistration(reg); err != nil {
-		return domain.Worker{}, "", err
+// RegisterResult is the session Register opens. The worker sends SessionToken on every
+// other call.
+type RegisterResult struct {
+	Worker       domain.Worker
+	SessionToken string
+}
+
+// Register stores the Tasks a worker process declares and opens its session.
+func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Registration) (RegisterResult, error) {
+	if err := reg.Validate(); err != nil {
+		return RegisterResult{}, registrationError(err)
 	}
 
 	workerID, err := uuid.NewV7()
 	if err != nil {
-		return domain.Worker{}, "", fmt.Errorf("new worker id: %w", err)
+		return RegisterResult{}, fmt.Errorf("new worker id: %w", err)
 	}
 
 	taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
 	for range reg.Tasks {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return domain.Worker{}, "", fmt.Errorf("new task id: %w", err)
+			return RegisterResult{}, fmt.Errorf("new task id: %w", err)
 		}
 
 		taskIDs = append(taskIDs, id)
@@ -53,46 +59,39 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 
 	token, tokenHash, err := newSessionToken()
 	if err != nil {
-		return domain.Worker{}, "", err
+		return RegisterResult{}, err
 	}
 
 	keyHash := sha256.Sum256([]byte(apiKey))
-	worker, err := s.workers.Register(ctx, keyHash[:], domain.NewWorker{
+	worker, err := s.workerStore.Register(ctx, keyHash[:], domain.NewWorker{
 		ID:           workerID,
 		TokenHash:    tokenHash,
 		Registration: reg,
 		TaskIDs:      taskIDs,
 	})
 	if isNotFound(err) {
-		return domain.Worker{}, "", errInvalidAPIKey
+		return RegisterResult{}, errInvalidAPIKey
 	}
 
 	if err != nil {
-		return domain.Worker{}, "", err
+		return RegisterResult{}, err
 	}
 
-	return worker, token, nil
+	return RegisterResult{Worker: worker, SessionToken: token}, nil
 }
 
-func validateRegistration(reg domain.Registration) error {
-	if reg.Slots < 1 {
-		return apierr.Invalid(apierr.CodeInvalidRegistration, "slots must be at least 1")
+func registrationError(err error) error {
+	regErr, ok := domain.AsRegistrationError(err)
+	if !ok {
+		return err
 	}
 
-	if len(reg.Tasks) == 0 {
-		return apierr.Invalid(apierr.CodeInvalidRegistration, "a registration needs at least one task")
+	apiErr := apierr.Invalid(apierr.CodeInvalidRegistration, regErr.Message)
+	if regErr.TaskName != "" {
+		apiErr = apiErr.WithDetail("task_name", regErr.TaskName)
 	}
 
-	seen := make(map[string]struct{}, len(reg.Tasks))
-	for _, def := range reg.Tasks {
-		if _, ok := seen[def.Name]; ok {
-			return apierr.Invalid(apierr.CodeInvalidRegistration, "task is declared twice").WithDetail("task_name", def.Name)
-		}
-
-		seen[def.Name] = struct{}{}
-	}
-
-	return nil
+	return apiErr
 }
 
 func newSessionToken() (string, []byte, error) {
@@ -110,7 +109,7 @@ func newSessionToken() (string, []byte, error) {
 // Authenticate returns the live session of the token.
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.Worker, error) {
 	hash := sha256.Sum256([]byte(token))
-	worker, err := s.workers.WorkerBySessionToken(ctx, hash[:])
+	worker, err := s.workerStore.WorkerBySessionToken(ctx, hash[:])
 	if isNotFound(err) {
 		return domain.Worker{}, errInvalidSessionToken
 	}
@@ -128,35 +127,18 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 
 // CompleteStep stores the outcome of one try of a Do Step and returns its record. A
 // failed Step is not tried again yet: its failure is final.
-func (s *Service) CompleteStep(
-	ctx context.Context,
-	worker domain.Worker,
-	lease domain.Lease,
-	stepID string,
-	outcome domain.StepOutcome,
-) (domain.StepRecord, error) {
-	record, err := s.runs.CompleteStep(ctx, worker.ID, lease, stepID, outcome)
+func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
+	record, err := s.runStore.CompleteStep(ctx, params)
 	if errors.Is(err, domain.ErrStale) {
-		return domain.StepRecord{}, errStaleLease.WithDetail("run_id", lease.RunID.String())
+		return domain.StepRecord{}, errStaleLease.WithDetail("run_id", params.Lease.RunID.String())
 	}
 
 	return record, err
 }
 
-// CompleteRun ends the attempt with the handler's result. A failure that carries a
-// Step's ID ends the Run as step_failed.
+// CompleteRun ends the attempt with the handler's result.
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
-	end := domain.RunEnd{Status: domain.RunStatusSucceeded, Output: result.Output}
-	if result.Failure != nil {
-		failure := *result.Failure
-		if failure.StepID != "" {
-			failure.Code = domain.FailureCodeStepFailed
-		}
-
-		end = domain.RunEnd{Status: domain.RunStatusFailed, Failure: &failure}
-	}
-
-	ended, err := s.runs.FinishRun(ctx, worker.ID, lease, end)
+	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, result.End())
 	if errors.Is(err, domain.ErrStale) {
 		return errStaleLease.WithDetail("run_id", lease.RunID.String())
 	}

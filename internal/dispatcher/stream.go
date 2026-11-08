@@ -64,9 +64,15 @@ func (s *Service) Listen(
 
 	// The stream goes in the map while the worker row is locked, so the map follows the
 	// order of the row lock: a slower, older Listen cannot replace a newer one.
-	notHeld, err := s.workers.AttachStream(ctx, worker.ID, s.id, streamID, running, func(notHeld []domain.Lease) {
-		st.free = max(worker.Slots-(len(running)-len(notHeld)), 0)
-		s.put(st)
+	notHeld, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
+		WorkerID:     worker.ID,
+		DispatcherID: s.id,
+		StreamID:     streamID,
+		Running:      running,
+		Attached: func(notHeld []domain.Lease) {
+			st.free = max(worker.Slots-(len(running)-len(notHeld)), 0)
+			s.put(st)
+		},
 	})
 	if err != nil {
 		s.drop(worker.ID, streamID)
@@ -87,7 +93,7 @@ func (s *Service) Listen(
 		}
 	}
 
-	keepalive := time.NewTicker(s.worker.HeartbeatInterval)
+	keepalive := time.NewTicker(s.cfg.HeartbeatInterval)
 	defer keepalive.Stop()
 
 	for {
