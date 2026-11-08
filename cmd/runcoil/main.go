@@ -44,7 +44,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if cfg.Postgres.AutoMigrate {
+	if cfg.AutoMigrate {
 		logger.InfoContext(ctx, "running migrations")
 
 		if err := postgres.Migrate(pool); err != nil {

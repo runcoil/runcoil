@@ -27,8 +27,9 @@ The tests open no database. Every tool call runs with `GOWORK=off`, because
 ## Database
 
 The migrations are goose SQL files in `internal/storage/postgres/migration`,
-embedded in the server. With `postgres.auto-migrate` set, the server applies the
-pending ones at boot; Compose sets it. The tasks run goose against the PostgreSQL
+embedded in the server and in `runcoil-migrate`, a binary that applies them and
+exits. With `postgres.auto-migrate` set, the server applies them at boot; Compose
+sets it. The tasks run goose against the PostgreSQL
 of Compose, or against `GOOSE_DBSTRING` when it is set.
 
 ```sh
