@@ -69,9 +69,10 @@ The server listens on port `7070`:
 
 Each key is a flag (`--postgres.host`), an environment variable with the same
 name in upper case (`POSTGRES_HOST`), or a key in a YAML file passed with
-`--config`, lowest first: file, environment, flag. `cmd/runcoil/config.example.yml`
-and `cmd/runcoil/.env.example` list every key with its default. The binary never
-reads `.env`; pass flags to `task run` after `--` to change a key.
+`--config`, lowest first: file, environment, flag. Each binary has a
+`config.example.yml` and an `.env.example` in its `cmd/` directory that list every
+key with its default. No binary reads `.env`; pass flags to `task run` after `--`
+to change a key.
 
 ## Image
 
