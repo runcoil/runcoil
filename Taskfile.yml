@@ -21,10 +21,8 @@ tasks:
     desc: Download the modules and build the Go tools
     cmds:
       - go mod download
-      - cmd: go mod download
-        dir: tools
-      - cmd: go mod download
-        dir: proto
+      - go -C tools mod download
+      - go -C proto mod download
       - go build -modfile=tools/go.mod tool
 
   build:
@@ -36,6 +34,17 @@ tasks:
     desc: Run the server
     cmds:
       - go run ./cmd/runcoil {{.CLI_ARGS}}
+
+  sqlc-gen:
+    desc: Generate the Go code of the SQL queries
+    sources:
+      - internal/storage/postgres/sqlc/sqlc.yml
+      - internal/storage/postgres/sqlc/*.sql
+      - internal/storage/postgres/migration/*.sql
+    generates:
+      - internal/storage/postgres/sqlc/*.go
+    cmds:
+      - go tool -modfile=tools/go.mod sqlc generate -f internal/storage/postgres/sqlc/sqlc.yml
 
   migrate-up:
     desc: Apply every pending migration
@@ -76,8 +85,7 @@ tasks:
     desc: Fail when go.mod or go.sum is not tidy
     cmds:
       - go mod tidy -diff
-      - cmd: go mod tidy -diff
-        dir: tools
+      - go -C tools mod tidy -diff
 
   vuln:
     desc: Scan for known vulnerabilities

@@ -83,6 +83,23 @@ jobs:
       - uses: go-task/setup-task@v2
       - run: task vuln
 
+  generated:
+    name: Generated Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go.mod
+          check-latest: true
+      - uses: go-task/setup-task@v2
+      - run: task sqlc-gen --force
+      - name: Fail when generated code is stale
+        run: git diff --exit-code && test -z "$(git status --porcelain)"
+
   docker:
     name: Docker
     runs-on: ubuntu-latest

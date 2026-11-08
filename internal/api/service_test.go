@@ -1,4 +1,4 @@
-package http
+package api
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/pkg/configutil"
+	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 
 type fakePinger struct {
@@ -33,8 +34,11 @@ func (p *fakePinger) Ping(ctx context.Context) error {
 	return p.err
 }
 
-func newTestService(db Pinger) *Service {
-	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db)
+func newTestService(db *fakePinger) *Service {
+	checks := healthutil.New()
+	checks.Add("postgres", db.Ping)
+
+	return New(Config{Port: 8080}, slog.New(slog.DiscardHandler), checks)
 }
 
 func get(s *Service, path string) *httptest.ResponseRecorder {
@@ -48,7 +52,7 @@ func TestConfig(t *testing.T) {
 	var cfg Config
 	require.NoError(t, configutil.Load("test", &cfg, nil, func(string) (string, bool) { return "", false }))
 
-	assert.Equal(t, 7070, cfg.Port)
+	assert.Equal(t, 8080, cfg.Port)
 	assert.NoError(t, cfg.Validate())
 
 	for _, port := range []int{0, -1, 70000} {
@@ -73,7 +77,7 @@ func TestReadyz(t *testing.T) {
 		want     int
 	}{
 		{name: "healthy", want: http.StatusOK},
-		{name: "database fails", err: errors.New("down"), want: http.StatusServiceUnavailable},
+		{name: "a check fails", err: errors.New("down"), want: http.StatusServiceUnavailable},
 		{name: "stopping", stopping: true, want: http.StatusServiceUnavailable},
 	}
 
@@ -162,28 +166,8 @@ func TestStopBeforeRun(t *testing.T) {
 	assert.NoError(t, wait(t, done))
 }
 
-func TestUnencryptedHTTP2(t *testing.T) {
-	s := newTestService(&fakePinger{})
-	base, done := start(t, context.Background(), s)
-	defer func() {
-		s.Stop()
-		assert.NoError(t, wait(t, done))
-	}()
-
-	protocols := new(http.Protocols)
-	protocols.SetUnencryptedHTTP2(true)
-	client := &http.Client{Transport: &http.Transport{Protocols: protocols}}
-
-	resp, err := client.Get(base + "/livez")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 2, resp.ProtoMajor)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-}
-
 func TestRunListenError(t *testing.T) {
-	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{})
+	s := New(Config{Port: 70000}, slog.New(slog.DiscardHandler), healthutil.New())
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }

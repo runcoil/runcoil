@@ -32,7 +32,11 @@ exits. With `auto-migrate` set, the server applies them at boot; Compose
 sets it. The tasks run goose against the PostgreSQL
 of Compose, or against `GOOSE_DBSTRING` when it is set.
 
+The queries are sqlc files in `internal/storage/postgres/sqlc`, one per table;
+the generated Go code is committed next to them.
+
 ```sh
+task sqlc-gen                    # generate the Go code after changing a query or a migration
 task migrate-up                  # apply every pending migration
 task migrate-down                # roll back the last one
 task migrate-reset               # roll back every migration
@@ -44,7 +48,8 @@ task migrate-create -- <name>    # add a migration
 
 The worker protocol is in `proto/`, a Buf module and its own Go module,
 `github.com/runcoil/runcoil/proto`. The generated Go code is committed under
-`proto/gen/go`.
+`proto/gen/go`. The server requires `proto` at a release tag and replaces it with
+`./proto`, so it always builds the protocol of its own commit.
 
 Each merge to `main` that changes `proto/` tags a new patch version,
 `proto/vX.Y.Z`, through `proto-release.yaml`; `#minor` or `#major` in the commit
@@ -64,10 +69,13 @@ docker compose down
 task run                 # the server on the host, against the PostgreSQL of Compose
 ```
 
-The server listens on port `7070`:
+The server listens on two ports:
 
-- `/livez`: the process is alive
-- `/readyz`: the database answers and the server is not shutting down
+- `8080`, the API port, with the health checks of the whole process:
+  - `/livez`: the process is alive
+  - `/readyz`: the database answers, the dispatcher takes workers, and the server is
+    not shutting down
+- `7070`, the dispatcher port, with the worker protocol, `runcoil.v1.WorkerService`
 
 ## Configuration
 

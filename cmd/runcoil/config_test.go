@@ -39,7 +39,8 @@ func TestValidateNamesTheSection(t *testing.T) {
 	}{
 		{name: "log", modify: func(c *Config) { c.Log.Format = "xml" }, want: "log: format must be text or json"},
 		{name: "postgres", modify: func(c *Config) { c.Postgres.Port = 0 }, want: "postgres: port must be between 1 and 65535"},
-		{name: "http", modify: func(c *Config) { c.HTTP.Port = 0 }, want: "http: port must be between 1 and 65535"},
+		{name: "api", modify: func(c *Config) { c.API.Port = 0 }, want: "api: port must be between 1 and 65535"},
+		{name: "dispatcher", modify: func(c *Config) { c.Dispatcher.ClaimInterval = 0 }, want: "dispatcher: claim interval must be greater than 0"},
 	}
 
 	for _, tt := range tests {
