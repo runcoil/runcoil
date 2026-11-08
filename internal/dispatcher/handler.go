@@ -1,49 +1,36 @@
-package http
+package dispatcher
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/runcoil/runcoil/internal/apierr"
-	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/domain"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
 
-// Dispatcher carries out the worker protocol.
-type Dispatcher interface {
-	HeartbeatInterval() time.Duration
-	Register(ctx context.Context, apiKey string, reg domain.Registration) (dispatcher.RegisterResult, error)
-	Authenticate(ctx context.Context, token string) (domain.Worker, error)
-	Listen(ctx context.Context, worker domain.Worker, running []domain.Lease, send func(domain.StreamMessage) error) error
-	Heartbeat(worker domain.Worker)
-	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error)
-	CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error
-}
+var _ runcoilv1connect.WorkerServiceHandler = workerHandler{}
 
-var _ runcoilv1connect.WorkerServiceHandler = workerProtocol{}
-
-// workerProtocol serves the WorkerService. It maps messages to dispatcher calls and back,
-// and holds no logic of its own. Register takes the API key as its bearer token; every
+// workerHandler serves the WorkerService. It maps messages to the Service's calls and
+// back, and holds no logic of its own. Register takes the API key as its bearer token; every
 // other call takes the session token.
-type workerProtocol struct {
+type workerHandler struct {
 	runcoilv1connect.UnimplementedWorkerServiceHandler
 
-	dispatcher Dispatcher
+	s *Service
 }
 
-func (h workerProtocol) Register(ctx context.Context, req *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
+func (h workerHandler) Register(ctx context.Context, req *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
 	apiKey, err := bearerToken(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := h.dispatcher.Register(ctx, apiKey, registrationFromProto(req))
+	result, err := h.s.Register(ctx, apiKey, registrationFromProto(req))
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +38,11 @@ func (h workerProtocol) Register(ctx context.Context, req *runcoilv1.RegisterReq
 	return &runcoilv1.RegisterResponse{
 		WorkerId:          result.Worker.ID.String(),
 		SessionToken:      result.SessionToken,
-		HeartbeatInterval: durationpb.New(h.dispatcher.HeartbeatInterval()),
+		HeartbeatInterval: durationpb.New(h.s.HeartbeatInterval()),
 	}, nil
 }
 
-func (h workerProtocol) Listen(
+func (h workerHandler) Listen(
 	ctx context.Context,
 	req *runcoilv1.ListenRequest,
 	out runcoilv1connect.WorkerServiceListenServerStream,
@@ -75,23 +62,23 @@ func (h workerProtocol) Listen(
 		running = append(running, lease)
 	}
 
-	return h.dispatcher.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
+	return h.s.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
 		return out.Send(listenResponse(msg))
 	})
 }
 
-func (h workerProtocol) Heartbeat(ctx context.Context, _ *runcoilv1.HeartbeatRequest) (*runcoilv1.HeartbeatResponse, error) {
+func (h workerHandler) Heartbeat(ctx context.Context, _ *runcoilv1.HeartbeatRequest) (*runcoilv1.HeartbeatResponse, error) {
 	worker, err := h.authenticate(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	h.dispatcher.Heartbeat(worker)
+	h.s.Heartbeat(worker)
 
 	return &runcoilv1.HeartbeatResponse{}, nil
 }
 
-func (h workerProtocol) CompleteStep(
+func (h workerHandler) CompleteStep(
 	ctx context.Context,
 	req *runcoilv1.CompleteStepRequest,
 ) (*runcoilv1.CompleteStepResponse, error) {
@@ -113,7 +100,7 @@ func (h workerProtocol) CompleteStep(
 		}}
 	}
 
-	record, err := h.dispatcher.CompleteStep(ctx, domain.CompleteStepParams{
+	record, err := h.s.CompleteStep(ctx, domain.CompleteStepParams{
 		WorkerID: worker.ID,
 		Lease:    lease,
 		StepID:   req.GetStepId(),
@@ -128,7 +115,7 @@ func (h workerProtocol) CompleteStep(
 	}, nil
 }
 
-func (h workerProtocol) CompleteRun(
+func (h workerHandler) CompleteRun(
 	ctx context.Context,
 	req *runcoilv1.CompleteRunRequest,
 ) (*runcoilv1.CompleteRunResponse, error) {
@@ -151,20 +138,20 @@ func (h workerProtocol) CompleteRun(
 		}}
 	}
 
-	if err := h.dispatcher.CompleteRun(ctx, worker, lease, result); err != nil {
+	if err := h.s.CompleteRun(ctx, worker, lease, result); err != nil {
 		return nil, err
 	}
 
 	return &runcoilv1.CompleteRunResponse{}, nil
 }
 
-func (h workerProtocol) authenticate(ctx context.Context) (domain.Worker, error) {
+func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) {
 	token, err := bearerToken(ctx)
 	if err != nil {
 		return domain.Worker{}, err
 	}
 
-	return h.dispatcher.Authenticate(ctx, token)
+	return h.s.Authenticate(ctx, token)
 }
 
 func registrationFromProto(req *runcoilv1.RegisterRequest) domain.Registration {

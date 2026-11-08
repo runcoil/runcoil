@@ -99,10 +99,10 @@ fields such as `input` and `output` are base64 in JSON.
    task worker-call METHOD=Listen TOKEN=<session token>
    ```
 
-3. Create a Run of the Task. It is assigned within `dispatcher.poll-interval`:
+3. Create a Run of the Task. It is assigned within `dispatcher.claim-interval`:
 
    ```sh
-   task dev-run-create APP=shop TASK=charge INPUT='{"orderId":42}'
+   task dev-run-create APP=shop TASK_NAME=charge INPUT='{"orderId":42}'
    ```
 
 4. Record a Step and end the Run with the `lease` of the `assign`:

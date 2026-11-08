@@ -16,22 +16,22 @@ import (
 
 // Config is the timing of the dispatcher and of the worker sessions it holds.
 type Config struct {
-	PollInterval      time.Duration
+	ClaimInterval     time.Duration
 	HeartbeatInterval time.Duration
 	WorkerTTL         time.Duration
 }
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
-	fs.DurationVar(&c.PollInterval, "dispatcher.poll-interval", time.Second, "Longest time between two claims.")
+	fs.DurationVar(&c.ClaimInterval, "dispatcher.claim-interval", time.Second, "How often the dispatcher claims queued Runs for the workers with free slots.")
 	fs.DurationVar(&c.HeartbeatInterval, "dispatcher.heartbeat-interval", 10*time.Second, "How often a worker sends a heartbeat, and the server a keepalive.")
 	fs.DurationVar(&c.WorkerTTL, "dispatcher.worker-ttl", 30*time.Second, "With no heartbeat for longer than this, a worker session ends.")
 }
 
 // Validate checks the configuration.
 func (c *Config) Validate() error {
-	if c.PollInterval <= 0 {
-		return errors.New("poll interval must be greater than 0")
+	if c.ClaimInterval <= 0 {
+		return errors.New("claim interval must be greater than 0")
 	}
 
 	if c.HeartbeatInterval <= 0 {
@@ -111,7 +111,7 @@ func (s *Service) Run(ctx context.Context) error {
 
 	s.logger.InfoContext(ctx, "dispatcher started", slog.String("dispatcher_id", s.id.String()))
 
-	claim := time.NewTicker(s.cfg.PollInterval)
+	claim := time.NewTicker(s.cfg.ClaimInterval)
 	defer claim.Stop()
 
 	flush := time.NewTicker(s.cfg.WorkerTTL / 3)

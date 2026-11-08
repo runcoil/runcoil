@@ -1,18 +1,37 @@
-package http
+package dispatcher
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"connectrpc.com/connect/v2/connectproto"
+	"connectrpc.com/validate"
 
 	"github.com/runcoil/runcoil/internal/apierr"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
+	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
+
+// Handler returns the worker protocol and the path it is served under, for the server's
+// mux. The dispatcher holds the workers' streams, so it serves their calls too.
+func (s *Service) Handler() (string, http.Handler) {
+	server := connect.NewServer(
+		errorInterceptor{logger: s.logger}.wrap,
+		validate.NewServerInterceptor(),
+	)
+	runcoilv1connect.RegisterWorkerServiceHandler(server, workerHandler{s: s})
+
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server)
+
+	return "/" + runcoilv1connect.WorkerServiceName + "/", mux
+}
 
 // internalMessage is the only text a client sees for an unexpected failure.
 const internalMessage = "internal error"

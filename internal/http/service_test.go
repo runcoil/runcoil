@@ -33,8 +33,14 @@ func (p *fakePinger) Ping(ctx context.Context) error {
 	return p.err
 }
 
+type fakeRPC struct{}
+
+func (fakeRPC) Handler() (string, http.Handler) {
+	return "/test.v1.Service/", http.NotFoundHandler()
+}
+
 func newTestService(db Pinger) *Service {
-	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db, nil)
+	return NewService(Config{Port: 7070}, slog.New(slog.DiscardHandler), db, fakeRPC{})
 }
 
 func get(s *Service, path string) *httptest.ResponseRecorder {
@@ -183,7 +189,7 @@ func TestUnencryptedHTTP2(t *testing.T) {
 }
 
 func TestRunListenError(t *testing.T) {
-	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{}, nil)
+	s := NewService(Config{Port: 70000}, slog.New(slog.DiscardHandler), &fakePinger{}, fakeRPC{})
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }

@@ -105,15 +105,15 @@ tasks:
         SQL
 
   dev-run-create:
-    desc: "Create a Run in the Compose database: task dev-run-create APP=shop TASK=charge INPUT='{}'"
+    desc: "Create a Run in the Compose database: task dev-run-create APP=shop TASK_NAME=charge INPUT='{}'"
     vars:
       APP: '{{.APP | default "shop"}}'
-      TASK: '{{.TASK | default "charge"}}'
+      TASK_NAME: '{{.TASK_NAME | default "charge"}}'
       INPUT: '{{.INPUT | default "{}"}}'
     cmds:
       - |
         docker compose exec -T postgres psql -U postgres -At -v ON_ERROR_STOP=1 \
-          -v app='{{.APP}}' -v task='{{.TASK}}' -v input='{{.INPUT}}' <<'SQL'
+          -v app='{{.APP}}' -v task='{{.TASK_NAME}}' -v input='{{.INPUT}}' <<'SQL'
         WITH t AS (
             SELECT id, project_id, retry_policy, start_deadline
             FROM tasks

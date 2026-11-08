@@ -17,6 +17,6 @@ http:
   port: 7070
 
 dispatcher:
-  poll_interval: 1s
+  claim_interval: 1s
   heartbeat_interval: 10s
   worker_ttl: 30s
