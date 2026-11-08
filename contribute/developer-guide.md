@@ -48,7 +48,8 @@ task migrate-create -- <name>    # add a migration
 
 The worker protocol is in `proto/`, a Buf module and its own Go module,
 `github.com/runcoil/runcoil/proto`. The generated Go code is committed under
-`proto/gen/go`.
+`proto/gen/go`. The server requires `proto` at a release tag and replaces it with
+`./proto`, so it always builds the protocol of its own commit.
 
 Each merge to `main` that changes `proto/` tags a new patch version,
 `proto/vX.Y.Z`, through `proto-release.yaml`; `#minor` or `#major` in the commit
