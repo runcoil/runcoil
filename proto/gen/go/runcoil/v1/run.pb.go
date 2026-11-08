@@ -77,8 +77,6 @@ const (
 	FailureCode_FAILURE_CODE_ATTEMPT_LOST         FailureCode = 4
 	FailureCode_FAILURE_CODE_START_DEADLINE       FailureCode = 5
 	FailureCode_FAILURE_CODE_OUTPUT_NOT_ENCODABLE FailureCode = 6
-	FailureCode_FAILURE_CODE_OUTPUT_TOO_LARGE     FailureCode = 7
-	FailureCode_FAILURE_CODE_RUN_DATA_LIMIT       FailureCode = 8
 )
 
 // Enum value maps for FailureCode.
@@ -91,8 +89,6 @@ var (
 		4: "FAILURE_CODE_ATTEMPT_LOST",
 		5: "FAILURE_CODE_START_DEADLINE",
 		6: "FAILURE_CODE_OUTPUT_NOT_ENCODABLE",
-		7: "FAILURE_CODE_OUTPUT_TOO_LARGE",
-		8: "FAILURE_CODE_RUN_DATA_LIMIT",
 	}
 	FailureCode_value = map[string]int32{
 		"FAILURE_CODE_UNSPECIFIED":          0,
@@ -102,8 +98,6 @@ var (
 		"FAILURE_CODE_ATTEMPT_LOST":         4,
 		"FAILURE_CODE_START_DEADLINE":       5,
 		"FAILURE_CODE_OUTPUT_NOT_ENCODABLE": 6,
-		"FAILURE_CODE_OUTPUT_TOO_LARGE":     7,
-		"FAILURE_CODE_RUN_DATA_LIMIT":       8,
 	}
 )
 
@@ -311,7 +305,7 @@ const file_runcoil_v1_run_proto_rawDesc = "" +
 	"\astep_id\x18\x03 \x01(\tR\x06stepId*7\n" +
 	"\bStepKind\x12\x19\n" +
 	"\x15STEP_KIND_UNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fSTEP_KIND_DO\x10\x01*\xa4\x02\n" +
+	"\fSTEP_KIND_DO\x10\x01*\xe0\x01\n" +
 	"\vFailureCode\x12\x1c\n" +
 	"\x18FAILURE_CODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12FAILURE_CODE_ERROR\x10\x01\x12\x16\n" +
@@ -319,9 +313,7 @@ const file_runcoil_v1_run_proto_rawDesc = "" +
 	"\x18FAILURE_CODE_STEP_FAILED\x10\x03\x12\x1d\n" +
 	"\x19FAILURE_CODE_ATTEMPT_LOST\x10\x04\x12\x1f\n" +
 	"\x1bFAILURE_CODE_START_DEADLINE\x10\x05\x12%\n" +
-	"!FAILURE_CODE_OUTPUT_NOT_ENCODABLE\x10\x06\x12!\n" +
-	"\x1dFAILURE_CODE_OUTPUT_TOO_LARGE\x10\a\x12\x1f\n" +
-	"\x1bFAILURE_CODE_RUN_DATA_LIMIT\x10\bB\xa1\x01\n" +
+	"!FAILURE_CODE_OUTPUT_NOT_ENCODABLE\x10\x06B\xa1\x01\n" +
 	"\x0ecom.runcoil.v1B\bRunProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +
 	"Runcoil\\V1\xe2\x02\x16Runcoil\\V1\\GPBMetadata\xea\x02\vRuncoil::V1b\x06proto3"

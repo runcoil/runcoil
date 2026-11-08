@@ -30,9 +30,6 @@ message RegisterRequest {
   }];
   repeated TaskDefinition tasks = 2;
   uint32 slots = 3;
-  string hostname = 4;
-  string sdk_name = 5;
-  string sdk_version = 6;
 }
 
 message RegisterResponse {
@@ -59,13 +56,7 @@ message Assign {
   string task_name = 2;
   bytes input = 3;
   repeated StepRecord steps = 4;
-  StepRetry retry = 5;
-  google.protobuf.Timestamp created_at = 6;
-}
-
-message StepRetry {
-  string step_id = 1;
-  uint32 attempt = 2;
+  google.protobuf.Timestamp created_at = 5;
 }
 
 message Cancel {
