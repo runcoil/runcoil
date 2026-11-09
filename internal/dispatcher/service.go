@@ -70,7 +70,7 @@ type WorkerStore interface {
 
 // RunStore keeps the Runs and their journal.
 type RunStore interface {
-	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error)
+	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, bool, error)
 	FinishRun(ctx context.Context, workerID uuid.UUID, lease domain.Lease, end domain.RunEnd) (bool, error)
 }
 
@@ -149,6 +149,12 @@ func (s *Service) serve(ctx context.Context, listener net.Listener) error {
 	)
 
 	err := s.loop(ctx, served)
+
+	s.mu.Lock()
+	open := len(s.streams)
+	s.mu.Unlock()
+
+	s.logger.InfoContext(ctx, "dispatcher stopping", slog.Int("streams", open))
 
 	// The streams end when stopped is closed, so the shutdown does not wait for them. One
 	// drain context bounds the shutdown and the last flush, which runs after the shutdown
@@ -281,5 +287,8 @@ func (s *Service) flushHeartbeats(ctx context.Context) {
 
 	if err := s.workerStore.FlushHeartbeats(ctx, ids, times); err != nil {
 		s.logger.ErrorContext(ctx, "flush heartbeats failed", slog.Any("error", err))
+		return
 	}
+
+	s.logger.DebugContext(ctx, "heartbeats flushed", slog.Int("count", len(ids)))
 }

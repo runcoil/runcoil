@@ -69,13 +69,15 @@ func (s *Service) Listen(
 
 	// The stream goes in the map while the worker row is locked, so the map follows the
 	// order of the row lock: a slower, older Listen cannot replace a newer one.
+	free := 0
 	notHeld, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
 		WorkerID:     worker.ID,
 		DispatcherID: s.id,
 		StreamID:     streamID,
 		Running:      running,
 		Attached: func(notHeld []domain.Lease) {
-			st.free = max(worker.Slots-(len(running)-len(notHeld)), 0)
+			free = max(worker.Slots-(len(running)-len(notHeld)), 0)
+			st.free = free
 			s.put(st)
 		},
 	})
@@ -88,12 +90,32 @@ func (s *Service) Listen(
 	s.logger.InfoContext(ctx, "stream attached",
 		slog.String("worker_id", worker.ID.String()),
 		slog.String("stream_id", streamID.String()),
+		slog.String("app", worker.App),
 		slog.Int("running", len(running)),
 		slog.Int("not_held", len(notHeld)),
+		slog.Int("free_slots", free),
 	)
 
+	attachedAt := time.Now()
+	reason := "worker closed"
+	defer func() {
+		s.logger.InfoContext(ctx, "stream detached",
+			slog.String("worker_id", worker.ID.String()),
+			slog.String("stream_id", streamID.String()),
+			slog.String("reason", reason),
+			slog.Duration("duration", time.Since(attachedAt)),
+		)
+	}()
+
 	for _, l := range notHeld {
+		s.logger.InfoContext(ctx, "lease lost sent",
+			slog.String("worker_id", worker.ID.String()),
+			slog.String("run_id", l.RunID.String()),
+			slog.Int64("epoch", l.Epoch),
+		)
+
 		if err := send(domain.StreamMessage{LeaseLost: &l}); err != nil {
+			reason = "send failed"
 			return fmt.Errorf("send lease lost: %w", err)
 		}
 	}
@@ -106,15 +128,19 @@ func (s *Service) Listen(
 		case <-ctx.Done():
 			return nil
 		case <-s.stopped:
+			reason = "server stopping"
 			return nil
 		case <-st.ended:
+			reason = "ended by the dispatcher"
 			return errStreamEnded
 		case msg := <-st.out:
 			if err := send(msg); err != nil {
+				reason = "send failed"
 				return fmt.Errorf("send message: %w", err)
 			}
 		case <-keepalive.C:
 			if err := send(domain.StreamMessage{Keepalive: true}); err != nil {
+				reason = "send failed"
 				return fmt.Errorf("send keepalive: %w", err)
 			}
 		}
@@ -203,6 +229,12 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 	for _, a := range assigns {
 		select {
 		case st.out <- domain.StreamMessage{Assign: &a}:
+			s.logger.InfoContext(ctx, "run assigned",
+				slog.String("run_id", a.Lease.RunID.String()),
+				slog.Int64("epoch", a.Lease.Epoch),
+				slog.String("task_name", a.TaskName),
+				slog.String("worker_id", workerID.String()),
+			)
 		default:
 			s.logger.WarnContext(ctx, "stream buffer full, ending the stream",
 				slog.String("worker_id", workerID.String()),

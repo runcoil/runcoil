@@ -22,11 +22,13 @@ func NewRunStore(db DB, queries sqlc.Queries) *RunStore {
 }
 
 // CompleteStep stores the outcome of a Do Step in one transaction and returns the stored
-// record. A record of the same kind already stored is returned as it is: a resend
-// changes nothing. It returns domain.ErrStaleLease when the lease is not this attempt's.
-func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
+// record, and whether this call created it. A record of the same kind already stored is
+// returned as it is: a resend changes nothing. It returns domain.ErrStaleLease when the
+// lease is not this attempt's.
+func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, bool, error) {
 	lease := params.Lease
 	var record domain.StepRecord
+	created := false
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		held, err := s.queries.LeaseLock(ctx, tx, sqlc.LeaseLockParams{
 			RunID:      lease.RunID,
@@ -87,14 +89,15 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 			ErrorCode:    step.ErrorCode,
 			ErrorMessage: step.ErrorMessage,
 		})
+		created = true
 
 		return nil
 	})
 	if err != nil {
-		return domain.StepRecord{}, fmt.Errorf("complete step in transaction: %w", err)
+		return domain.StepRecord{}, false, fmt.Errorf("complete step in transaction: %w", err)
 	}
 
-	return record, nil
+	return record, created, nil
 }
 
 func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID string) (domain.StepRecord, bool, error) {
