@@ -11,8 +11,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// batchSize is how many Runs one statement moves. A sweep repeats while statements come
-// back full.
+// batchSize is how many Runs one tick of a job moves: 500 a second per server with the
+// default poll interval. More is left for the next tick.
 const batchSize = 500
 
 // Config is the timing of the scheduler.
@@ -42,7 +42,7 @@ type RunStore interface {
 }
 
 // Service does what is due at a time: it moves Runs whose wait in run_delayed is over to
-// the queue, and fails queued Runs past their start deadline. Each sweep locks its rows
+// the queue, and fails queued Runs past their start deadline. Each batch locks its rows
 // with SKIP LOCKED, so several servers can run one each.
 type Service struct {
 	cfg      Config
@@ -64,23 +64,29 @@ func New(cfg Config, logger *slog.Logger, runStore RunStore) *Service {
 	}
 }
 
-// Run sweeps every poll interval until Stop is called or ctx ends.
+// Run moves due Runs and expires start deadlines until Stop is called or ctx ends. Each
+// job runs one batch per tick, so Stop is seen within one batch, and a backlog in one job
+// never holds up the other.
 func (s *Service) Run(ctx context.Context) error {
 	s.running.Store(true)
 	defer s.running.Store(false)
 
-	ticker := time.NewTicker(s.cfg.PollInterval)
-	defer ticker.Stop()
+	promote := time.NewTicker(s.cfg.PollInterval)
+	defer promote.Stop()
+
+	expire := time.NewTicker(s.cfg.PollInterval)
+	defer expire.Stop()
 
 	for {
-		s.sweep(ctx)
-
 		select {
 		case <-s.stopped:
 			return nil
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-promote.C:
+			s.promoteDueDelayed(ctx)
+		case <-expire.C:
+			s.expireStartDeadlines(ctx)
 		}
 	}
 }
@@ -99,39 +105,36 @@ func (s *Service) Ready(_ context.Context) error {
 	return nil
 }
 
-// sweep runs each job until it has nothing left that is due. A failed job is logged and
-// tried again at the next sweep.
-func (s *Service) sweep(ctx context.Context) {
-	s.drain(ctx, "promote due delayed runs", s.runStore.PromoteDueDelayed)
-	s.drain(ctx, "expire start deadlines", s.runStore.ExpireStartDeadlines)
-}
-
-// drain calls job until a call moves less than a full batch.
-func (s *Service) drain(ctx context.Context, name string, job func(context.Context, int) (int, error)) {
-	total := 0
-	for {
-		n, err := job(ctx, batchSize)
-		if err != nil {
-			if ctx.Err() == nil {
-				s.logger.ErrorContext(ctx, "scheduler job failed",
-					slog.String("job", name),
-					slog.Any("error", err),
-				)
-			}
-
-			return
+// promoteDueDelayed moves one batch of Runs whose wait is over to the queue. A failed batch
+// is tried again at the next tick.
+func (s *Service) promoteDueDelayed(ctx context.Context) {
+	n, err := s.runStore.PromoteDueDelayed(ctx, batchSize)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger.ErrorContext(ctx, "promote due delayed runs failed", slog.Any("error", err))
 		}
 
-		total += n
-		if n < batchSize {
-			break
-		}
+		return
 	}
 
-	if total > 0 {
-		s.logger.DebugContext(ctx, "scheduler job done",
-			slog.String("job", name),
-			slog.Int("runs", total),
-		)
+	if n > 0 {
+		s.logger.DebugContext(ctx, "delayed runs promoted", slog.Int("runs", n))
+	}
+}
+
+// expireStartDeadlines fails one batch of queued Runs past their start deadline. A failed
+// batch is tried again at the next tick.
+func (s *Service) expireStartDeadlines(ctx context.Context) {
+	n, err := s.runStore.ExpireStartDeadlines(ctx, batchSize)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger.ErrorContext(ctx, "expire start deadlines failed", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	if n > 0 {
+		s.logger.InfoContext(ctx, "runs failed past their start deadline", slog.Int("runs", n))
 	}
 }
