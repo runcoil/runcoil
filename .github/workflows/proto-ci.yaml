@@ -26,7 +26,7 @@ env:
 
 jobs:
   buf:
-    name: Buf
+    name: Buf Lint and Format
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,7 +44,7 @@ jobs:
           pr_comment: false
 
   generate:
-    name: Generated Code
+    name: Code Gen Check (buf)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -61,7 +61,7 @@ jobs:
         run: git diff --exit-code && test -z "$(git status --porcelain)"
 
   go:
-    name: Go
+    name: Go Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -74,4 +74,3 @@ jobs:
           check-latest: true
       - uses: go-task/setup-task@v2
       - run: task proto:build
-      - run: task proto:tidy

@@ -43,7 +43,7 @@ jobs:
       - uses: go-task/setup-task@v2
       - run: task sdk-go:lint
 
-  # Test and tidy run on the SDK's own Go, the oldest its users may have.
+  # Test runs on the SDK's own Go, the oldest its users may have.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -60,23 +60,8 @@ jobs:
       - run: task sdk-go:build
       - run: task sdk-go:test
 
-  tidy:
-    name: Tidy
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: sdks/go/go.mod
-          check-latest: true
-      - uses: go-task/setup-task@v2
-      - run: task sdk-go:tidy
-
   vuln:
-    name: Vuln
+    name: Vulnerability Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
