@@ -41,11 +41,11 @@ func TestRegistrationFromProto(t *testing.T) {
 	}, reg)
 }
 
-func TestFailureCodeOf(t *testing.T) {
-	assert.Equal(t, domain.FailureCodeError, failureCodeOf(runcoilv1.ErrorKind_ERROR_KIND_UNSPECIFIED))
-	assert.Equal(t, domain.FailureCodeError, failureCodeOf(runcoilv1.ErrorKind_ERROR_KIND_ERROR))
-	assert.Equal(t, domain.FailureCodePanic, failureCodeOf(runcoilv1.ErrorKind_ERROR_KIND_PANIC))
-	assert.Equal(t, domain.FailureCodeOutputNotEncodable, failureCodeOf(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE))
+func TestFailureCodeFromProto(t *testing.T) {
+	assert.Equal(t, domain.FailureCodeError, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_UNSPECIFIED))
+	assert.Equal(t, domain.FailureCodeError, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR))
+	assert.Equal(t, domain.FailureCodePanic, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_PANIC))
+	assert.Equal(t, domain.FailureCodeOutputNotEncodable, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE))
 }
 
 func TestStepRecordToProto(t *testing.T) {
@@ -62,16 +62,16 @@ func TestStepRecordToProto(t *testing.T) {
 	assert.Equal(t, "charge", failed.GetFailure().GetStepId())
 }
 
-func TestListenResponse(t *testing.T) {
+func TestStreamMessageToProto(t *testing.T) {
 	lease := domain.Lease{RunID: uuid.New(), Epoch: 7}
 
-	assign := listenResponse(domain.StreamMessage{Assign: &domain.Assign{Lease: lease, TaskName: "charge"}})
+	assign := streamMessageToProto(domain.StreamMessage{Assign: &domain.Assign{Lease: lease, TaskName: "charge"}})
 	assert.Equal(t, lease.RunID.String(), assign.GetAssign().GetLease().GetRunId())
 	assert.Equal(t, int64(7), assign.GetAssign().GetLease().GetEpoch())
 	assert.Equal(t, "charge", assign.GetAssign().GetTaskName())
 
-	lost := listenResponse(domain.StreamMessage{LeaseLost: &lease})
+	lost := streamMessageToProto(domain.StreamMessage{LeaseLost: &lease})
 	assert.Equal(t, runcoilv1.Cancel_REASON_LEASE_LOST, lost.GetCancel().GetReason())
 
-	assert.NotNil(t, listenResponse(domain.StreamMessage{Keepalive: true}).GetKeepalive())
+	assert.NotNil(t, streamMessageToProto(domain.StreamMessage{Keepalive: true}).GetKeepalive())
 }

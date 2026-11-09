@@ -29,21 +29,22 @@ func TestNewWorkerValidates(t *testing.T) {
 
 	tests := []struct {
 		name string
+		app  string
 		opts []WorkerOption
 		want string
 	}{
 		{name: "no app", want: "new worker: app is required"},
-		{name: "no slots", opts: []WorkerOption{App("shop"), Slots(0)}, want: "new worker: slots must be at least 1, got 0"},
+		{name: "no slots", app: "shop", opts: []WorkerOption{Slots(0)}, want: "new worker: slots must be at least 1, got 0"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewWorker(client, tt.opts...)
+			_, err := NewWorker(client, tt.app, tt.opts...)
 			assert.EqualError(t, err, tt.want)
 		})
 	}
 
-	_, err = NewWorker(nil, App("shop"))
+	_, err = NewWorker(nil, "shop")
 	assert.Error(t, err)
 }
 
@@ -51,7 +52,7 @@ func TestNewTaskValidates(t *testing.T) {
 	client, err := NewClient(URL("http://localhost:7070"), APIKey("k"))
 	require.NoError(t, err)
 
-	w, err := NewWorker(client, App("shop"))
+	w, err := NewWorker(client, "shop")
 	require.NoError(t, err)
 
 	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
@@ -340,7 +341,7 @@ func TestStartFailsWhenRegisterIsRefused(t *testing.T) {
 	client, err := NewClient(URL("http://127.0.0.1:1"), APIKey("k"))
 	require.NoError(t, err)
 
-	w, err := NewWorker(client, App("shop"))
+	w, err := NewWorker(client, "shop")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -555,7 +556,7 @@ func TestAnEndedAttemptNeverStartsItsHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	for range 50 {
-		w, err := NewWorker(client, App("shop"))
+		w, err := NewWorker(client, "shop")
 		require.NoError(t, err)
 
 		var called atomic.Bool

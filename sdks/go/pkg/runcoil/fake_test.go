@@ -282,7 +282,7 @@ func startWorker(t *testing.T, url string, tasks map[string]Handler) *Worker {
 	client, err := NewClient(URL(url), APIKey(testAPIKey))
 	require.NoError(t, err)
 
-	w, err := NewWorker(client, App("shop"), Slots(2))
+	w, err := NewWorker(client, "shop", Slots(2))
 	require.NoError(t, err)
 
 	for name, h := range tasks {

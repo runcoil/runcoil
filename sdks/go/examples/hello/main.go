@@ -49,7 +49,7 @@ func run() error {
 		return fmt.Errorf("new client: %w", err)
 	}
 
-	worker, err := runcoil.NewWorker(client, runcoil.App("hello"), runcoil.Slots(2))
+	worker, err := runcoil.NewWorker(client, "hello", runcoil.Slots(2))
 	if err != nil {
 		return fmt.Errorf("new worker: %w", err)
 	}

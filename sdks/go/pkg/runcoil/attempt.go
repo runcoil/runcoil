@@ -8,8 +8,6 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
 )
@@ -96,7 +94,7 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 	logger := w.logger.With(slog.String("run_id", a.runID))
 
 	if t == nil {
-		w.report(a, failedRun(runcoilv1.ErrorKind_ERROR_KIND_ERROR,
+		w.report(a, runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR,
 			fmt.Sprintf("task %q is not registered by this worker", assign.GetTaskName()), ""))
 
 		return
@@ -127,7 +125,7 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 		)
 	}
 
-	w.report(a, resultOf(out, err))
+	w.report(a, runResultToProto(out, err))
 }
 
 // takeSlot waits for one of the worker's handler slots. It returns false when ctx ends
@@ -203,39 +201,6 @@ func callHandler(ctx context.Context, h Handler, input []byte) (out []byte, err 
 	return h.call(ctx, input)
 }
 
-// resultOf turns a handler's output or error into the result CompleteRun sends.
-func resultOf(out []byte, err error) *runcoilv1.CompleteRunRequest {
-	if err == nil {
-		return &runcoilv1.CompleteRunRequest{Result: &runcoilv1.CompleteRunRequest_Output{Output: out}}
-	}
-
-	var se *runstate.StepError
-	if errors.As(err, &se) {
-		// The handler returned a Step's final error.
-		return failedRun(runcoilv1.ErrorKind_ERROR_KIND_ERROR, err.Error(), se.StepID)
-	}
-
-	var pe *panicError
-	if errors.As(err, &pe) {
-		return failedRun(runcoilv1.ErrorKind_ERROR_KIND_PANIC, pe.Error(), "")
-	}
-
-	var ee *encodeError
-	if errors.As(err, &ee) {
-		return failedRun(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE, ee.Error(), "")
-	}
-
-	return failedRun(runcoilv1.ErrorKind_ERROR_KIND_ERROR, err.Error(), "")
-}
-
-// failedRun builds a result that fails the Run. stepID is set when the handler returned
-// the final error of that Step.
-func failedRun(kind runcoilv1.ErrorKind, message, stepID string) *runcoilv1.CompleteRunRequest {
-	return &runcoilv1.CompleteRunRequest{Result: &runcoilv1.CompleteRunRequest_Error{
-		Error: &runcoilv1.RunError{Kind: kind, Message: message, StepId: stepID},
-	}}
-}
-
 // recordStep sends the outcome of one Step of the attempt and returns the stored record.
 // It returns false when the attempt ended, or when the report could not be made: the
 // attempt is then ended here, and the handler must stop.
@@ -245,21 +210,7 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 		slog.String("step_id", r.StepID),
 	)
 
-	req := &runcoilv1.CompleteStepRequest{
-		Lease:     a.lease(),
-		StepId:    r.StepID,
-		StartedAt: timestamppb.New(r.StartedAt),
-		EndedAt:   timestamppb.New(r.EndedAt),
-	}
-
-	if r.Failure != nil {
-		req.Outcome = &runcoilv1.CompleteStepRequest_Error{Error: &runcoilv1.StepError{
-			Kind:    errorKind(r.Failure.Kind),
-			Message: r.Failure.Message,
-		}}
-	} else {
-		req.Outcome = &runcoilv1.CompleteStepRequest_Output{Output: r.Output}
-	}
+	req := stepReportToProto(a.lease(), r)
 
 	var resp *runcoilv1.CompleteStepResponse
 	session := w.sessionToken()
@@ -294,47 +245,5 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 		return runstate.Record{}, false
 	}
 
-	return recordOf(rec), true
-}
-
-// records converts the journal an Assign carries, by Step ID.
-func records(steps []*runcoilv1.StepRecord) map[string]runstate.Record {
-	recorded := make(map[string]runstate.Record, len(steps))
-	for _, rec := range steps {
-		recorded[rec.GetStepId()] = recordOf(rec)
-	}
-
-	return recorded
-}
-
-// recordOf converts a stored Step record from the server.
-func recordOf(rec *runcoilv1.StepRecord) runstate.Record {
-	failure := rec.GetFailure()
-	if failure == nil {
-		return runstate.Record{Succeeded: true, Output: rec.GetOutput()}
-	}
-
-	return runstate.Record{Kind: failureKind(failure.GetCode()), Message: failure.GetMessage()}
-}
-
-func errorKind(kind string) runcoilv1.ErrorKind {
-	switch kind {
-	case runstate.KindPanic:
-		return runcoilv1.ErrorKind_ERROR_KIND_PANIC
-	case runstate.KindOutputNotEncodable:
-		return runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE
-	default:
-		return runcoilv1.ErrorKind_ERROR_KIND_ERROR
-	}
-}
-
-func failureKind(code runcoilv1.Failure_Code) string {
-	switch code {
-	case runcoilv1.Failure_CODE_PANIC:
-		return runstate.KindPanic
-	case runcoilv1.Failure_CODE_OUTPUT_NOT_ENCODABLE:
-		return runstate.KindOutputNotEncodable
-	default:
-		return runstate.KindError
-	}
+	return stepRecordFromProto(rec), true
 }
