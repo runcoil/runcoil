@@ -122,8 +122,6 @@ func (w *Worker) listenOnce(ctx context.Context) (bool, error) {
 	}
 	defer func() { _ = stream.Close() }()
 
-	w.logger.DebugContext(ctx, "listen stream opened", slog.Int("running", len(running)))
-
 	received := false
 	var streamErr error
 	for {
@@ -131,6 +129,12 @@ func (w *Worker) listenOnce(ctx context.Context) (bool, error) {
 		if err != nil {
 			streamErr = err
 			break
+		}
+
+		if !received {
+			// The stream is open only once the server sends something: Listen returns
+			// before the connection is made.
+			w.logger.DebugContext(ctx, "listen stream attached", slog.Int("running", len(running)))
 		}
 
 		received = true

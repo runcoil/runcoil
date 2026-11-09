@@ -54,7 +54,7 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	stepID := st.StepID(id)
 	if stepID != id {
-		st.Logger.WarnContext(ctx, "step id used again in this run; stored with a counter",
+		st.Logger.DebugContext(ctx, "step id used again in this run; stored with a counter",
 			slog.String("step_id", stepID),
 		)
 	}
