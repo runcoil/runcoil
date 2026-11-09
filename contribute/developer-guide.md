@@ -61,6 +61,36 @@ task proto:format   # format the protos
 task proto:check    # lint, format check, generated-code check, build and tidy
 ```
 
+## Go SDK
+
+The Go SDK is `sdks/go`, its own Go module, `github.com/runcoil/runcoil/sdks/go`, on
+Go 1.26. It requires `proto` at a release tag; `go.work` builds it against `./proto`
+for work across modules, and its tasks run with `GOWORK=off`, as CI does.
+
+```sh
+task sdk-go:build   # build and vet the SDK and its examples
+task sdk-go:test    # tests with the race detector, against an in-process fake server
+task sdk-go:check   # lint, test, tidy and vuln
+```
+
+[`sdks/go/README.md`](../sdks/go/README.md) describes the SDK itself.
+
+`sdks/go/examples/hello` is a worker of the app `hello` with one Task, `greet`, of
+three Steps. It reads `RUNCOIL_URL` (the dispatcher port, `http://localhost:7070`)
+and `RUNCOIL_API_KEY`. Until API keys can be made, add one to the Compose database
+with psql, as the server stores only its `sha256`:
+
+```sh
+docker compose exec -T postgres psql -U postgres <<'SQL'
+INSERT INTO projects (id, name) VALUES ('01900000-0000-7000-8000-000000000001', 'default');
+INSERT INTO api_keys (id, project_id, name, key_hash)
+VALUES ('01900000-0000-7000-8000-000000000002', '01900000-0000-7000-8000-000000000001', 'local', sha256('rc_api_local_dev'));
+SQL
+
+cd sdks/go
+RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=rc_api_local_dev go run ./examples/hello
+```
+
 ## Running
 
 ```sh

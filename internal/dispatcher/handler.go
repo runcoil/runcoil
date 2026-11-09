@@ -63,7 +63,7 @@ func (h workerHandler) Listen(
 	}
 
 	err = h.s.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
-		return out.Send(listenResponse(msg))
+		return out.Send(streamMessageToProto(msg))
 	})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -100,7 +100,7 @@ func (h workerHandler) CompleteStep(
 	outcome := domain.StepOutcome{Output: req.GetOutput()}
 	if stepErr := req.GetError(); stepErr != nil {
 		outcome = domain.StepOutcome{Failure: &domain.Failure{
-			Code:    failureCodeOf(stepErr.GetKind()),
+			Code:    failureCodeFromProto(stepErr.GetKind()),
 			Message: stepErr.GetMessage(),
 		}}
 	}
@@ -137,7 +137,7 @@ func (h workerHandler) CompleteRun(
 	result := domain.RunResult{Output: req.GetOutput()}
 	if runErr := req.GetError(); runErr != nil {
 		result = domain.RunResult{Failure: &domain.Failure{
-			Code:    failureCodeOf(runErr.GetKind()),
+			Code:    failureCodeFromProto(runErr.GetKind()),
 			Message: runErr.GetMessage(),
 			StepID:  runErr.GetStepId(),
 		}}
@@ -209,7 +209,7 @@ func leaseToProto(l domain.Lease) *runcoilv1.Lease {
 	return &runcoilv1.Lease{RunId: l.RunID.String(), Epoch: l.Epoch}
 }
 
-func listenResponse(msg domain.StreamMessage) *runcoilv1.ListenResponse {
+func streamMessageToProto(msg domain.StreamMessage) *runcoilv1.ListenResponse {
 	switch {
 	case msg.Assign != nil:
 		a := msg.Assign
@@ -244,8 +244,8 @@ var failureCodes = map[domain.FailureCode]runcoilv1.Failure_Code{
 	domain.FailureCodeOutputNotEncodable: runcoilv1.Failure_CODE_OUTPUT_NOT_ENCODABLE,
 }
 
-// failureCodeOf maps what a worker reports to a failure code. An unset kind is an error.
-func failureCodeOf(kind runcoilv1.ErrorKind) domain.FailureCode {
+// failureCodeFromProto maps what a worker reports to a failure code. An unset kind is an error.
+func failureCodeFromProto(kind runcoilv1.ErrorKind) domain.FailureCode {
 	switch kind {
 	case runcoilv1.ErrorKind_ERROR_KIND_PANIC:
 		return domain.FailureCodePanic

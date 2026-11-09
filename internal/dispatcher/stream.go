@@ -69,13 +69,15 @@ func (s *Service) Listen(
 
 	// The stream goes in the map while the worker row is locked, so the map follows the
 	// order of the row lock: a slower, older Listen cannot replace a newer one.
+	free := 0
 	notHeld, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
 		WorkerID:     worker.ID,
 		DispatcherID: s.id,
 		StreamID:     streamID,
 		Running:      running,
 		Attached: func(notHeld []domain.Lease) {
-			st.free = max(worker.Slots-(len(running)-len(notHeld)), 0)
+			free = max(worker.Slots-(len(running)-len(notHeld)), 0)
+			st.free = free
 			s.put(st)
 		},
 	})
@@ -88,11 +90,36 @@ func (s *Service) Listen(
 	s.logger.InfoContext(ctx, "stream attached",
 		slog.String("worker_id", worker.ID.String()),
 		slog.String("stream_id", streamID.String()),
+		slog.String("app", worker.App),
 		slog.Int("running", len(running)),
 		slog.Int("not_held", len(notHeld)),
+		slog.Int("free_slots", free),
 	)
 
+	attachedAt := time.Now()
+	err = s.pump(ctx, st, notHeld, send)
+
+	s.logger.InfoContext(ctx, "stream detached",
+		slog.String("worker_id", worker.ID.String()),
+		slog.String("stream_id", streamID.String()),
+		slog.Duration("duration", time.Since(attachedAt)),
+		slog.Any("error", err),
+	)
+
+	return err
+}
+
+// pump sends the messages of st until the worker goes, the server stops, or the
+// dispatcher ends the stream. It first tells the worker which of the attempts it reported
+// are no longer its own.
+func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, send func(domain.StreamMessage) error) error {
 	for _, l := range notHeld {
+		s.logger.InfoContext(ctx, "lease lost sent",
+			slog.String("worker_id", st.workerID.String()),
+			slog.String("run_id", l.RunID.String()),
+			slog.Int64("epoch", l.Epoch),
+		)
+
 		if err := send(domain.StreamMessage{LeaseLost: &l}); err != nil {
 			return fmt.Errorf("send lease lost: %w", err)
 		}
@@ -203,6 +230,12 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 	for _, a := range assigns {
 		select {
 		case st.out <- domain.StreamMessage{Assign: &a}:
+			s.logger.DebugContext(ctx, "run assigned",
+				slog.String("run_id", a.Lease.RunID.String()),
+				slog.Int64("epoch", a.Lease.Epoch),
+				slog.String("task_name", a.TaskName),
+				slog.String("worker_id", workerID.String()),
+			)
 		default:
 			s.logger.WarnContext(ctx, "stream buffer full, ending the stream",
 				slog.String("worker_id", workerID.String()),

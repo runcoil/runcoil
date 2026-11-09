@@ -1,0 +1,91 @@
+name: SDK Go CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sdks/go/**'
+      - 'proto/**'
+      - 'tools/**'
+      - '.github/workflows/sdk-go-ci.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'sdks/go/**'
+      - 'proto/**'
+      - 'tools/**'
+      - '.github/workflows/sdk-go-ci.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOWORK: 'off'
+
+jobs:
+  # The tools need the server's Go, so lint and vuln set up the Go of tools/go.mod.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go.mod
+          check-latest: true
+      - uses: go-task/setup-task@v2
+      - run: task sdk-go:lint
+
+  # Test and tidy run on the SDK's own Go, the oldest its users may have.
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: sdks/go/go.mod
+          check-latest: true
+      - uses: go-task/setup-task@v2
+      - run: task sdk-go:build
+      - run: task sdk-go:test
+
+  tidy:
+    name: Tidy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: sdks/go/go.mod
+          check-latest: true
+      - uses: go-task/setup-task@v2
+      - run: task sdk-go:tidy
+
+  vuln:
+    name: Vuln
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go.mod
+          check-latest: true
+      - uses: go-task/setup-task@v2
+      - run: task sdk-go:vuln

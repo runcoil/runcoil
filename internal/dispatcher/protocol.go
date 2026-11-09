@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/runcoil/runcoil/internal/apierr"
@@ -59,6 +60,18 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("register worker: %w", err)
 	}
+
+	tasks := make([]string, 0, len(reg.Tasks))
+	for _, t := range reg.Tasks {
+		tasks = append(tasks, t.Name)
+	}
+
+	s.logger.InfoContext(ctx, "worker registered",
+		slog.String("worker_id", worker.ID.String()),
+		slog.String("app", worker.App),
+		slog.Int("slots", worker.Slots),
+		slog.Any("tasks", tasks),
+	)
 
 	return RegisterResult{Worker: worker, SessionToken: token}, nil
 }
@@ -119,12 +132,24 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 		return domain.StepRecord{}, fmt.Errorf("complete step: %w", err)
 	}
 
+	status := domain.StepStatusSucceeded
+	if record.Failure != nil {
+		status = domain.StepStatusFailed
+	}
+
+	s.logger.DebugContext(ctx, "step recorded",
+		slog.String("run_id", params.Lease.RunID.String()),
+		slog.String("step_id", record.StepID),
+		slog.String("status", string(status)),
+	)
+
 	return record, nil
 }
 
 // CompleteRun ends the attempt with the handler's result.
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
-	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, result.End())
+	end := result.End()
+	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)
 	if errors.Is(err, domain.ErrStaleLease) {
 		return errStaleLease
 	}
@@ -133,9 +158,24 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 		return fmt.Errorf("finish run: %w", err)
 	}
 
-	if ended {
-		s.release(worker.ID)
+	if !ended {
+		s.logger.DebugContext(ctx, "run already ended", slog.String("run_id", lease.RunID.String()))
+		return nil
 	}
+
+	s.release(worker.ID)
+
+	attrs := []slog.Attr{
+		slog.String("run_id", lease.RunID.String()),
+		slog.Int64("epoch", lease.Epoch),
+		slog.String("worker_id", worker.ID.String()),
+		slog.String("status", string(end.Status)),
+	}
+	if end.Failure != nil {
+		attrs = append(attrs, slog.String("error_code", string(end.Failure.Code)))
+	}
+
+	s.logger.LogAttrs(ctx, slog.LevelDebug, "run ended", attrs...)
 
 	return nil
 }

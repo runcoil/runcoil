@@ -1,0 +1,42 @@
+version: '3'
+
+env:
+  GOWORK: 'off'
+
+vars:
+  TOOL: go tool -modfile=../../tools/go.mod
+
+tasks:
+  build:
+    desc: Build and vet the SDK and its examples
+    cmds:
+      - go build ./...
+      - go vet ./...
+
+  test:
+    desc: Run the SDK tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: Run golangci-lint on the SDK
+    cmds:
+      - '{{.TOOL}} golangci-lint run ./...'
+
+  tidy:
+    desc: Fail when go.mod or go.sum is not tidy
+    cmds:
+      - go mod tidy -diff
+
+  vuln:
+    desc: Scan the SDK for known vulnerabilities
+    cmds:
+      - '{{.TOOL}} govulncheck ./...'
+
+  check:
+    desc: Run lint, test, tidy and vuln
+    cmds:
+      - task: lint
+      - task: test
+      - task: tidy
+      - task: vuln
