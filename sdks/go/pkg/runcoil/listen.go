@@ -15,7 +15,9 @@ import (
 
 const (
 	reconnectStart = 500 * time.Millisecond
-	reconnectCap   = 10 * time.Second
+	// reconnectCap bounds the wait between two tries to open Listen, so a worker is back
+	// within about 5s of the server.
+	reconnectCap = 5 * time.Second
 	// silentBeats is how many heartbeat intervals a Listen stream may stay silent before
 	// the worker drops it. The server sends a keepalive every interval.
 	silentBeats = 3
