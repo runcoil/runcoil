@@ -175,3 +175,18 @@ func TestDoNeedsAnID(t *testing.T) {
 
 	assert.EqualError(t, err, "step: id is required")
 }
+
+func TestDoUnwindsWhenTheAttemptEndsWhileItReports(t *testing.T) {
+	f, ctx := newFakeRun(nil)
+	report := f.st.Report
+	f.st.Report = func(ctx context.Context, r runstate.StepReport) (runstate.Record, bool) {
+		rec, ok := report(ctx, r)
+		f.open = false
+
+		return rec, ok
+	}
+
+	assert.True(t, unwound(func() {
+		_, _ = Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil })
+	}), "code after the Step does not run once the attempt ended")
+}

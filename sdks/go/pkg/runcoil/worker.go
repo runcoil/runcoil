@@ -734,12 +734,16 @@ func (w *Worker) retryCall(parent context.Context, budget time.Duration, op func
 		err := op(ctx)
 		cancel()
 
-		if err == nil || !retryable(err) || parent.Err() != nil {
-			return err
+		if err == nil {
+			return nil
+		}
+
+		if !retryable(err) || parent.Err() != nil {
+			return fmt.Errorf("try %d: %w", try, err)
 		}
 
 		if time.Now().Add(backoff).After(deadline) {
-			return err
+			return fmt.Errorf("gave up after %d tries: %w", try, err)
 		}
 
 		w.logger.DebugContext(parent, "call failed; retrying",
@@ -749,7 +753,7 @@ func (w *Worker) retryCall(parent context.Context, budget time.Duration, op func
 		)
 
 		if !sleep(parent, backoff) {
-			return err
+			return fmt.Errorf("gave up after %d tries: %w", try, err)
 		}
 
 		backoff = min(2*backoff, retryCap)

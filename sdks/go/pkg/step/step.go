@@ -86,7 +86,8 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 	rep.StartedAt, rep.EndedAt = startedAt, endedAt
 
 	rec, ok := st.Report(ctx, rep)
-	if !ok {
+	if !ok || !st.Open() {
+		// The attempt ended while the Step was reported: the code after it must not run.
 		runstate.Unwind()
 	}
 

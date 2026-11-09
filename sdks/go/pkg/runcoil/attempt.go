@@ -107,6 +107,11 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 	}
 	defer func() { <-w.slots }()
 
+	// The slot and the end of the attempt may be ready together, and select picks either.
+	if !a.open() {
+		return
+	}
+
 	out, err := callHandler(a.ctx, t.handler, assign.GetInput())
 	if errors.Is(err, errAttemptEnded) {
 		logger.DebugContext(a.ctx, "attempt ended while its handler ran; no report")

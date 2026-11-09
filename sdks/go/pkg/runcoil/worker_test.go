@@ -484,10 +484,12 @@ func TestAssignsOfTheSameRun(t *testing.T) {
 	f.streams <- st
 
 	var calls atomic.Int32
+	firstRunning := make(chan struct{})
 	firstEnded := make(chan struct{})
 	startWorker(t, url, map[string]Handler{
 		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
 			if calls.Add(1) == 1 {
+				close(firstRunning)
 				<-ctx.Done()
 				close(firstEnded)
 
@@ -499,6 +501,8 @@ func TestAssignsOfTheSameRun(t *testing.T) {
 	})
 
 	st.send <- assignMsg("run-1", 1, "order", `{}`)
+	<-firstRunning
+
 	st.send <- assignMsg("run-1", 1, "order", `{}`)
 	st.send <- assignMsg("run-1", 2, "order", `{}`)
 
@@ -544,4 +548,139 @@ func TestShutdownCutsAResultStillBeingSent(t *testing.T) {
 
 	assert.EqualError(t, err, "shutdown: gave up 1 runs before their result was sent: [run-1]")
 	assert.Less(t, time.Since(start), 3*handlerWait, "Shutdown does not wait for the report's whole budget")
+}
+
+func TestAnEndedAttemptNeverStartsItsHandler(t *testing.T) {
+	client, err := NewClient(URL("http://localhost:7070"), APIKey("k"))
+	require.NoError(t, err)
+
+	for range 50 {
+		w, err := NewWorker(client, App("shop"))
+		require.NoError(t, err)
+
+		var called atomic.Bool
+		h := HandlerFunc(func(context.Context, orderInput) (orderOutput, error) {
+			called.Store(true)
+			return orderOutput{}, nil
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		a := &attempt{runID: "run-1", epoch: 1, ctx: ctx, cancel: cancel}
+		a.end()
+
+		w.running.Add(1)
+		w.execute(a, &task{name: "order", handler: h}, &runcoilv1.Assign{TaskName: "order"})
+
+		require.False(t, called.Load(), "the handler of an ended attempt ran")
+		require.Empty(t, w.slots, "the slot is given back")
+	}
+}
+
+func TestARefusedReportRegistersAgain(t *testing.T) {
+	ended := codedError(t, connect.CodeUnauthenticated, runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "invalid session token")
+
+	tests := []struct {
+		name    string
+		refuse  func(f *fakeServer)
+		handler Handler
+	}{
+		{
+			name: "CompleteStep",
+			refuse: func(f *fakeServer) {
+				f.stepAnswer = func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error) { return nil, ended }
+			},
+			handler: HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
+				_, err := step.Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil })
+				return orderOutput{}, err
+			}),
+		},
+		{
+			name: "CompleteRun",
+			refuse: func(f *fakeServer) {
+				f.runAnswer = func(context.Context) error { return ended }
+			},
+			handler: HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, url := newFakeServer(t)
+			first := newFakeStream()
+			f.streams <- first
+			f.streams <- newFakeStream()
+			f.set(tt.refuse)
+
+			startWorker(t, url, map[string]Handler{"order": tt.handler})
+
+			first.send <- assignMsg("run-1", 1, "order", `{}`)
+
+			require.Eventually(t, func() bool {
+				registers, listens, _, _ := f.snapshot()
+				return len(registers) == 2 && len(listens) == 2
+			}, 5*time.Second, 10*time.Millisecond)
+
+			_, _, listenAuth, _ := f.snapshot()
+			assert.Equal(t, []string{"session-1", "session-2"}, listenAuth)
+		})
+	}
+}
+
+func TestASilentStreamIsDropped(t *testing.T) {
+	f, url := newFakeServer(t)
+	f.streams <- newFakeStream()
+	f.streams <- newFakeStream()
+	f.set(func(f *fakeServer) { f.hbInterval = 50 * time.Millisecond })
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
+	})
+
+	require.Eventually(t, func() bool {
+		_, listens, _, _ := f.snapshot()
+		return len(listens) == 2
+	}, 5*time.Second, 10*time.Millisecond, "a stream with no keepalive for three intervals is opened again")
+
+	registers, _, _, _ := f.snapshot()
+	assert.Len(t, registers, 1, "a silent stream is not an ended session")
+}
+
+func TestTheWorkerRunsAtMostItsSlots(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	var running, most atomic.Int32
+	release := make(chan struct{})
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) {
+			n := running.Add(1)
+			for {
+				m := most.Load()
+				if n <= m || most.CompareAndSwap(m, n) {
+					break
+				}
+			}
+
+			<-release
+			running.Add(-1)
+
+			return orderOutput{}, nil
+		}),
+	})
+
+	for _, id := range []string{"run-1", "run-2", "run-3"} {
+		st.send <- assignMsg(id, 1, "order", `{}`)
+	}
+
+	require.Eventually(t, func() bool { return running.Load() == 2 }, 5*time.Second, 10*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(2), running.Load(), "the third Run waits for a slot")
+
+	close(release)
+	for range 3 {
+		f.waitRun(t)
+	}
+
+	assert.Equal(t, int32(2), most.Load())
 }
