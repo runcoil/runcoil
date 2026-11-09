@@ -55,12 +55,16 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 	stepID := st.StepID(id)
 	if stepID != id {
 		st.Logger.WarnContext(ctx, "step id used again in this run; stored with a counter",
-			slog.String("run_id", st.RunID),
 			slog.String("step_id", stepID),
 		)
 	}
 
 	if rec, ok := st.Lookup(stepID); ok {
+		st.Logger.DebugContext(ctx, "step replayed",
+			slog.String("step_id", stepID),
+			slog.String("status", recordStatus(rec)),
+		)
+
 		return result[T](stepID, rec)
 	}
 
@@ -75,7 +79,6 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	if out.panicked {
 		st.Logger.ErrorContext(ctx, "step panicked",
-			slog.String("run_id", st.RunID),
 			slog.String("step_id", stepID),
 			slog.Any("panic", out.panicValue),
 			slog.String("stack", string(out.stack)),
@@ -93,7 +96,22 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	st.Store(stepID, rec)
 
+	st.Logger.DebugContext(ctx, "step completed",
+		slog.String("step_id", stepID),
+		slog.String("status", recordStatus(rec)),
+		slog.Duration("duration", endedAt.Sub(startedAt)),
+	)
+
 	return result[T](stepID, rec)
+}
+
+// recordStatus names the outcome of a stored record for the logs.
+func recordStatus(rec runstate.Record) string {
+	if rec.Succeeded {
+		return "succeeded"
+	}
+
+	return "failed"
 }
 
 // outcome is what fn returned, or the panic it raised.

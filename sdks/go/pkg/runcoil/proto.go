@@ -94,6 +94,18 @@ func errorKindToProto(kind string) runcoilv1.ErrorKind {
 	}
 }
 
+// errorKindFromProto names the kind of a failed Run for the logs.
+func errorKindFromProto(kind runcoilv1.ErrorKind) string {
+	switch kind {
+	case runcoilv1.ErrorKind_ERROR_KIND_PANIC:
+		return runstate.KindPanic
+	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE:
+		return runstate.KindOutputNotEncodable
+	default:
+		return runstate.KindError
+	}
+}
+
 // failureKindFromProto maps a stored failure code to the kind a Step error carries. A
 // code this SDK does not know is an error.
 func failureKindFromProto(code runcoilv1.Failure_Code) string {

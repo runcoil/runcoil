@@ -59,7 +59,8 @@ func (w *Worker) register(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, registerTimeout)
 	defer cancel()
 
-	resp, err := w.rpc.Register(ctx, w.registerRequest())
+	req := w.registerRequest()
+	resp, err := w.rpc.Register(ctx, req)
 	if err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
@@ -76,9 +77,16 @@ func (w *Worker) register(ctx context.Context) error {
 
 	w.sessionEnded.Store(false)
 
+	tasks := make([]string, 0, len(req.GetTasks()))
+	for _, t := range req.GetTasks() {
+		tasks = append(tasks, t.GetName())
+	}
+
 	w.logger.InfoContext(ctx, "worker registered",
 		slog.String("app", w.app),
 		slog.String("worker_id", resp.GetWorkerId()),
+		slog.Int("slots", int(req.GetSlots())),
+		slog.Any("tasks", tasks),
 	)
 
 	return nil

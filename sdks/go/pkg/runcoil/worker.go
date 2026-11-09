@@ -248,6 +248,12 @@ func (w *Worker) shutdown(drainCtx context.Context) error {
 		return nil
 	}
 
+	w.mu.Lock()
+	running := len(w.attempts)
+	w.mu.Unlock()
+
+	w.logger.InfoContext(drainCtx, "worker shutting down", slog.Int("running", running))
+
 	listenStop()
 	<-listenDone
 
@@ -257,11 +263,11 @@ func (w *Worker) shutdown(drainCtx context.Context) error {
 		close(drained)
 	}()
 
-	var err error
+	var gaveUp []string
 	select {
 	case <-drained:
 	case <-drainCtx.Done():
-		err = w.giveUp(drained)
+		gaveUp = w.giveUp(drained)
 	}
 
 	// Heartbeats keep the session alive until the handlers have returned.
@@ -269,14 +275,20 @@ func (w *Worker) shutdown(drainCtx context.Context) error {
 	<-beatDone
 	w.conn.stop()
 
-	return err
+	w.logger.InfoContext(drainCtx, "worker stopped", slog.Int("gave_up", len(gaveUp)))
+
+	if len(gaveUp) > 0 {
+		return fmt.Errorf("shutdown: gave up %d runs before their result was sent: %v", len(gaveUp), gaveUp)
+	}
+
+	return nil
 }
 
 // giveUp ends a drain that has reached its deadline. It cancels every handler that is
 // still running and gives the handlers handlerWait to return. Then it cuts short the
-// results still being sent, and waits handlerWait again. It returns an error naming the
-// Runs whose result was not sent.
-func (w *Worker) giveUp(drained <-chan struct{}) error {
+// results still being sent, and waits handlerWait again. It returns the Runs whose result
+// was not sent, sorted.
+func (w *Worker) giveUp(drained <-chan struct{}) []string {
 	given := map[string]bool{}
 
 	w.mu.Lock()
@@ -298,13 +310,7 @@ func (w *Worker) giveUp(drained <-chan struct{}) error {
 		wait(drained, handlerWait)
 	}
 
-	if len(given) == 0 {
-		return nil
-	}
-
-	runs := slices.Sorted(maps.Keys(given))
-
-	return fmt.Errorf("shutdown: gave up %d runs before their result was sent: %v", len(runs), runs)
+	return slices.Sorted(maps.Keys(given))
 }
 
 // wait waits for done for at most d, and reports whether done was closed.

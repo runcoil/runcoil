@@ -115,11 +115,14 @@ func (w *Worker) listenOnce(ctx context.Context) (bool, error) {
 	})
 	defer watchdog.Stop()
 
-	stream, err := w.rpc.Listen(streamCtx, &runcoilv1.ListenRequest{Running: w.runningLeases()})
+	running := w.runningLeases()
+	stream, err := w.rpc.Listen(streamCtx, &runcoilv1.ListenRequest{Running: running})
 	if err != nil {
 		return false, fmt.Errorf("open listen: %w", err)
 	}
 	defer func() { _ = stream.Close() }()
+
+	w.logger.DebugContext(ctx, "listen stream opened", slog.Int("running", len(running)))
 
 	received := false
 	var streamErr error
@@ -188,8 +191,13 @@ func (w *Worker) accept(ctx context.Context, assign *runcoilv1.Assign) {
 
 	attemptCtx, cancel := context.WithCancel(context.Background())
 	a := &attempt{
-		runID:  lease.GetRunId(),
-		epoch:  lease.GetEpoch(),
+		runID: lease.GetRunId(),
+		epoch: lease.GetEpoch(),
+		logger: w.logger.With(
+			slog.String("run_id", lease.GetRunId()),
+			slog.String("task_name", assign.GetTaskName()),
+			slog.Int64("epoch", lease.GetEpoch()),
+		),
 		cancel: cancel,
 	}
 
@@ -197,7 +205,7 @@ func (w *Worker) accept(ctx context.Context, assign *runcoilv1.Assign) {
 	st.RunID = a.runID
 	st.App = w.app
 	st.TaskName = assign.GetTaskName()
-	st.Logger = w.logger
+	st.Logger = a.logger
 	st.Open = a.open
 	st.Report = func(_ context.Context, r runstate.StepReport) (runstate.Record, bool) {
 		return w.recordStep(a, r)
@@ -240,6 +248,6 @@ func (w *Worker) abandon(ctx context.Context, lease *runcoilv1.Lease) {
 		return
 	}
 
-	w.logger.InfoContext(ctx, "attempt taken back by the server", slog.String("run_id", a.runID))
+	a.logger.InfoContext(ctx, "attempt taken back by the server")
 	a.end()
 }

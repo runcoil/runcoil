@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
@@ -21,6 +22,9 @@ var errAttemptEnded = errors.New("attempt ended")
 type attempt struct {
 	runID string
 	epoch int64
+
+	// logger carries the run_id, task_name and epoch of the attempt.
+	logger *slog.Logger
 
 	// ctx is the handler's context. It is cancelled when the attempt ends.
 	ctx    context.Context
@@ -91,16 +95,15 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 	defer w.forget(a)
 	defer a.cancel()
 
-	logger := w.logger.With(slog.String("run_id", a.runID))
-
 	if t == nil {
+		a.logger.WarnContext(a.ctx, "task not registered by this worker; the run fails")
 		w.report(a, runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR,
 			fmt.Sprintf("task %q is not registered by this worker", assign.GetTaskName()), ""))
 
 		return
 	}
 
-	if !w.takeSlot(a.ctx) {
+	if !w.takeSlot(a) {
 		return
 	}
 	defer func() { <-w.slots }()
@@ -110,40 +113,65 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 		return
 	}
 
+	a.logger.InfoContext(a.ctx, "run started", slog.Int("replayed_steps", len(assign.GetSteps())))
+	startedAt := time.Now()
+
 	out, err := callHandler(a.ctx, t.handler, assign.GetInput())
 	if errors.Is(err, errAttemptEnded) {
-		logger.DebugContext(a.ctx, "attempt ended while its handler ran; no report")
+		a.logger.DebugContext(a.ctx, "attempt ended while its handler ran; no report")
 		return
 	}
 
 	var pe *panicError
 	if errors.As(err, &pe) {
-		logger.ErrorContext(a.ctx, "handler panicked",
-			slog.String("task_name", t.name),
+		a.logger.ErrorContext(a.ctx, "handler panicked",
 			slog.Any("panic", pe.value),
 			slog.String("stack", string(pe.stack)),
 		)
 	}
 
-	w.report(a, runResultToProto(out, err))
+	req := runResultToProto(out, err)
+	if !w.report(a, req) {
+		return
+	}
+
+	attrs := []slog.Attr{
+		slog.String("status", "succeeded"),
+		slog.Duration("duration", time.Since(startedAt)),
+	}
+	if runErr := req.GetError(); runErr != nil {
+		attrs[0] = slog.String("status", "failed")
+		attrs = append(attrs, slog.String("error_kind", errorKindFromProto(runErr.GetKind())))
+	}
+
+	a.logger.LogAttrs(a.ctx, slog.LevelInfo, "run finished", attrs...)
 }
 
-// takeSlot waits for one of the worker's handler slots. It returns false when ctx ends
-// first.
-func (w *Worker) takeSlot(ctx context.Context) bool {
+// takeSlot waits for one of the worker's handler slots. It returns false when the attempt
+// ends first.
+func (w *Worker) takeSlot(a *attempt) bool {
 	select {
 	case w.slots <- struct{}{}:
 		return true
-	case <-ctx.Done():
+	default:
+	}
+
+	a.logger.DebugContext(a.ctx, "run waiting for a slot")
+
+	select {
+	case w.slots <- struct{}{}:
+		return true
+	case <-a.ctx.Done():
 		return false
 	}
 }
 
-// report sends the result of an attempt unless the attempt has ended.
-func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) {
+// report sends the result of an attempt unless the attempt has ended, and reports
+// whether the server took it.
+func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 	if !a.claim() {
-		w.logger.InfoContext(a.ctx, "attempt ended before its result was reported", slog.String("run_id", a.runID))
-		return
+		a.logger.InfoContext(a.ctx, "attempt ended before its result was reported")
+		return false
 	}
 
 	req.Lease = a.lease()
@@ -160,18 +188,19 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) {
 		return nil
 	})
 	if err == nil {
-		return
+		return true
 	}
 
-	logger := w.logger.With(slog.String("run_id", a.runID))
 	switch {
 	case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_STALE_LEASE:
-		logger.InfoContext(ctx, "run result refused: lease is stale")
+		a.logger.InfoContext(ctx, "run result refused: lease is stale")
 	case w.endSession(ctx, session, err):
-		logger.WarnContext(ctx, "run result refused: worker session ended")
+		a.logger.WarnContext(ctx, "run result refused: worker session ended")
 	default:
-		logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
+		a.logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
 	}
+
+	return false
 }
 
 // forget drops the attempt from the held set, so Listen stops reporting it.
@@ -205,10 +234,7 @@ func callHandler(ctx context.Context, h Handler, input []byte) (out []byte, err 
 // It returns false when the attempt ended, or when the report could not be made: the
 // attempt is then ended here, and the handler must stop.
 func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record, bool) {
-	logger := w.logger.With(
-		slog.String("run_id", a.runID),
-		slog.String("step_id", r.StepID),
-	)
+	logger := a.logger.With(slog.String("step_id", r.StepID))
 
 	req := stepReportToProto(a.lease(), r)
 

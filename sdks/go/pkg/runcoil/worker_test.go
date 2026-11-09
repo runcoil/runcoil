@@ -566,7 +566,7 @@ func TestAnEndedAttemptNeverStartsItsHandler(t *testing.T) {
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
-		a := &attempt{runID: "run-1", epoch: 1, ctx: ctx, cancel: cancel}
+		a := &attempt{runID: "run-1", epoch: 1, logger: w.logger, ctx: ctx, cancel: cancel}
 		a.end()
 
 		w.running.Add(1)
