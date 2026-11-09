@@ -28,9 +28,9 @@ type State struct {
 	Open func() bool
 
 	// Report sends the outcome of one Step to the server and waits for its answer. It
-	// returns the stored record and true. It returns false when the attempt ended or
-	// could not report: the worker has then ended the attempt, and the caller must
-	// Unwind.
+	// returns the stored record and true. It returns false when the attempt ended, could
+	// not report, or the server scheduled a retry of the Step: the worker has then ended
+	// the attempt, and the caller must Unwind.
 	Report func(ctx context.Context, r StepReport) (Record, bool)
 
 	mu       sync.Mutex
@@ -58,9 +58,11 @@ type Record struct {
 
 // StepReport is the outcome of one Step, as the SDK sends it.
 type StepReport struct {
-	StepID    string
-	Output    []byte
-	Failure   *Failure
+	StepID  string
+	Output  []byte
+	Failure *Failure
+	// Retry is the Step's own retry policy. Nil: the Task's.
+	Retry     *RetryPolicy
 	StartedAt time.Time
 	EndedAt   time.Time
 }
@@ -69,6 +71,17 @@ type StepReport struct {
 type Failure struct {
 	Kind    string
 	Message string
+	// NonRetriable asks the server not to try the Step again.
+	NonRetriable bool
+	// RetryAfter replaces the policy's delay before the next try.
+	RetryAfter *time.Duration
+}
+
+// RetryPolicy says how often and how late a failed Step is tried again. A zero field is
+// the server's default.
+type RetryPolicy struct {
+	MaxAttempts int
+	Delays      []time.Duration
 }
 
 // StepID returns the id a Step named name is stored under in this attempt: the name the

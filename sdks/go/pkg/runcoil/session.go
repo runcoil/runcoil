@@ -48,7 +48,7 @@ func (w *Worker) registerRequest() *runcoilv1.RegisterRequest {
 
 	defs := make([]*runcoilv1.TaskDefinition, 0, len(w.tasks))
 	for _, t := range w.tasks {
-		defs = append(defs, &runcoilv1.TaskDefinition{Name: t.name})
+		defs = append(defs, taskDefinitionToProto(t))
 	}
 
 	return &runcoilv1.RegisterRequest{App: w.app, Tasks: defs, Slots: w.slotCount}

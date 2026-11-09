@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
+	"github.com/runcoil/runcoil/sdks/go/pkg/step"
 )
 
 const (
@@ -86,8 +87,27 @@ type Worker struct {
 }
 
 type task struct {
-	name    string
-	handler Handler
+	name          string
+	handler       Handler
+	retry         *step.RetryPolicy
+	startDeadline time.Duration
+}
+
+// TaskOption configures a Task in NewTask.
+type TaskOption func(*task)
+
+// TaskRetry sets the retry policy of the Task's Steps. A Step's own step.Retry comes
+// first, and a zero field takes the server's default. The server keeps the policy of a Run
+// from when the Run was created, so a new policy applies to new Runs only.
+func TaskRetry(p step.RetryPolicy) TaskOption {
+	return func(t *task) { t.retry = &p }
+}
+
+// StartDeadline fails a Run of the Task that has not started within d of becoming ready,
+// for example because no worker was free. It applies to the first start only, not to
+// retries. Without it a Run waits for a worker as long as it takes.
+func StartDeadline(d time.Duration) TaskOption {
+	return func(t *task) { t.startDeadline = d }
 }
 
 // NewWorker returns a Worker for app. The client must come from NewClient. The Worker does
@@ -139,15 +159,32 @@ func Slots(n int) WorkerOption {
 }
 
 // NewTask adds a Task with its handler to the worker. The name must be unique within the
-// worker. It fails when the name is empty or taken, when the handler is zero, or when the
-// worker has started. Call it before Start; Start registers the Task with the server.
-func (w *Worker) NewTask(name string, h Handler) error {
+// worker. It fails when the name is empty or taken, when the handler is zero, when an
+// option is invalid, or when the worker has started. Call it before Start; Start
+// registers the Task with the server. Options such as TaskRetry and StartDeadline set the
+// Task's settings.
+func (w *Worker) NewTask(name string, h Handler, opts ...TaskOption) error {
 	if name == "" {
 		return errors.New("new task: name is required")
 	}
 
 	if h.call == nil {
 		return fmt.Errorf("new task %q: handler is required", name)
+	}
+
+	t := &task{name: name, handler: h}
+	for _, opt := range opts {
+		opt(t)
+	}
+
+	if t.retry != nil {
+		if err := t.retry.Validate(); err != nil {
+			return fmt.Errorf("new task %q: retry policy: %w", name, err)
+		}
+	}
+
+	if t.startDeadline < 0 {
+		return fmt.Errorf("new task %q: start deadline must not be negative", name)
 	}
 
 	w.mu.Lock()
@@ -165,7 +202,6 @@ func (w *Worker) NewTask(name string, h Handler) error {
 		return fmt.Errorf("new task %q: task name is already registered", name)
 	}
 
-	t := &task{name: name, handler: h}
 	w.tasks = append(w.tasks, t)
 	w.byName[name] = t
 

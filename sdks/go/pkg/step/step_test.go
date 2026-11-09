@@ -3,8 +3,10 @@ package step
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,3 +192,69 @@ func TestDoUnwindsWhenTheAttemptEndsWhileItReports(t *testing.T) {
 		_, _ = Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil })
 	}), "code after the Step does not run once the attempt ended")
 }
+
+func TestDoMarksTheRetryOfAFailure(t *testing.T) {
+	base := errors.New("rate limited")
+
+	tests := []struct {
+		name         string
+		err          error
+		nonRetriable bool
+		retryAfter   *time.Duration
+	}{
+		{name: "a plain error", err: base},
+		{name: "non retriable", err: NonRetriable(base), nonRetriable: true},
+		{name: "retry after", err: RetryAfter(base, time.Minute), retryAfter: ptr(time.Minute)},
+		{name: "wrapped retry after", err: fmt.Errorf("charge: %w", RetryAfter(base, time.Second)), retryAfter: ptr(time.Second)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, ctx := newFakeRun(nil)
+
+			_, err := Do(ctx, "charge", func(context.Context) (int, error) { return 0, tt.err })
+			require.Error(t, err)
+
+			require.Len(t, f.reports, 1)
+			failure := f.reports[0].Failure
+			assert.Equal(t, tt.err.Error(), failure.Message)
+			assert.Equal(t, tt.nonRetriable, failure.NonRetriable)
+			assert.Equal(t, tt.retryAfter, failure.RetryAfter)
+		})
+	}
+}
+
+func TestRetryMarksKeepTheError(t *testing.T) {
+	base := errors.New("rate limited")
+
+	assert.ErrorIs(t, NonRetriable(base), base)
+	assert.ErrorIs(t, RetryAfter(base, time.Second), base)
+	assert.Equal(t, "rate limited", NonRetriable(base).Error())
+	assert.NoError(t, NonRetriable(nil))
+	assert.NoError(t, RetryAfter(nil, time.Second))
+}
+
+func TestDoSendsTheStepRetryPolicy(t *testing.T) {
+	f, ctx := newFakeRun(nil)
+
+	_, err := Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil },
+		Retry(RetryPolicy{MaxAttempts: 2, Delays: []time.Duration{time.Second}}))
+	require.NoError(t, err)
+
+	require.Len(t, f.reports, 1)
+	assert.Equal(t, &runstate.RetryPolicy{MaxAttempts: 2, Delays: []time.Duration{time.Second}}, f.reports[0].Retry)
+}
+
+func TestDoRefusesAnInvalidRetryPolicy(t *testing.T) {
+	f, ctx := newFakeRun(nil)
+
+	called := false
+	_, err := Do(ctx, "charge", func(context.Context) (int, error) { called = true; return 1, nil },
+		Retry(RetryPolicy{MaxAttempts: 31}))
+
+	assert.EqualError(t, err, `step "charge": retry policy: max attempts must be between 0 and 30, got 31`)
+	assert.False(t, called)
+	assert.Empty(t, f.reports)
+}
+
+func ptr[T any](v T) *T { return &v }

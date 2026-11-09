@@ -43,6 +43,7 @@ type fakeServer struct {
 
 	mu         sync.Mutex
 	registers  []string // the bearer token of each Register
+	regReqs    []*runcoilv1.RegisterRequest
 	listens    []*runcoilv1.ListenRequest
 	listenAuth []string
 	steps      []*runcoilv1.CompleteStepRequest
@@ -104,11 +105,12 @@ func bearer(ctx context.Context) string {
 }
 
 // Register opens session-1, session-2, ... in turn.
-func (f *fakeServer) Register(ctx context.Context, _ *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
+func (f *fakeServer) Register(ctx context.Context, req *runcoilv1.RegisterRequest) (*runcoilv1.RegisterResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.registers = append(f.registers, bearer(ctx))
+	f.regReqs = append(f.regReqs, req)
 	f.sessions++
 
 	return &runcoilv1.RegisterResponse{
