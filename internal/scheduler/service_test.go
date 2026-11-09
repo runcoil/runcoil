@@ -55,7 +55,7 @@ func (f *fakeRunStore) calls() (promotes, expires int) {
 }
 
 func newService(runStore RunStore) *Service {
-	return New(Config{PollInterval: 10 * time.Millisecond}, slog.New(slog.DiscardHandler), runStore)
+	return New(Config{RequeueDelayedRunsInterval: 10 * time.Millisecond, StartDeadlineCheckInterval: 10 * time.Millisecond}, slog.New(slog.DiscardHandler), runStore)
 }
 
 // start runs s until the test ends, and returns the channel Run's error arrives on.
@@ -79,7 +79,7 @@ func TestRunCallsEachJobOncePerTick(t *testing.T) {
 
 	assert.LessOrEqual(t, promotes, 11, "a full batch waits for the next tick")
 	assert.GreaterOrEqual(t, promotes, 5)
-	assert.GreaterOrEqual(t, expires, 5, "a backlog in promote does not hold up expire")
+	assert.GreaterOrEqual(t, expires, 5, "a backlog of delayed Runs does not hold up the start deadline check")
 }
 
 func TestStopEndsRunDuringABacklog(t *testing.T) {
@@ -106,7 +106,7 @@ func TestAFailedJobIsTriedAgainAtTheNextTick(t *testing.T) {
 	start(t, s)
 
 	require.Eventually(t, func() bool { p, e := store.calls(); return p >= 3 && e >= 3 }, time.Second, 5*time.Millisecond,
-		"a failed promote is tried at each tick, and expire still runs")
+		"a failed requeue is tried at each tick, and the start deadline check still runs")
 }
 
 func TestReady(t *testing.T) {
@@ -122,6 +122,7 @@ func TestReady(t *testing.T) {
 }
 
 func TestConfigValidate(t *testing.T) {
-	assert.NoError(t, (&Config{PollInterval: time.Second}).Validate())
-	assert.EqualError(t, (&Config{}).Validate(), "poll interval must be greater than 0")
+	assert.NoError(t, (&Config{RequeueDelayedRunsInterval: time.Second, StartDeadlineCheckInterval: time.Second}).Validate())
+	assert.EqualError(t, (&Config{StartDeadlineCheckInterval: time.Second}).Validate(), "requeue delayed runs interval must be greater than 0")
+	assert.EqualError(t, (&Config{RequeueDelayedRunsInterval: time.Second}).Validate(), "start deadline check interval must be greater than 0")
 }

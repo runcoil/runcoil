@@ -28,4 +28,5 @@ retry:
   jitter: 0.2
 
 scheduler:
-  poll_interval: 1s
+  requeue_delayed_runs_interval: 1s
+  start_deadline_check_interval: 1s
