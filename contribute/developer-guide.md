@@ -73,6 +73,8 @@ task sdk-go:test    # tests with the race detector, against an in-process fake s
 task sdk-go:check   # lint, test, tidy and vuln
 ```
 
+[`sdks/go/README.md`](../sdks/go/README.md) describes the SDK itself.
+
 `sdks/go/examples/hello` is a worker of the app `hello` with one Task, `greet`, of
 three Steps. It reads `RUNCOIL_URL` (the dispatcher port, `http://localhost:7070`)
 and `RUNCOIL_API_KEY`. Until API keys can be made, add one to the Compose database

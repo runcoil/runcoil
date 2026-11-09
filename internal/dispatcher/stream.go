@@ -97,25 +97,30 @@ func (s *Service) Listen(
 	)
 
 	attachedAt := time.Now()
-	reason := "worker closed"
-	defer func() {
-		s.logger.InfoContext(ctx, "stream detached",
-			slog.String("worker_id", worker.ID.String()),
-			slog.String("stream_id", streamID.String()),
-			slog.String("reason", reason),
-			slog.Duration("duration", time.Since(attachedAt)),
-		)
-	}()
+	err = s.pump(ctx, st, notHeld, send)
 
+	s.logger.InfoContext(ctx, "stream detached",
+		slog.String("worker_id", worker.ID.String()),
+		slog.String("stream_id", streamID.String()),
+		slog.Duration("duration", time.Since(attachedAt)),
+		slog.Any("error", err),
+	)
+
+	return err
+}
+
+// pump sends the messages of st until the worker goes, the server stops, or the
+// dispatcher ends the stream. It first tells the worker which of the attempts it reported
+// are no longer its own.
+func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, send func(domain.StreamMessage) error) error {
 	for _, l := range notHeld {
 		s.logger.InfoContext(ctx, "lease lost sent",
-			slog.String("worker_id", worker.ID.String()),
+			slog.String("worker_id", st.workerID.String()),
 			slog.String("run_id", l.RunID.String()),
 			slog.Int64("epoch", l.Epoch),
 		)
 
 		if err := send(domain.StreamMessage{LeaseLost: &l}); err != nil {
-			reason = "send failed"
 			return fmt.Errorf("send lease lost: %w", err)
 		}
 	}
@@ -128,19 +133,15 @@ func (s *Service) Listen(
 		case <-ctx.Done():
 			return nil
 		case <-s.stopped:
-			reason = "server stopping"
 			return nil
 		case <-st.ended:
-			reason = "ended by the dispatcher"
 			return errStreamEnded
 		case msg := <-st.out:
 			if err := send(msg); err != nil {
-				reason = "send failed"
 				return fmt.Errorf("send message: %w", err)
 			}
 		case <-keepalive.C:
 			if err := send(domain.StreamMessage{Keepalive: true}); err != nil {
-				reason = "send failed"
 				return fmt.Errorf("send keepalive: %w", err)
 			}
 		}
