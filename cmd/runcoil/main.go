@@ -11,6 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api"
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
+	"github.com/runcoil/runcoil/internal/scheduler"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 	"github.com/runcoil/runcoil/pkg/configutil"
@@ -65,17 +66,22 @@ func run() error {
 		return fmt.Errorf("new dispatcher service: %w", err)
 	}
 
+	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore)
+
 	// The API serves the health checks of the whole process, so the probes call one port.
 	checks := healthutil.New()
 	checks.Add("postgres", pool.Ping)
 	checks.Add("dispatcher", dispatcherService.Ready)
+	checks.Add("scheduler", schedulerService.Ready)
 
 	apiService := api.New(cfg.API, logger, checks)
 
-	// The dispatcher stops first, so /readyz fails while the API still answers it.
+	// The scheduler and the dispatcher stop first, so /readyz fails while the API still
+	// answers it.
 	manager := service.NewManager(
 		apiService,
 		dispatcherService,
+		schedulerService,
 	)
 
 	logger.InfoContext(ctx, "server is started")

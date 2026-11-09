@@ -98,26 +98,31 @@ func (h workerHandler) CompleteStep(
 	}
 
 	outcome := domain.StepOutcome{Output: req.GetOutput()}
+	retry := domain.StepRetry{Policy: retryPolicyFromProto(req.GetRetry())}
 	if stepErr := req.GetError(); stepErr != nil {
 		outcome = domain.StepOutcome{Failure: &domain.Failure{
 			Code:    failureCodeFromProto(stepErr.GetKind()),
 			Message: stepErr.GetMessage(),
 		}}
+		retry.NonRetriable = stepErr.GetNonRetriable()
+
+		if after := stepErr.GetRetryAfter(); after != nil {
+			d := after.AsDuration()
+			retry.After = &d
+		}
 	}
 
-	record, err := h.s.CompleteStep(ctx, domain.CompleteStepParams{
+	result, err := h.s.CompleteStep(ctx, domain.CompleteStepParams{
 		WorkerID: worker.ID,
 		Lease:    lease,
 		StepID:   req.GetStepId(),
 		Outcome:  outcome,
-	})
+	}, retry)
 	if err != nil {
 		return nil, fmt.Errorf("complete step: %w", err)
 	}
 
-	return &runcoilv1.CompleteStepResponse{
-		Result: &runcoilv1.CompleteStepResponse_Record{Record: stepRecordToProto(record)},
-	}, nil
+	return stepResultToProto(result), nil
 }
 
 func (h workerHandler) CompleteRun(
@@ -180,19 +185,41 @@ func registrationFromProto(req *runcoilv1.RegisterRequest) domain.Registration {
 			def.StartDeadline = &d
 		}
 
-		if p := t.GetRetry(); p != nil {
-			policy := &domain.RetryPolicy{MaxAttempts: int(p.GetMaxAttempts())}
-			for _, d := range p.GetDelays() {
-				policy.Delays = append(policy.Delays, d.AsDuration())
-			}
-
-			def.Retry = policy
-		}
+		def.Retry = retryPolicyFromProto(t.GetRetry())
 
 		reg.Tasks = append(reg.Tasks, def)
 	}
 
 	return reg
+}
+
+// retryPolicyFromProto reads a retry policy. Nil stays nil: no policy.
+func retryPolicyFromProto(p *runcoilv1.RetryPolicy) *domain.RetryPolicy {
+	if p == nil {
+		return nil
+	}
+
+	policy := &domain.RetryPolicy{MaxAttempts: int(p.GetMaxAttempts())}
+	for _, d := range p.GetDelays() {
+		policy.Delays = append(policy.Delays, d.AsDuration())
+	}
+
+	return policy
+}
+
+func stepResultToProto(r domain.StepResult) *runcoilv1.CompleteStepResponse {
+	if r.Retry != nil {
+		return &runcoilv1.CompleteStepResponse{Result: &runcoilv1.CompleteStepResponse_RetryScheduled{
+			RetryScheduled: &runcoilv1.RetryScheduled{
+				NextAttemptAt: timestamppb.New(r.Retry.NextAttemptAt),
+				TryCount:      uint32(r.Retry.TryCount), //nolint:gosec // At most MaxRetryAttempts.
+			},
+		}}
+	}
+
+	return &runcoilv1.CompleteStepResponse{
+		Result: &runcoilv1.CompleteStepResponse_Record{Record: stepRecordToProto(r.Record)},
+	}
 }
 
 // leaseFromProto reads a lease. The request rules have checked that run_id is a UUID.

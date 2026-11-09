@@ -100,12 +100,6 @@ func byTaskName(tasks []domain.TaskDefinition) []int {
 	return order
 }
 
-// retryPolicyJSON is how tasks.retry_policy stores a policy.
-type retryPolicyJSON struct {
-	MaxAttempts int      `json:"max_attempts,omitempty"`
-	Delays      []string `json:"delays,omitempty"`
-}
-
 func taskUpsertParams(id, projectID uuid.UUID, app string, def domain.TaskDefinition) (sqlc.TaskUpsertParams, error) {
 	params := sqlc.TaskUpsertParams{
 		ID:            id,
@@ -116,12 +110,7 @@ func taskUpsertParams(id, projectID uuid.UUID, app string, def domain.TaskDefini
 	}
 
 	if def.Retry != nil {
-		policy := retryPolicyJSON{MaxAttempts: def.Retry.MaxAttempts}
-		for _, d := range def.Retry.Delays {
-			policy.Delays = append(policy.Delays, d.String())
-		}
-
-		raw, err := json.Marshal(policy)
+		raw, err := json.Marshal(retryPolicyToJSON(*def.Retry))
 		if err != nil {
 			return sqlc.TaskUpsertParams{}, fmt.Errorf("encode retry policy: %w", err)
 		}

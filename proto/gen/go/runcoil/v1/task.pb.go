@@ -24,10 +24,11 @@ const (
 )
 
 type TaskDefinition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Retry         *RetryPolicy           `protobuf:"bytes,2,opt,name=retry,proto3" json:"retry,omitempty"`
-	StartDeadline *durationpb.Duration   `protobuf:"bytes,3,opt,name=start_deadline,json=startDeadline,proto3" json:"start_deadline,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Retry *RetryPolicy           `protobuf:"bytes,2,opt,name=retry,proto3" json:"retry,omitempty"`
+	// Only for the first start. Unset: no deadline.
+	StartDeadline *durationpb.Duration `protobuf:"bytes,3,opt,name=start_deadline,json=startDeadline,proto3" json:"start_deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,9 +86,9 @@ func (x *TaskDefinition) GetStartDeadline() *durationpb.Duration {
 
 type RetryPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The first attempt included.
+	// The first attempt included. Zero: the server's default.
 	MaxAttempts uint32 `protobuf:"varint,1,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
-	// The last delay repeats.
+	// The last delay repeats. Empty: the server's default.
 	Delays        []*durationpb.Duration `protobuf:"bytes,2,rep,name=delays,proto3" json:"delays,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -142,15 +143,15 @@ var File_runcoil_v1_task_proto protoreflect.FileDescriptor
 const file_runcoil_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15runcoil/v1/task.proto\x12\n" +
-	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa1\x01\n" +
+	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xab\x01\n" +
 	"\x0eTaskDefinition\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\xff\x01R\x04name\x12-\n" +
-	"\x05retry\x18\x02 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x12@\n" +
-	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rstartDeadline\"c\n" +
-	"\vRetryPolicy\x12!\n" +
-	"\fmax_attempts\x18\x01 \x01(\rR\vmaxAttempts\x121\n" +
-	"\x06delays\x18\x02 \x03(\v2\x19.google.protobuf.DurationR\x06delaysB\xa2\x01\n" +
+	"\x05retry\x18\x02 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x12J\n" +
+	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\b\xbaH\x05\xaa\x01\x02*\x00R\rstartDeadline\"}\n" +
+	"\vRetryPolicy\x12*\n" +
+	"\fmax_attempts\x18\x01 \x01(\rB\a\xbaH\x04*\x02\x18\x1eR\vmaxAttempts\x12B\n" +
+	"\x06delays\x18\x02 \x03(\v2\x19.google.protobuf.DurationB\x0f\xbaH\f\x92\x01\t\x10 \"\x05\xaa\x01\x022\x00R\x06delaysB\xa2\x01\n" +
 	"\x0ecom.runcoil.v1B\tTaskProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +
 	"Runcoil\\V1\xe2\x02\x16Runcoil\\V1\\GPBMetadata\xea\x02\vRuncoil::V1b\x06proto3"

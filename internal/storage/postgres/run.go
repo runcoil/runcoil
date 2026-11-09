@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -23,10 +24,16 @@ func NewRunStore(db DB, queries sqlc.Queries) *RunStore {
 
 // CompleteStep stores the outcome of a Do Step in one transaction and returns the stored
 // record. A record of the same kind already stored is returned as it is: a resend
-// changes nothing. It returns domain.ErrStaleLease when the lease is not this attempt's.
-func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
+// changes nothing. A failed try that decide sends to a retry ends the attempt instead:
+// the Run waits in run_delayed and no record is stored. It returns domain.ErrStaleLease
+// when the lease is not this attempt's.
+func (s *RunStore) CompleteStep(
+	ctx context.Context,
+	params domain.CompleteStepParams,
+	decide domain.RetryDecider,
+) (domain.StepResult, error) {
 	lease := params.Lease
-	var record domain.StepRecord
+	var result domain.StepResult
 	err := s.db.WithTx(ctx, func(tx DB) error {
 		held, err := s.queries.LeaseLock(ctx, tx, sqlc.LeaseLockParams{
 			RunID:      lease.RunID,
@@ -47,7 +54,7 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 		}
 
 		if found && stored.Kind == domain.StepKindDo {
-			record = stored
+			result.Record = stored
 			return nil
 		}
 
@@ -56,45 +63,102 @@ func (s *RunStore) CompleteStep(ctx context.Context, params domain.CompleteStepP
 			tries = int(held.RetryCount) + 1
 		}
 
-		step := sqlc.StepCreateParams{
-			RunID:    lease.RunID,
-			StepID:   params.StepID,
-			Status:   string(params.Outcome.Status()),
-			Output:   params.Outcome.Output,
-			TryCount: int32(tries), //nolint:gosec // retry_count is a smallint.
-		}
-		if failure := params.Outcome.Failure; failure != nil {
-			code := string(failure.Code)
-			step.Output = nil
-			step.ErrorCode = &code
-			step.ErrorMessage = &failure.Message
+		if params.Outcome.Failure != nil {
+			retry, err := s.scheduleRetry(ctx, tx, params, tries, held.Config, decide)
+			if err != nil {
+				return fmt.Errorf("schedule retry: %w", err)
+			}
+
+			if retry != nil {
+				result.Retry = retry
+				return nil
+			}
 		}
 
-		if _, err := s.queries.StepCreate(ctx, tx, step); err != nil {
+		record, err := s.createStep(ctx, tx, params, tries)
+		if err != nil {
 			return fmt.Errorf("create step: %w", err)
 		}
 
-		err = s.queries.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: lease.RunID, StepID: params.StepID})
-		if err != nil {
-			return fmt.Errorf("reset step retry: %w", err)
-		}
-
-		record = stepRecord(stepRecordParams{
-			StepID:       step.StepID,
-			Kind:         string(domain.StepKindDo),
-			Status:       step.Status,
-			Output:       step.Output,
-			ErrorCode:    step.ErrorCode,
-			ErrorMessage: step.ErrorMessage,
-		})
+		result.Record = record
 
 		return nil
 	})
 	if err != nil {
-		return domain.StepRecord{}, fmt.Errorf("complete step in transaction: %w", err)
+		return domain.StepResult{}, fmt.Errorf("complete step in transaction: %w", err)
 	}
 
-	return record, nil
+	return result, nil
+}
+
+// scheduleRetry asks decide whether the failed try is tried again and, when it is, moves
+// the Run to run_delayed. It returns nil when the failure is final.
+func (s *RunStore) scheduleRetry(
+	ctx context.Context,
+	tx DB,
+	params domain.CompleteStepParams,
+	tries int,
+	config json.RawMessage,
+	decide domain.RetryDecider,
+) (*domain.ScheduledRetry, error) {
+	runPolicy, err := runRetryPolicy(config)
+	if err != nil {
+		return nil, fmt.Errorf("read run retry policy: %w", err)
+	}
+
+	delay, retry := decide(tries, runPolicy)
+	if !retry {
+		return nil, nil //nolint:nilnil // No retry is not an error.
+	}
+
+	row, err := s.queries.LeaseScheduleStepRetry(ctx, tx, sqlc.LeaseScheduleStepRetryParams{
+		Delay:      interval(&delay),
+		StepID:     params.StepID,
+		RunID:      params.Lease.RunID,
+		LeaseEpoch: params.Lease.Epoch,
+		WorkerID:   params.WorkerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("move run to run_delayed: %w", err)
+	}
+
+	return &domain.ScheduledRetry{NextAttemptAt: row.ReadyAt, TryCount: int(row.RetryCount)}, nil
+}
+
+// createStep stores the record of a Step that succeeded, or failed for good, at its try
+// number tries.
+func (s *RunStore) createStep(ctx context.Context, tx DB, params domain.CompleteStepParams, tries int) (domain.StepRecord, error) {
+	step := sqlc.StepCreateParams{
+		RunID:    params.Lease.RunID,
+		StepID:   params.StepID,
+		Status:   string(params.Outcome.Status()),
+		Output:   params.Outcome.Output,
+		TryCount: int32(tries), //nolint:gosec // retry_count is a smallint.
+	}
+	if failure := params.Outcome.Failure; failure != nil {
+		code := string(failure.Code)
+		step.Output = nil
+		step.ErrorCode = &code
+		step.ErrorMessage = &failure.Message
+	}
+
+	if _, err := s.queries.StepCreate(ctx, tx, step); err != nil {
+		return domain.StepRecord{}, fmt.Errorf("insert step: %w", err)
+	}
+
+	err := s.queries.LeaseResetStepRetry(ctx, tx, sqlc.LeaseResetStepRetryParams{RunID: params.Lease.RunID, StepID: params.StepID})
+	if err != nil {
+		return domain.StepRecord{}, fmt.Errorf("reset step retry: %w", err)
+	}
+
+	return stepRecord(stepRecordParams{
+		StepID:       step.StepID,
+		Kind:         string(domain.StepKindDo),
+		Status:       step.Status,
+		Output:       step.Output,
+		ErrorCode:    step.ErrorCode,
+		ErrorMessage: step.ErrorMessage,
+	}), nil
 }
 
 func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID string) (domain.StepRecord, bool, error) {
@@ -152,4 +216,26 @@ func (s *RunStore) FinishRun(ctx context.Context, workerID uuid.UUID, lease doma
 	}
 
 	return false, nil
+}
+
+// PromoteDueDelayed moves at most batchSize Runs whose wait in run_delayed is over to
+// run_queue, and returns how many it moved.
+func (s *RunStore) PromoteDueDelayed(ctx context.Context, batchSize int) (int, error) {
+	ids, err := s.queries.DelayedPromoteDue(ctx, s.db, int32(batchSize)) //nolint:gosec // A small batch size.
+	if err != nil {
+		return 0, fmt.Errorf("promote due delayed runs: %w", err)
+	}
+
+	return len(ids), nil
+}
+
+// ExpireStartDeadlines fails at most batchSize queued Runs past their start deadline, and
+// returns how many it failed.
+func (s *RunStore) ExpireStartDeadlines(ctx context.Context, batchSize int) (int, error) {
+	ids, err := s.queries.QueueExpireStartDeadlines(ctx, s.db, int32(batchSize)) //nolint:gosec // A small batch size.
+	if err != nil {
+		return 0, fmt.Errorf("expire start deadlines: %w", err)
+	}
+
+	return len(ids), nil
 }

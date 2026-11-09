@@ -13,17 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var validRetry = RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 0.2}
+
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name string
 		cfg  Config
 		want string
 	}{
-		{name: "defaults", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: 10 * time.Second, WorkerTTL: 30 * time.Second}},
+		{name: "defaults", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: 10 * time.Second, WorkerTTL: 30 * time.Second, Retry: validRetry}},
 		{name: "port out of range", cfg: Config{Port: 70000, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second}, want: "port must be between 1 and 65535"},
 		{name: "no claim interval", cfg: Config{Port: 7070, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second}, want: "claim interval must be greater than 0"},
 		{name: "no heartbeat interval", cfg: Config{Port: 7070, ClaimInterval: time.Second, WorkerTTL: time.Second}, want: "heartbeat interval must be greater than 0"},
 		{name: "ttl too short", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: time.Second}, want: "worker ttl must be longer than the heartbeat interval"},
+		{name: "retry attempts", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 31, Delays: []time.Duration{time.Second}}}, want: "retry max attempts must be between 1 and 30"},
+		{name: "retry delays", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4}}, want: "retry delays must be one or more durations of 0 or more"},
+		{name: "retry jitter", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 2}}, want: "retry jitter must be between 0 and 1"},
 	}
 
 	for _, tt := range tests {
