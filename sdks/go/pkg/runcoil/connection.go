@@ -45,6 +45,7 @@ func (c *connection) failed(ctx context.Context, err error, next time.Duration) 
 		c.logger.WarnContext(ctx, "server connection lost",
 			slog.Any("error", err),
 			slog.String("app", c.app),
+			slog.Duration("next_delay", next),
 		)
 
 		c.armReminder()
