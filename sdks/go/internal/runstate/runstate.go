@@ -1,6 +1,3 @@
-// Package runstate holds the value a worker puts in a handler's context, and the types
-// that the public packages share without importing each other. runcoil fills it, and
-// step reads and reports through it.
 package runstate
 
 import (

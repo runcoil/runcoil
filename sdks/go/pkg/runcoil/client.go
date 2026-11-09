@@ -1,7 +1,3 @@
-// Package runcoil is the Go SDK for Runcoil. A Worker runs the Tasks of one app in this
-// process: it registers them with the server, receives their Runs, runs the handlers,
-// and reports each result. Create a Client with NewClient, create a Worker with
-// NewWorker, add each Task with NewTask, and call Start.
 package runcoil
 
 import (

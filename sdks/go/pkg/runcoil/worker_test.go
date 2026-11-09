@@ -69,7 +69,7 @@ func TestRunSucceeds(t *testing.T) {
 
 	startWorker(t, url, map[string]Handler{
 		"order": HandlerFunc(func(ctx context.Context, in orderInput) (orderOutput, error) {
-			info, ok := Info(ctx)
+			info, ok := RunInfoFromContext(ctx)
 			require.True(t, ok)
 			assert.Equal(t, RunInfo{RunID: "run-1", App: "shop", TaskName: "order"}, info)
 

@@ -1,6 +1,3 @@
-// Command hello runs a worker of the app "hello" with one Task, "greet", of three Steps.
-// Start a server, then run it with RUNCOIL_URL and RUNCOIL_API_KEY set. Stop it with
-// Ctrl-C; it waits up to 30 seconds for running handlers.
 package main
 
 import (
@@ -110,7 +107,7 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 			return false, errors.New("log failed")
 		}
 
-		info, _ := runcoil.Info(ctx)
+		info, _ := runcoil.RunInfoFromContext(ctx)
 		t.logger.InfoContext(ctx, "greeted",
 			slog.String("run_id", info.RunID),
 			slog.String("greeting", greeting),

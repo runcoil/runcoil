@@ -58,8 +58,9 @@ type RunInfo struct {
 	TaskName string
 }
 
-// Info returns the Run that ctx belongs to. It reports false outside a handler.
-func Info(ctx context.Context) (RunInfo, bool) {
+// RunInfoFromContext returns the Run that ctx belongs to. It reports false outside a
+// handler.
+func RunInfoFromContext(ctx context.Context) (RunInfo, bool) {
 	s, ok := runstate.From(ctx)
 	if !ok {
 		return RunInfo{}, false

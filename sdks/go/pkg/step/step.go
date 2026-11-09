@@ -1,6 +1,3 @@
-// Package step runs the Steps of a handler. A Step is a function whose outcome Runcoil
-// records, so that a Run that runs again replays the Steps that finished and does not
-// run them again.
 package step
 
 import (
