@@ -229,7 +229,7 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 	for _, a := range assigns {
 		select {
 		case st.out <- domain.StreamMessage{Assign: &a}:
-			s.logger.InfoContext(ctx, "run assigned",
+			s.logger.DebugContext(ctx, "run assigned",
 				slog.String("run_id", a.Lease.RunID.String()),
 				slog.Int64("epoch", a.Lease.Epoch),
 				slog.String("task_name", a.TaskName),

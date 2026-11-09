@@ -177,7 +177,7 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 		attrs = append(attrs, slog.String("error_code", string(end.Failure.Code)))
 	}
 
-	s.logger.LogAttrs(ctx, slog.LevelInfo, "run ended", attrs...)
+	s.logger.LogAttrs(ctx, slog.LevelDebug, "run ended", attrs...)
 
 	return nil
 }

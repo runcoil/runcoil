@@ -113,7 +113,7 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 		return
 	}
 
-	a.logger.InfoContext(a.ctx, "run started", slog.Int("replayed_steps", len(assign.GetSteps())))
+	a.logger.DebugContext(a.ctx, "run started", slog.Int("replayed_steps", len(assign.GetSteps())))
 	startedAt := time.Now()
 
 	out, err := callHandler(a.ctx, t.handler, assign.GetInput())
@@ -144,7 +144,7 @@ func (w *Worker) execute(a *attempt, t *task, assign *runcoilv1.Assign) {
 		attrs = append(attrs, slog.String("error_kind", errorKindFromProto(runErr.GetKind())))
 	}
 
-	a.logger.LogAttrs(a.ctx, slog.LevelInfo, "run finished", attrs...)
+	a.logger.LogAttrs(a.ctx, slog.LevelDebug, "run finished", attrs...)
 }
 
 // takeSlot waits for one of the worker's handler slots. It returns false when the attempt
