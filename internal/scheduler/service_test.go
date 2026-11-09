@@ -50,7 +50,7 @@ func (f *fakeStore) ExpireStartDeadlines(_ context.Context, limit int) (int, err
 	return take(&f.expired, limit), nil
 }
 
-func newService(store Store) *Service {
+func newService(store RunStore) *Service {
 	return New(Config{PollInterval: 10 * time.Millisecond}, slog.New(slog.DiscardHandler), store)
 }
 

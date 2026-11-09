@@ -97,27 +97,7 @@ func (h workerHandler) CompleteStep(
 		return nil, fmt.Errorf("read lease: %w", err)
 	}
 
-	outcome := domain.StepOutcome{Output: req.GetOutput()}
-	retry := domain.StepRetry{Policy: retryPolicyFromProto(req.GetRetry())}
-	if stepErr := req.GetError(); stepErr != nil {
-		outcome = domain.StepOutcome{Failure: &domain.Failure{
-			Code:    failureCodeFromProto(stepErr.GetKind()),
-			Message: stepErr.GetMessage(),
-		}}
-		retry.NonRetriable = stepErr.GetNonRetriable()
-
-		if after := stepErr.GetRetryAfter(); after != nil {
-			d := after.AsDuration()
-			retry.After = &d
-		}
-	}
-
-	result, err := h.s.CompleteStep(ctx, domain.CompleteStepParams{
-		WorkerID: worker.ID,
-		Lease:    lease,
-		StepID:   req.GetStepId(),
-		Outcome:  outcome,
-	}, retry)
+	result, err := h.s.CompleteStep(ctx, completeStepParams(worker.ID, lease, req))
 	if err != nil {
 		return nil, fmt.Errorf("complete step: %w", err)
 	}
@@ -191,6 +171,33 @@ func registrationFromProto(req *runcoilv1.RegisterRequest) domain.Registration {
 	}
 
 	return reg
+}
+
+// completeStepParams reads one try of a Step: its outcome, and what the worker says about
+// retrying it.
+func completeStepParams(workerID uuid.UUID, lease domain.Lease, req *runcoilv1.CompleteStepRequest) domain.CompleteStepParams {
+	params := domain.CompleteStepParams{
+		WorkerID: workerID,
+		Lease:    lease,
+		StepID:   req.GetStepId(),
+		Outcome:  domain.StepOutcome{Output: req.GetOutput()},
+		Retry:    domain.StepRetry{Policy: retryPolicyFromProto(req.GetRetry())},
+	}
+
+	if stepErr := req.GetError(); stepErr != nil {
+		params.Outcome = domain.StepOutcome{Failure: &domain.Failure{
+			Code:    failureCodeFromProto(stepErr.GetKind()),
+			Message: stepErr.GetMessage(),
+		}}
+		params.Retry.NonRetriable = stepErr.GetNonRetriable()
+
+		if after := stepErr.GetRetryAfter(); after != nil {
+			d := after.AsDuration()
+			params.Retry.After = &d
+		}
+	}
+
+	return params
 }
 
 // retryPolicyFromProto reads a retry policy. Nil stays nil: no policy.

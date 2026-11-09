@@ -160,7 +160,10 @@ The policy comes from the first of these that sets it, field by field:
 2. the Task's, `runcoil.TaskRetry(policy)` in `NewTask`, kept with each Run when it is
    created;
 3. the server's default (`retry.*` in the server config): 4 attempts, 5s, 10s and 30s
-   apart, each spread by up to 20%.
+   apart.
+
+The server spreads each delay by up to 20% either way (`retry.jitter`), so Steps that
+failed together do not retry together. A `step.RetryAfter` delay is used as it is.
 
 ```go
 worker.NewTask("process-order", runcoil.HandlerFunc(processOrder),
@@ -181,12 +184,20 @@ id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
 
 - `MaxAttempts` counts every try, the first one included, and is at most 30. `Delays` are
   the waits before each retry, at most 32; the last one repeats.
+- `step.ExponentialDelays(initial, factor, limit, n)` builds growing delays:
+  `step.ExponentialDelays(time.Second, 2, time.Minute, 5)` is 1s, 2s, 4s, 8s and 16s.
 - A panic in a Step, or an output JSON cannot encode, is never tried again.
 - An error the handler returns outside any Step fails the Run at once.
 
 `runcoil.StartDeadline(d)` fails a Run of the Task with `start_deadline` when it has not
 started within `d`, for example because no worker was free. It applies to the first start
-only.
+only, and `d` must be greater than 0.
+
+> [!NOTE]
+> The server keeps a Task's retry policy and start deadline with each Run when the Run is
+> created. Nothing creates Runs that way yet: `Invoke` and schedules come later. Until then,
+> `runcoil.TaskRetry` and `runcoil.StartDeadline` are sent at Register and stored, but a Run
+> uses the Step's own policy, or else the server's default, and has no start deadline.
 
 ## Shutdown
 

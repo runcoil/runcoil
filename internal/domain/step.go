@@ -1,6 +1,12 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // StepKind is what a Step record records.
 type StepKind string
@@ -44,10 +50,55 @@ func (o StepOutcome) Status() StepStatus {
 }
 
 // CompleteStepParams stores the outcome of one try of a Do Step for the attempt that
-// holds Lease.
+// holds Lease. Retry is what the worker says about retrying a failed try.
 type CompleteStepParams struct {
 	WorkerID uuid.UUID
 	Lease    Lease
 	StepID   string
 	Outcome  StepOutcome
+	Retry    StepRetry
+}
+
+// StepRetry is what a worker says about retrying a failed try of a Step.
+type StepRetry struct {
+	// Policy is the Step's own policy. Nil: the Run's policy.
+	Policy *RetryPolicy
+	// NonRetriable says the Step must not be tried again.
+	NonRetriable bool
+	// After replaces the policy's delay before the next try.
+	After *time.Duration
+}
+
+// Validate checks the Step's own policy and that After is not negative.
+func (r StepRetry) Validate() error {
+	if r.Policy != nil {
+		if err := r.Policy.Validate(); err != nil {
+			return fmt.Errorf("retry policy: %w", err)
+		}
+	}
+
+	if r.After != nil && *r.After < 0 {
+		return errors.New("retry after must not be negative")
+	}
+
+	return nil
+}
+
+// RetryDecider decides whether a failed try of a Step is tried again. tries counts the
+// tries of the Step, this one included, and runPolicy is the Run's policy, nil when the
+// Run has none. It returns the wait before the next try, and false when the failure is
+// final.
+type RetryDecider func(tries int, runPolicy *RetryPolicy) (time.Duration, bool)
+
+// ScheduledRetry is the next try of a Step whose try failed.
+type ScheduledRetry struct {
+	NextAttemptAt time.Time
+	// TryCount is how many tries of the Step failed so far.
+	TryCount int
+}
+
+// StepResult is what one try of a Step leads to: its stored record, or a retry.
+type StepResult struct {
+	Record StepRecord
+	Retry  *ScheduledRetry
 }

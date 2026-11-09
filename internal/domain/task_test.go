@@ -7,6 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestRetryPolicyValidate(t *testing.T) {
+	assert.NoError(t, RetryPolicy{}.Validate())
+	assert.NoError(t, RetryPolicy{MaxAttempts: MaxRetryAttempts, Delays: make([]time.Duration, MaxRetryDelays)}.Validate())
+
+	assert.EqualError(t, RetryPolicy{MaxAttempts: 31}.Validate(), "max attempts must be between 0 and 30")
+	assert.EqualError(t, RetryPolicy{MaxAttempts: -1}.Validate(), "max attempts must be between 0 and 30")
+	assert.EqualError(t, RetryPolicy{Delays: make([]time.Duration, 33)}.Validate(), "at most 32 delays")
+	assert.EqualError(t, RetryPolicy{Delays: []time.Duration{-time.Second}}.Validate(), "delays must not be negative")
+}
+
 func TestRetryPolicyOr(t *testing.T) {
 	fallback := RetryPolicy{MaxAttempts: 4, Delays: []time.Duration{time.Second}}
 
@@ -42,10 +52,4 @@ func TestRetryPolicyDelay(t *testing.T) {
 
 	_, retry = RetryPolicy{MaxAttempts: 1}.Delay(1)
 	assert.False(t, retry, "one attempt: no retry")
-}
-
-func TestFailureCodeRetriable(t *testing.T) {
-	assert.True(t, FailureCodeError.Retriable())
-	assert.False(t, FailureCodePanic.Retriable())
-	assert.False(t, FailureCodeOutputNotEncodable.Retriable())
 }

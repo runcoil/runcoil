@@ -64,7 +64,12 @@ func (s *RunStore) CompleteStep(
 		}
 
 		if params.Outcome.Failure != nil {
-			retry, err := s.scheduleRetry(ctx, tx, params, tries, held.Config, decide)
+			retry, err := s.scheduleRetry(ctx, tx, scheduleRetryParams{
+				Step:   params,
+				Tries:  tries,
+				Config: held.Config,
+				Decide: decide,
+			})
 			if err != nil {
 				return fmt.Errorf("schedule retry: %w", err)
 			}
@@ -91,32 +96,36 @@ func (s *RunStore) CompleteStep(
 	return result, nil
 }
 
-// scheduleRetry asks decide whether the failed try is tried again and, when it is, moves
+// scheduleRetryParams is a failed try of a Step that may be tried again.
+type scheduleRetryParams struct {
+	Step domain.CompleteStepParams
+	// Tries counts the tries of the Step, this one included.
+	Tries int
+	// Config is the Run's runs.config.
+	Config json.RawMessage
+	Decide domain.RetryDecider
+}
+
+// scheduleRetry asks Decide whether the failed try is tried again and, when it is, moves
 // the Run to run_delayed. It returns nil when the failure is final.
-func (s *RunStore) scheduleRetry(
-	ctx context.Context,
-	tx DB,
-	params domain.CompleteStepParams,
-	tries int,
-	config json.RawMessage,
-	decide domain.RetryDecider,
-) (*domain.ScheduledRetry, error) {
-	runPolicy, err := runRetryPolicy(config)
+func (s *RunStore) scheduleRetry(ctx context.Context, tx DB, params scheduleRetryParams) (*domain.ScheduledRetry, error) {
+	runPolicy, err := runRetryPolicy(params.Config)
 	if err != nil {
 		return nil, fmt.Errorf("read run retry policy: %w", err)
 	}
 
-	delay, retry := decide(tries, runPolicy)
+	delay, retry := params.Decide(params.Tries, runPolicy)
 	if !retry {
 		return nil, nil //nolint:nilnil // No retry is not an error.
 	}
 
+	step := params.Step
 	row, err := s.queries.LeaseScheduleStepRetry(ctx, tx, sqlc.LeaseScheduleStepRetryParams{
 		Delay:      interval(&delay),
-		StepID:     params.StepID,
-		RunID:      params.Lease.RunID,
-		LeaseEpoch: params.Lease.Epoch,
-		WorkerID:   params.WorkerID,
+		StepID:     step.StepID,
+		RunID:      step.Lease.RunID,
+		LeaseEpoch: step.Lease.Epoch,
+		WorkerID:   step.WorkerID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("move run to run_delayed: %w", err)

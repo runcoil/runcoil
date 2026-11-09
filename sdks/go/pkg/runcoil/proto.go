@@ -89,12 +89,12 @@ func retryPolicyToProto(p *runstate.RetryPolicy) *runcoilv1.RetryPolicy {
 // taskDefinitionToProto converts what NewTask declared for a Task.
 func taskDefinitionToProto(t *task) *runcoilv1.TaskDefinition {
 	def := &runcoilv1.TaskDefinition{Name: t.name}
-	if t.retry != nil {
-		def.Retry = retryPolicyToProto(&runstate.RetryPolicy{MaxAttempts: t.retry.MaxAttempts, Delays: t.retry.Delays})
+	if r := t.cfg.retry; r != nil {
+		def.Retry = retryPolicyToProto(&runstate.RetryPolicy{MaxAttempts: r.MaxAttempts, Delays: r.Delays})
 	}
 
-	if t.startDeadline > 0 {
-		def.StartDeadline = durationpb.New(t.startDeadline)
+	if d := t.cfg.startDeadline; d != nil {
+		def.StartDeadline = durationpb.New(*d)
 	}
 
 	return def

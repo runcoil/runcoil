@@ -685,3 +685,55 @@ func TestTheWorkerRunsAtMostItsSlots(t *testing.T) {
 
 	assert.Equal(t, int32(2), most.Load())
 }
+
+func TestRegisterCarriesTheTaskOptions(t *testing.T) {
+	f, url := newFakeServer(t)
+	f.streams <- newFakeStream()
+
+	client, err := NewClient(URL(url), APIKey(testAPIKey))
+	require.NoError(t, err)
+
+	w, err := NewWorker(client, "shop")
+	require.NoError(t, err)
+
+	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
+	require.NoError(t, w.NewTask("charge", h,
+		TaskRetry(step.RetryPolicy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
+		StartDeadline(10*time.Minute),
+	))
+	require.NoError(t, w.NewTask("plain", h))
+
+	require.NoError(t, w.Start(context.Background()))
+	t.Cleanup(func() { _ = w.Shutdown(context.Background()) })
+
+	f.mu.Lock()
+	defs := f.regReqs[0].GetTasks()
+	f.mu.Unlock()
+
+	require.Len(t, defs, 2)
+	assert.Equal(t, uint32(5), defs[0].GetRetry().GetMaxAttempts())
+	assert.Equal(t, []time.Duration{time.Second, time.Minute},
+		[]time.Duration{defs[0].GetRetry().GetDelays()[0].AsDuration(), defs[0].GetRetry().GetDelays()[1].AsDuration()})
+	assert.Equal(t, 10*time.Minute, defs[0].GetStartDeadline().AsDuration())
+	assert.Nil(t, defs[1].GetRetry(), "no policy: the server's default")
+	assert.Nil(t, defs[1].GetStartDeadline(), "no deadline")
+}
+
+func TestNewTaskValidatesItsOptions(t *testing.T) {
+	client, err := NewClient(URL("http://localhost:7070"), APIKey("k"))
+	require.NoError(t, err)
+
+	w, err := NewWorker(client, "shop")
+	require.NoError(t, err)
+
+	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
+
+	assert.EqualError(t, w.NewTask("a", h, TaskRetry(step.RetryPolicy{MaxAttempts: 31})),
+		`new task "a": retry policy: max attempts must be between 0 and 30, got 31`)
+	assert.EqualError(t, w.NewTask("b", h, TaskRetry(step.RetryPolicy{Delays: []time.Duration{-time.Second}})),
+		`new task "b": retry policy: delays must not be negative, got -1s`)
+	assert.EqualError(t, w.NewTask("c", h, StartDeadline(-time.Second)),
+		`new task "c": start deadline must be greater than 0, got -1s`)
+	assert.EqualError(t, w.NewTask("d", h, StartDeadline(0)),
+		`new task "d": start deadline must be greater than 0, got 0s`)
+}

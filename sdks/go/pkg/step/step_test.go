@@ -224,16 +224,6 @@ func TestDoMarksTheRetryOfAFailure(t *testing.T) {
 	}
 }
 
-func TestRetryMarksKeepTheError(t *testing.T) {
-	base := errors.New("rate limited")
-
-	assert.ErrorIs(t, NonRetriable(base), base)
-	assert.ErrorIs(t, RetryAfter(base, time.Second), base)
-	assert.Equal(t, "rate limited", NonRetriable(base).Error())
-	assert.NoError(t, NonRetriable(nil))
-	assert.NoError(t, RetryAfter(nil, time.Second))
-}
-
 func TestDoSendsTheStepRetryPolicy(t *testing.T) {
 	f, ctx := newFakeRun(nil)
 

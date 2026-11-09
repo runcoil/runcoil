@@ -54,13 +54,13 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 		return zero, errors.New("step: id is required")
 	}
 
-	var o options
+	var c cfg
 	for _, opt := range opts {
-		opt(&o)
+		opt(&c)
 	}
 
-	if o.retry != nil {
-		if err := o.retry.Validate(); err != nil {
+	if c.retry != nil {
+		if err := c.retry.Validate(); err != nil {
 			return zero, fmt.Errorf("step %q: retry policy: %w", id, err)
 		}
 	}
@@ -104,8 +104,8 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	rep := report(stepID, out)
 	rep.StartedAt, rep.EndedAt = startedAt, endedAt
-	if o.retry != nil {
-		rep.Retry = o.retry.runstate()
+	if c.retry != nil {
+		rep.Retry = c.retry.runstate()
 	}
 
 	rec, ok := st.Report(ctx, rep)

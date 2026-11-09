@@ -35,8 +35,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Store moves Runs on time.
-type Store interface {
+// RunStore moves Runs on time.
+type RunStore interface {
 	PromoteDueDelayed(ctx context.Context, batchSize int) (int, error)
 	ExpireStartDeadlines(ctx context.Context, batchSize int) (int, error)
 }
@@ -45,9 +45,9 @@ type Store interface {
 // the queue, and fails queued Runs past their start deadline. Each sweep locks its rows
 // with SKIP LOCKED, so several servers can run one each.
 type Service struct {
-	cfg    Config
-	logger *slog.Logger
-	store  Store
+	cfg      Config
+	logger   *slog.Logger
+	runStore RunStore
 
 	running  atomic.Bool
 	stopped  chan struct{}
@@ -55,12 +55,12 @@ type Service struct {
 }
 
 // New creates the scheduler. It does nothing until Run.
-func New(cfg Config, logger *slog.Logger, store Store) *Service {
+func New(cfg Config, logger *slog.Logger, runStore RunStore) *Service {
 	return &Service{
-		cfg:     cfg,
-		logger:  logger,
-		store:   store,
-		stopped: make(chan struct{}),
+		cfg:      cfg,
+		logger:   logger,
+		runStore: runStore,
+		stopped:  make(chan struct{}),
 	}
 }
 
@@ -102,8 +102,8 @@ func (s *Service) Ready(_ context.Context) error {
 // sweep runs each job until it has nothing left that is due. A failed job is logged and
 // tried again at the next sweep.
 func (s *Service) sweep(ctx context.Context) {
-	s.drain(ctx, "promote due delayed runs", s.store.PromoteDueDelayed)
-	s.drain(ctx, "expire start deadlines", s.store.ExpireStartDeadlines)
+	s.drain(ctx, "promote due delayed runs", s.runStore.PromoteDueDelayed)
+	s.drain(ctx, "expire start deadlines", s.runStore.ExpireStartDeadlines)
 }
 
 // drain calls job until a call moves less than a full batch.

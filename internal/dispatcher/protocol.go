@@ -124,8 +124,12 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 // CompleteStep stores the outcome of one try of a Do Step and returns its record. A
 // failed try that may be tried again ends the attempt instead: the result carries the
 // retry, the Run waits for its next try, and the worker's slot is free.
-func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams, retry domain.StepRetry) (domain.StepResult, error) {
-	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, retry))
+func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
+	if err := params.Retry.Validate(); err != nil {
+		return domain.StepResult{}, apierr.Invalid(apierr.CodeInvalidRequest, err.Error())
+	}
+
+	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
 	if errors.Is(err, domain.ErrStaleLease) {
 		return domain.StepResult{}, errStaleLease
 	}

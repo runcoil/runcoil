@@ -44,16 +44,32 @@ func (p RetryPolicy) Validate() error {
 	return nil
 }
 
-// Option configures one Step in Do.
-type Option func(*options)
+// ExponentialDelays returns n delays that start at initial and grow by factor each time,
+// each at most limit: ExponentialDelays(time.Second, 2, time.Minute, 5) is 1s, 2s, 4s, 8s
+// and 16s. Use it for RetryPolicy.Delays; a policy holds at most 32 delays, and the last
+// one repeats.
+func ExponentialDelays(initial time.Duration, factor float64, limit time.Duration, n int) []time.Duration {
+	delays := make([]time.Duration, 0, max(n, 0))
+	d := float64(initial)
+	for range n {
+		delays = append(delays, min(time.Duration(d), limit))
+		d *= factor
+	}
 
-type options struct {
+	return delays
+}
+
+// Option configures one Step in Do.
+type Option func(*cfg)
+
+// cfg holds what the options of one Step set.
+type cfg struct {
 	retry *RetryPolicy
 }
 
 // Retry sets the Step's own retry policy, in place of the Task's.
 func Retry(p RetryPolicy) Option {
-	return func(o *options) { o.retry = &p }
+	return func(c *cfg) { c.retry = &p }
 }
 
 // NonRetriable marks err so that the Step that returns it is not tried again: the Step

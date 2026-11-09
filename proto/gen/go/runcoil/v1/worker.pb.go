@@ -1315,11 +1315,11 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendedAtB\x10\n" +
-	"\aoutcome\x12\x05\xbaH\x02\b\x01\"\xbb\x01\n" +
+	"\aoutcome\x12\x05\xbaH\x02\b\x01\"\xb1\x01\n" +
 	"\tStepError\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12#\n" +
-	"\rnon_retriable\x18\x02 \x01(\bR\fnonRetriable\x12D\n" +
-	"\vretry_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\b\xbaH\x05\xaa\x01\x022\x00R\n" +
+	"\rnon_retriable\x18\x02 \x01(\bR\fnonRetriable\x12:\n" +
+	"\vretry_after\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"retryAfter\x12)\n" +
 	"\x04kind\x18\x04 \x01(\x0e2\x15.runcoil.v1.ErrorKindR\x04kind\"\x99\x01\n" +
 	"\x14CompleteStepResponse\x120\n" +

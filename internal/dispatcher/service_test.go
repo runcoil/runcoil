@@ -26,9 +26,9 @@ func TestConfigValidate(t *testing.T) {
 		{name: "no claim interval", cfg: Config{Port: 7070, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second}, want: "claim interval must be greater than 0"},
 		{name: "no heartbeat interval", cfg: Config{Port: 7070, ClaimInterval: time.Second, WorkerTTL: time.Second}, want: "heartbeat interval must be greater than 0"},
 		{name: "ttl too short", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: time.Second}, want: "worker ttl must be longer than the heartbeat interval"},
-		{name: "retry attempts", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 31, Delays: []time.Duration{time.Second}}}, want: "retry max attempts must be between 1 and 30"},
-		{name: "retry delays", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4}}, want: "retry delays must be one or more durations of 0 or more"},
-		{name: "retry jitter", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 2}}, want: "retry jitter must be between 0 and 1"},
+		{name: "retry attempts", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 31, Delays: []time.Duration{time.Second}}}, want: "retry: policy: max attempts must be between 0 and 30"},
+		{name: "retry delays", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4}}, want: "retry: delays must list at least one duration"},
+		{name: "retry jitter", cfg: Config{Port: 7070, ClaimInterval: time.Second, HeartbeatInterval: time.Second, WorkerTTL: 2 * time.Second, Retry: RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 2}}, want: "retry: jitter must be between 0 and 1"},
 	}
 
 	for _, tt := range tests {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +39,36 @@ type RetryConfig struct {
 	Jitter      float64
 }
 
+// RegisterFlags declares the retry.* keys with their defaults and help text.
+func (c *RetryConfig) RegisterFlags(fs *pflag.FlagSet) {
+	fs.IntVar(&c.MaxAttempts, "retry.max-attempts", 4, "Attempts of a failed Step, the first one included, when neither the Step nor its Task sets them.")
+	fs.DurationSliceVar(&c.Delays, "retry.delays",
+		[]time.Duration{5 * time.Second, 10 * time.Second, 30 * time.Second, time.Minute, 3 * time.Minute, 10 * time.Minute, 30 * time.Minute, time.Hour},
+		"Delays before each retry when neither the Step nor its Task sets them. The last one repeats.")
+	fs.Float64Var(&c.Jitter, "retry.jitter", 0.2, "Fraction by which each retry delay is spread either way, from 0 to 1.")
+}
+
+// Validate checks the default policy against the limits of every policy, and the jitter.
+func (c *RetryConfig) Validate() error {
+	if c.MaxAttempts < 1 {
+		return errors.New("max attempts must be at least 1")
+	}
+
+	if len(c.Delays) == 0 {
+		return errors.New("delays must list at least one duration")
+	}
+
+	if err := c.Policy().Validate(); err != nil {
+		return fmt.Errorf("policy: %w", err)
+	}
+
+	if c.Jitter < 0 || c.Jitter > 1 {
+		return errors.New("jitter must be between 0 and 1")
+	}
+
+	return nil
+}
+
 // Policy returns the default policy.
 func (c RetryConfig) Policy() domain.RetryPolicy {
 	return domain.RetryPolicy{MaxAttempts: c.MaxAttempts, Delays: c.Delays}
@@ -51,11 +80,7 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&c.ClaimInterval, "dispatcher.claim-interval", time.Second, "How often the dispatcher claims queued Runs for the workers with free slots.")
 	fs.DurationVar(&c.HeartbeatInterval, "dispatcher.heartbeat-interval", 10*time.Second, "How often a worker sends a heartbeat, and the server a keepalive.")
 	fs.DurationVar(&c.WorkerTTL, "dispatcher.worker-ttl", 30*time.Second, "With no heartbeat for longer than this, a worker session ends.")
-	fs.IntVar(&c.Retry.MaxAttempts, "retry.max-attempts", 4, "Attempts of a failed Step, the first one included, when neither the Step nor its Task sets them.")
-	fs.DurationSliceVar(&c.Retry.Delays, "retry.delays",
-		[]time.Duration{5 * time.Second, 10 * time.Second, 30 * time.Second, time.Minute, 3 * time.Minute, 10 * time.Minute, 30 * time.Minute, time.Hour},
-		"Delays before each retry when neither the Step nor its Task sets them. The last one repeats.")
-	fs.Float64Var(&c.Retry.Jitter, "retry.jitter", 0.2, "Fraction by which each retry delay is spread either way, from 0 to 1.")
+	c.Retry.RegisterFlags(fs)
 }
 
 // Validate checks the configuration.
@@ -76,16 +101,8 @@ func (c *Config) Validate() error {
 		return errors.New("worker ttl must be longer than the heartbeat interval")
 	}
 
-	if c.Retry.MaxAttempts < 1 || c.Retry.MaxAttempts > domain.MaxRetryAttempts {
-		return fmt.Errorf("retry max attempts must be between 1 and %d", domain.MaxRetryAttempts)
-	}
-
-	if len(c.Retry.Delays) == 0 || slices.ContainsFunc(c.Retry.Delays, func(d time.Duration) bool { return d < 0 }) {
-		return errors.New("retry delays must be one or more durations of 0 or more")
-	}
-
-	if c.Retry.Jitter < 0 || c.Retry.Jitter > 1 {
-		return errors.New("retry jitter must be between 0 and 1")
+	if err := c.Retry.Validate(); err != nil {
+		return fmt.Errorf("retry: %w", err)
 	}
 
 	return nil
