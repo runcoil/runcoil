@@ -70,7 +70,7 @@ type WorkerStore interface {
 
 // RunStore keeps the Runs and their journal.
 type RunStore interface {
-	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, bool, error)
+	CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error)
 	FinishRun(ctx context.Context, workerID uuid.UUID, lease domain.Lease, end domain.RunEnd) (bool, error)
 }
 

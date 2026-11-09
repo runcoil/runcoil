@@ -123,7 +123,7 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 // CompleteStep stores the outcome of one try of a Do Step and returns its record. A
 // failed Step is not tried again yet: its failure is final.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
-	record, created, err := s.runStore.CompleteStep(ctx, params)
+	record, err := s.runStore.CompleteStep(ctx, params)
 	if errors.Is(err, domain.ErrStaleLease) {
 		return domain.StepRecord{}, errStaleLease
 	}
@@ -137,12 +137,10 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 		status = domain.StepStatusFailed
 	}
 
-	// created is false when a resend found the record already stored.
 	s.logger.DebugContext(ctx, "step recorded",
 		slog.String("run_id", params.Lease.RunID.String()),
 		slog.String("step_id", record.StepID),
 		slog.String("status", string(status)),
-		slog.Bool("created", created),
 	)
 
 	return record, nil
