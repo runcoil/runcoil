@@ -91,12 +91,31 @@ const resolvedMarkdownUrl =
 
         const resolveMode = () => readPref() ?? (media.matches ? "dark" : "light");
 
+        // Parts with a colour transition, such as the search box and the rail
+        // of the table of contents, would fade from the old theme while the
+        // page around them has already changed. Transitions are off for the
+        // one frame in which the theme changes.
+        const withoutTransitions = (change) => {
+          const off = document.createElement("style");
+          off.textContent = "*,*::before,*::after{transition:none!important}";
+          document.head.appendChild(off);
+          change();
+          // Reading a style applies the new colours before transitions return.
+          void getComputedStyle(document.documentElement).color;
+          setTimeout(() => off.remove(), 1);
+        };
+
         const applyTheme = () => {
           const root = document.documentElement;
           const mode = resolveMode();
-          if (mode === "dark") root.setAttribute("data-mode", "dark");
-          else root.removeAttribute("data-mode");
-          root.style.colorScheme = mode;
+          const current = root.getAttribute("data-mode") === "dark" ? "dark" : "light";
+          const setMode = () => {
+            if (mode === "dark") root.setAttribute("data-mode", "dark");
+            else root.removeAttribute("data-mode");
+            root.style.colorScheme = mode;
+          };
+          if (mode === current) setMode();
+          else withoutTransitions(setMode);
           document.querySelectorAll("[data-nb-theme-toggle]").forEach((b) => {
             b.setAttribute("data-nb-state", mode);
             b.setAttribute("aria-pressed", String(mode === "dark"));
