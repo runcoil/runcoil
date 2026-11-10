@@ -6,7 +6,7 @@ is saved on the server, so a Run that starts again skips the Steps already done.
 
 > [!NOTE]
 > **The SDK is in early development.** Expect breaking changes until the first release.
-> Retries, schedules, `Invoke` and waits are not here yet.
+> Schedules, `Invoke` and waits are not here yet.
 
 ## Install
 
@@ -130,8 +130,9 @@ again, `step.Do` returns the saved value, or the saved error, and does not call 
 - **The Step ID** is `id` the first time it is used in a Run. A later Step with the same
   `id` gets a counter: `charge`, `charge#2`, `charge#3`. A loop that calls one Step is
   fine, as long as it calls the Steps in the same order each time.
-- **A failed Step** returns `*step.Error`. The handler may run another Step as a fallback,
-  or return the error to fail the Run with that Step's ID. The error is rebuilt from the
+- **A failed Step** is tried again first (see [Retries](#retries)). Once it fails for
+  good, it returns `*step.Error`. The handler may run another Step as a fallback, or return
+  the error to fail the Run with that Step's ID. The error is rebuilt from the
   saved text, so `errors.Is` does not match your own error values; use `errors.As` with
   `*step.Error`.
 - **Outside a Run**, `step.Do` calls `fn` and returns its result, so handlers can be unit
@@ -146,6 +147,58 @@ after the worker lost its connection for too long:
 
 A Step function should return soon after its context is cancelled.
 
+## Retries
+
+When a Step's function returns an error, the server tries the Step again. Each retry is
+a new attempt of the Run: the handler stops inside `step.Do`, and later runs again from
+the start, replaying the Steps already done, until it reaches the failed Step and runs it
+again.
+
+The policy comes from the first of these that sets it, field by field:
+
+1. the Step's own, `step.Retry(policy)` in `step.Do`;
+2. the Task's, `runcoil.Retry(policy)` in `NewTask`, kept with each Run when it is
+   created;
+3. the server's default (`retry.*` in the server config): 4 attempts, 5s, 10s and 30s
+   apart.
+
+The server spreads each delay by up to 20% either way (`retry.jitter`), so Steps that
+failed together do not retry together. A `retry.After` delay is used as it is.
+
+```go
+worker.NewTask("process-order", runcoil.HandlerFunc(processOrder),
+	runcoil.Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
+)
+
+id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
+	id, err := pay(ctx)
+	if errors.Is(err, errCardDeclined) {
+		return "", retry.NonRetriable(err) // fail now
+	}
+	if errors.Is(err, errRateLimited) {
+		return "", retry.After(err, 30*time.Second) // wait this long instead
+	}
+	return id, err
+}, step.Retry(retry.Policy{MaxAttempts: 3}))
+```
+
+- `MaxAttempts` counts every try, the first one included, and is at most 30. `Delays` are
+  the waits before each retry, at most 32; the last one repeats.
+- `retry.Exponential(initial, factor, limit, n)` builds growing delays:
+  `retry.Exponential(time.Second, 2, time.Minute, 5)` is 1s, 2s, 4s, 8s and 16s.
+- A panic in a Step, or an output JSON cannot encode, is never tried again.
+- An error the handler returns outside any Step fails the Run at once.
+
+`runcoil.StartDeadline(d)` fails a Run of the Task with `start_deadline` when it has not
+started within `d`, for example because no worker was free. It applies to the first start
+only, and `d` must be greater than 0.
+
+> [!NOTE]
+> The server keeps a Task's retry policy and start deadline with each Run when the Run is
+> created. Nothing creates Runs that way yet: `Invoke` and schedules come later. Until then,
+> `runcoil.Retry` and `runcoil.StartDeadline` are sent at Register and stored, but a Run
+> uses the Step's own policy, or else the server's default, and has no start deadline.
+
 ## Shutdown
 
 `worker.Shutdown(ctx)` stops taking new Runs and waits for the running handlers. When
@@ -157,7 +210,7 @@ back later.
 
 The SDK logs to the logger given with `runcoil.Logger`, and logs nothing without one.
 
-- At info: registration, shutdown, and the start and end of an outage.
+- At info: registration, shutdown, a Step retry, and the start and end of an outage.
 - At debug: each Run and Step, and each reconnect attempt.
 - At warn and error: refused reports, panics, and lost connections.
 

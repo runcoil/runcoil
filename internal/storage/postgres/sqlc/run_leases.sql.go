@@ -7,8 +7,11 @@ package sqlc
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const leaseClaim = `-- name: LeaseClaim :many
@@ -113,10 +116,11 @@ func (q *Queries) LeaseListNotHeld(ctx context.Context, db DBTX, arg LeaseListNo
 }
 
 const leaseLock = `-- name: LeaseLock :one
-SELECT retry_step_id, retry_count
-FROM run_leases
-WHERE run_id = $1::uuid AND lease_epoch = $2::bigint AND worker_id = $3::uuid
-FOR UPDATE
+SELECT l.retry_step_id, l.retry_count, r.config
+FROM run_leases l
+JOIN runs r ON r.id = l.run_id
+WHERE l.run_id = $1::uuid AND l.lease_epoch = $2::bigint AND l.worker_id = $3::uuid
+FOR UPDATE OF l
 `
 
 type LeaseLockParams struct {
@@ -128,13 +132,15 @@ type LeaseLockParams struct {
 type LeaseLockRow struct {
 	RetryStepID *string
 	RetryCount  int16
+	Config      json.RawMessage
 }
 
-// First statement of every worker call on a Run.
+// First statement of every worker call on a Run. config is the Task's settings when the
+// Run was created.
 func (q *Queries) LeaseLock(ctx context.Context, db DBTX, arg LeaseLockParams) (LeaseLockRow, error) {
 	row := db.QueryRow(ctx, leaseLock, arg.RunID, arg.LeaseEpoch, arg.WorkerID)
 	var i LeaseLockRow
-	err := row.Scan(&i.RetryStepID, &i.RetryCount)
+	err := row.Scan(&i.RetryStepID, &i.RetryCount, &i.Config)
 	return i, err
 }
 
@@ -190,4 +196,46 @@ type LeaseResetStepRetryParams struct {
 func (q *Queries) LeaseResetStepRetry(ctx context.Context, db DBTX, arg LeaseResetStepRetryParams) error {
 	_, err := db.Exec(ctx, leaseResetStepRetry, arg.RunID, arg.StepID)
 	return err
+}
+
+const leaseScheduleStepRetry = `-- name: LeaseScheduleStepRetry :one
+WITH released AS (
+    DELETE FROM run_leases
+    WHERE run_id = $3::uuid AND lease_epoch = $4::bigint AND worker_id = $5::uuid
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count
+)
+INSERT INTO run_delayed (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+SELECT run_id, project_id, task_id, now() + $1::interval, $2::text,
+       CASE WHEN retry_step_id = $2::text THEN retry_count + 1 ELSE 1 END,
+       lost_count
+FROM released
+RETURNING retry_count, ready_at
+`
+
+type LeaseScheduleStepRetryParams struct {
+	Delay      pgtype.Interval
+	StepID     string
+	RunID      uuid.UUID
+	LeaseEpoch int64
+	WorkerID   uuid.UUID
+}
+
+type LeaseScheduleStepRetryRow struct {
+	RetryCount int16
+	ReadyAt    time.Time
+}
+
+// Ends the attempt and puts the Run in run_delayed until @delay has passed. retry_count
+// counts the failed tries of @step_id, and starts again at 1 when another Step fails.
+func (q *Queries) LeaseScheduleStepRetry(ctx context.Context, db DBTX, arg LeaseScheduleStepRetryParams) (LeaseScheduleStepRetryRow, error) {
+	row := db.QueryRow(ctx, leaseScheduleStepRetry,
+		arg.Delay,
+		arg.StepID,
+		arg.RunID,
+		arg.LeaseEpoch,
+		arg.WorkerID,
+	)
+	var i LeaseScheduleStepRetryRow
+	err := row.Scan(&i.RetryCount, &i.ReadyAt)
+	return i, err
 }

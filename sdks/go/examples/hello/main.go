@@ -9,19 +9,25 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 	"github.com/runcoil/runcoil/sdks/go/pkg/runcoil"
 	"github.com/runcoil/runcoil/sdks/go/pkg/step"
 )
 
 type greetInput struct {
 	Name string `json:"name"`
-	// FailAt names a Step that fails, to see a failed Run.
+	// FailAt names a Step that fails on every try, to see a failed Run: compose fails at
+	// once, as non-retriable; normalize and log fail after their retries.
 	FailAt string `json:"fail_at"`
 	// Pause makes the compose Step take this long, such as "5s", to see a Run in flight.
 	Pause string `json:"pause"`
+	// FailTimes makes the compose Step fail that many tries before it succeeds, to see
+	// retries. The count lives in this process.
+	FailTimes int `json:"fail_times"`
 }
 
 type greetOutput struct {
@@ -30,6 +36,9 @@ type greetOutput struct {
 
 type tasks struct {
 	logger *slog.Logger
+
+	mu    sync.Mutex
+	tries map[string]int // tries of the compose Step, by Run ID
 }
 
 func main() {
@@ -54,8 +63,11 @@ func run() error {
 		return fmt.Errorf("new worker: %w", err)
 	}
 
-	t := &tasks{logger: logger}
-	if err := worker.NewTask("greet", runcoil.HandlerFunc(t.greet)); err != nil {
+	t := &tasks{logger: logger, tries: map[string]int{}}
+	err = worker.NewTask("greet", runcoil.HandlerFunc(t.greet),
+		runcoil.Retry(retry.Policy{MaxAttempts: 4, Delays: []time.Duration{time.Second, 2 * time.Second}}),
+	)
+	if err != nil {
 		return fmt.Errorf("new task: %w", err)
 	}
 
@@ -89,7 +101,11 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 
 	greeting, err := step.Do(ctx, "compose", func(ctx context.Context) (string, error) {
 		if in.FailAt == "compose" {
-			return "", errors.New("compose failed")
+			return "", retry.NonRetriable(errors.New("compose failed"))
+		}
+
+		if t.try(ctx) <= in.FailTimes {
+			return "", errors.New("compose failed; it will be tried again")
 		}
 
 		if err := pause(ctx, in.Pause); err != nil {
@@ -120,6 +136,18 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 	}
 
 	return greetOutput{Greeting: greeting}, nil
+}
+
+// try counts one more try of the compose Step of the Run in ctx, and returns the count.
+func (t *tasks) try(ctx context.Context) int {
+	info, _ := runcoil.RunInfoFromContext(ctx)
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.tries[info.RunID]++
+
+	return t.tries[info.RunID]
 }
 
 // pause waits for d, a duration such as "5s", or until ctx ends. An empty d does not wait.

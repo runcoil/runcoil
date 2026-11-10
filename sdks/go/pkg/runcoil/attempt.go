@@ -263,6 +263,22 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 		return runstate.Record{}, false
 	}
 
+	if retry := resp.GetRetryScheduled(); retry != nil {
+		message := ""
+		if r.Failure != nil {
+			message = r.Failure.Message
+		}
+
+		logger.InfoContext(a.ctx, "step failed; retry scheduled",
+			slog.String("error", message),
+			slog.Int("try_count", int(retry.GetTryCount())),
+			slog.Time("next_attempt_at", retry.GetNextAttemptAt().AsTime()),
+		)
+		a.end()
+
+		return runstate.Record{}, false
+	}
+
 	rec := resp.GetRecord()
 	if rec == nil {
 		logger.ErrorContext(a.ctx, "step report answered without a record; attempt ended")

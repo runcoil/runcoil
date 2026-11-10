@@ -19,8 +19,14 @@ type Error = runstate.StepError
 
 // Do runs fn and returns its result. Wrap each call with a side effect, such as a payment
 // or an email, in Do. Its outcome is stored, so a Run that runs again returns the stored
-// value, or the stored *Error, and does not call fn again. A Step that fails returns
-// *Error, and the handler may run a fallback or return it to fail the Run.
+// value, or the stored *Error, and does not call fn again.
+//
+// A Step whose fn returns an error is tried again by its retry policy: Retry sets the
+// Step's own, otherwise the Task's applies. A retry ends the attempt and runs the Run
+// again later, so the handler stops inside Do. Wrap the error with retry.NonRetriable to
+// fail at once, or with retry.After to choose the wait. A panic, or an output that JSON
+// cannot encode, is never tried again. A Step that fails for good returns *Error, and
+// the handler may run a fallback or return it to fail the Run.
 //
 // The Step is stored under id the first time; a later Step with the same id in the same
 // Run gets a counter (charge, charge#2).
@@ -37,7 +43,7 @@ type Error = runstate.StepError
 //
 // Once the server takes the attempt back, Do stops the handler and reports nothing. A
 // Step function must return promptly when its context is cancelled.
-func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, error)) (T, error) {
+func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, error), opts ...Option) (T, error) {
 	st, inRun := runstate.From(ctx)
 	if !inRun {
 		return fn(ctx)
@@ -46,6 +52,17 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 	var zero T
 	if id == "" {
 		return zero, errors.New("step: id is required")
+	}
+
+	var c cfg
+	for _, opt := range opts {
+		opt(&c)
+	}
+
+	if c.retry != nil {
+		if err := c.retry.Validate(); err != nil {
+			return zero, fmt.Errorf("step %q: retry policy: %w", id, err)
+		}
 	}
 
 	if !st.Open() {
@@ -87,10 +104,14 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	rep := report(stepID, out)
 	rep.StartedAt, rep.EndedAt = startedAt, endedAt
+	if c.retry != nil {
+		rep.Retry = retryPolicyToRunstate(*c.retry)
+	}
 
 	rec, ok := st.Report(ctx, rep)
 	if !ok || !st.Open() {
-		// The attempt ended while the Step was reported: the code after it must not run.
+		// The attempt ended while the Step was reported, or the Step will be tried again
+		// in a later attempt: the code after it must not run.
 		runstate.Unwind()
 	}
 
@@ -151,6 +172,7 @@ func report[T any](stepID string, out outcome[T]) runstate.StepReport {
 		rep.Failure = &runstate.Failure{Kind: runstate.KindPanic, Message: fmt.Sprintf("step panicked: %v", out.panicValue)}
 	case out.err != nil:
 		rep.Failure = &runstate.Failure{Kind: runstate.KindError, Message: out.err.Error()}
+		rep.Failure.MarkRetry(out.err)
 	default:
 		b, err := json.Marshal(out.value)
 		if err != nil {

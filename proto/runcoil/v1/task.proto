@@ -11,12 +11,13 @@ message TaskDefinition {
     max_bytes: 255
   }];
   RetryPolicy retry = 2;
+  // Only for the first start. Unset: no deadline.
   google.protobuf.Duration start_deadline = 3;
 }
 
 message RetryPolicy {
-  // The first attempt included.
+  // The first attempt included. Zero: the server's default.
   uint32 max_attempts = 1;
-  // The last delay repeats.
+  // The last delay repeats. Empty: the server's default.
   repeated google.protobuf.Duration delays = 2;
 }

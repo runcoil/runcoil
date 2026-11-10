@@ -3,6 +3,7 @@ package runcoil
 import (
 	"errors"
 
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
@@ -46,15 +47,22 @@ func stepReportToProto(lease *runcoilv1.Lease, r runstate.StepReport) *runcoilv1
 	req := &runcoilv1.CompleteStepRequest{
 		Lease:     lease,
 		StepId:    r.StepID,
+		Retry:     retryPolicyToProto(r.Retry),
 		StartedAt: timestamppb.New(r.StartedAt),
 		EndedAt:   timestamppb.New(r.EndedAt),
 	}
 
 	if r.Failure != nil {
-		req.Outcome = &runcoilv1.CompleteStepRequest_Error{Error: &runcoilv1.StepError{
-			Kind:    errorKindToProto(r.Failure.Kind),
-			Message: r.Failure.Message,
-		}}
+		stepErr := &runcoilv1.StepError{
+			Kind:         errorKindToProto(r.Failure.Kind),
+			Message:      r.Failure.Message,
+			NonRetriable: r.Failure.NonRetriable,
+		}
+		if r.Failure.RetryAfter != nil {
+			stepErr.RetryAfter = durationpb.New(*r.Failure.RetryAfter)
+		}
+
+		req.Outcome = &runcoilv1.CompleteStepRequest_Error{Error: stepErr}
 
 		return req
 	}
@@ -62,6 +70,34 @@ func stepReportToProto(lease *runcoilv1.Lease, r runstate.StepReport) *runcoilv1
 	req.Outcome = &runcoilv1.CompleteStepRequest_Output{Output: r.Output}
 
 	return req
+}
+
+// retryPolicyToProto converts a retry policy. Nil stays nil: the Task's policy applies.
+func retryPolicyToProto(p *runstate.RetryPolicy) *runcoilv1.RetryPolicy {
+	if p == nil {
+		return nil
+	}
+
+	policy := &runcoilv1.RetryPolicy{MaxAttempts: uint32(p.MaxAttempts)} //nolint:gosec // Validate keeps it at most 30.
+	for _, d := range p.Delays {
+		policy.Delays = append(policy.Delays, durationpb.New(d))
+	}
+
+	return policy
+}
+
+// taskDefinitionToProto converts what NewTask declared for a Task.
+func taskDefinitionToProto(t *task) *runcoilv1.TaskDefinition {
+	def := &runcoilv1.TaskDefinition{Name: t.name}
+	if r := t.cfg.retry; r != nil {
+		def.Retry = retryPolicyToProto(&runstate.RetryPolicy{MaxAttempts: r.MaxAttempts, Delays: r.Delays})
+	}
+
+	if d := t.cfg.startDeadline; d != nil {
+		def.StartDeadline = durationpb.New(*d)
+	}
+
+	return def
 }
 
 // stepRecordsFromProto reads the journal an Assign carries, by Step ID.

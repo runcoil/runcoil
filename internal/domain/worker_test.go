@@ -2,6 +2,7 @@ package domain
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,4 +62,28 @@ func TestNewWorkerSessionValidates(t *testing.T) {
 	regErr, ok := AsRegistrationError(err)
 	require.True(t, ok)
 	assert.Equal(t, "slots must be between 1 and 100", regErr.Message)
+}
+
+func TestRegistrationValidatesTaskSettings(t *testing.T) {
+	zero := time.Duration(0)
+
+	tests := []struct {
+		name string
+		def  TaskDefinition
+		want string
+	}{
+		{name: "too many attempts", def: TaskDefinition{Name: "a", Retry: &RetryPolicy{MaxAttempts: 31}}, want: "retry policy: max attempts must be between 0 and 30"},
+		{name: "zero start deadline", def: TaskDefinition{Name: "a", StartDeadline: &zero}, want: "start deadline must be greater than 0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Registration{App: "shop", Slots: 1, Tasks: []TaskDefinition{tt.def}}.Validate()
+
+			regErr, ok := AsRegistrationError(err)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, regErr.Message)
+			assert.Equal(t, "a", regErr.TaskName)
+		})
+	}
 }

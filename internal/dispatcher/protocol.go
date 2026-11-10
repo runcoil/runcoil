@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	mathrand "math/rand/v2"
 	"time"
 
 	"github.com/runcoil/runcoil/internal/apierr"
@@ -121,29 +122,89 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 }
 
 // CompleteStep stores the outcome of one try of a Do Step and returns its record. A
-// failed Step is not tried again yet: its failure is final.
-func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepRecord, error) {
-	record, err := s.runStore.CompleteStep(ctx, params)
+// failed try that may be tried again ends the attempt instead: the result carries the
+// retry, the Run waits for its next try, and the worker's slot is free.
+func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
+	if err := params.Retry.Validate(); err != nil {
+		return domain.StepResult{}, apierr.Invalid(apierr.CodeInvalidRequest, err.Error())
+	}
+
+	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
 	if errors.Is(err, domain.ErrStaleLease) {
-		return domain.StepRecord{}, errStaleLease
+		return domain.StepResult{}, errStaleLease
 	}
 
 	if err != nil {
-		return domain.StepRecord{}, fmt.Errorf("complete step: %w", err)
+		return domain.StepResult{}, fmt.Errorf("complete step: %w", err)
+	}
+
+	if result.Retry != nil {
+		s.release(params.WorkerID)
+
+		s.logger.DebugContext(ctx, "step retry scheduled",
+			slog.String("run_id", params.Lease.RunID.String()),
+			slog.String("step_id", params.StepID),
+			slog.Int("try_count", result.Retry.TryCount),
+			slog.Time("next_attempt_at", result.Retry.NextAttemptAt),
+		)
+
+		return result, nil
 	}
 
 	status := domain.StepStatusSucceeded
-	if record.Failure != nil {
+	if result.Record.Failure != nil {
 		status = domain.StepStatusFailed
 	}
 
 	s.logger.DebugContext(ctx, "step recorded",
 		slog.String("run_id", params.Lease.RunID.String()),
-		slog.String("step_id", record.StepID),
+		slog.String("step_id", result.Record.StepID),
 		slog.String("status", string(status)),
 	)
 
-	return record, nil
+	return result, nil
+}
+
+// retryDecider decides the next try of a failed Step. The Step's own policy comes first,
+// then the Run's, then the server's default, field by field. A retry_after from the worker
+// replaces the policy's delay; any other delay is spread by the jitter.
+func (s *Service) retryDecider(outcome domain.StepOutcome, retry domain.StepRetry) domain.RetryDecider {
+	return func(tries int, runPolicy *domain.RetryPolicy) (time.Duration, bool) {
+		if outcome.Failure == nil || !outcome.Failure.Code.Retriable() || retry.NonRetriable {
+			return 0, false
+		}
+
+		policy := s.cfg.Retry.Policy()
+		if runPolicy != nil {
+			policy = runPolicy.Or(policy)
+		}
+
+		if retry.Policy != nil {
+			policy = retry.Policy.Or(policy)
+		}
+
+		delay, ok := policy.Delay(tries)
+		if !ok {
+			return 0, false
+		}
+
+		if retry.After != nil {
+			return *retry.After, true
+		}
+
+		return jitter(delay, s.cfg.Retry.Jitter), true
+	}
+}
+
+// jitter spreads d by up to fraction of itself, either way.
+func jitter(d time.Duration, fraction float64) time.Duration {
+	if d <= 0 || fraction <= 0 {
+		return d
+	}
+
+	spread := float64(d) * fraction * (2*mathrand.Float64() - 1) //nolint:gosec // Jitter needs no secure random.
+
+	return d + time.Duration(spread)
 }
 
 // CompleteRun ends the attempt with the handler's result.

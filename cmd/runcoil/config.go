@@ -8,6 +8,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api"
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
+	"github.com/runcoil/runcoil/internal/scheduler"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
 
@@ -18,6 +19,7 @@ type Config struct {
 	Postgres    postgres.Config
 	API         api.Config
 	Dispatcher  dispatcher.Config
+	Scheduler   scheduler.Config
 }
 
 // RegisterFlags registers the flags of every section.
@@ -27,6 +29,7 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	c.Postgres.RegisterFlags(fs)
 	c.API.RegisterFlags(fs)
 	c.Dispatcher.RegisterFlags(fs)
+	c.Scheduler.RegisterFlags(fs)
 }
 
 // Validate checks every section of the configuration.
@@ -45,6 +48,10 @@ func (c *Config) Validate() error {
 
 	if err := c.Dispatcher.Validate(); err != nil {
 		return fmt.Errorf("dispatcher: %w", err)
+	}
+
+	if err := c.Scheduler.Validate(); err != nil {
+		return fmt.Errorf("scheduler: %w", err)
 	}
 
 	return nil

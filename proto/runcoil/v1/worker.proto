@@ -91,6 +91,7 @@ message CompleteStepRequest {
 message StepError {
   string message = 1;
   bool non_retriable = 2;
+  // Replaces the policy's delay before the next try.
   google.protobuf.Duration retry_after = 3;
   ErrorKind kind = 4;
 }

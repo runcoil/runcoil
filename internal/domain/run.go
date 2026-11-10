@@ -35,6 +35,12 @@ const (
 	FailureCodeOutputNotEncodable FailureCode = "output_not_encodable"
 )
 
+// Retriable reports whether a failure of this code may be tried again. A panic and an
+// output that cannot be encoded fail the same way every time.
+func (c FailureCode) Retriable() bool {
+	return c == FailureCodeError
+}
+
 // Failure is why a Step or a Run failed. StepID is set on a Run that failed with a
 // Step's final error.
 type Failure struct {

@@ -25,3 +25,9 @@ func TestRunStatusEnded(t *testing.T) {
 	assert.True(t, RunStatusSucceeded.Ended())
 	assert.True(t, RunStatusFailed.Ended())
 }
+
+func TestFailureCodeRetriable(t *testing.T) {
+	assert.True(t, FailureCodeError.Retriable())
+	assert.False(t, FailureCodePanic.Retriable())
+	assert.False(t, FailureCodeOutputNotEncodable.Retriable())
+}

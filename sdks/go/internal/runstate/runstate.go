@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -28,9 +29,9 @@ type State struct {
 	Open func() bool
 
 	// Report sends the outcome of one Step to the server and waits for its answer. It
-	// returns the stored record and true. It returns false when the attempt ended or
-	// could not report: the worker has then ended the attempt, and the caller must
-	// Unwind.
+	// returns the stored record and true. It returns false when the attempt ended, could
+	// not report, or the server scheduled a retry of the Step: the worker has then ended
+	// the attempt, and the caller must Unwind.
 	Report func(ctx context.Context, r StepReport) (Record, bool)
 
 	mu       sync.Mutex
@@ -58,9 +59,11 @@ type Record struct {
 
 // StepReport is the outcome of one Step, as the SDK sends it.
 type StepReport struct {
-	StepID    string
-	Output    []byte
-	Failure   *Failure
+	StepID  string
+	Output  []byte
+	Failure *Failure
+	// Retry is the Step's own retry policy. Nil: the Task's.
+	Retry     *RetryPolicy
 	StartedAt time.Time
 	EndedAt   time.Time
 }
@@ -69,6 +72,46 @@ type StepReport struct {
 type Failure struct {
 	Kind    string
 	Message string
+	// NonRetriable asks the server not to try the Step again.
+	NonRetriable bool
+	// RetryAfter replaces the policy's delay before the next try.
+	RetryAfter *time.Duration
+}
+
+// RetryPolicy says how often and how late a failed Step is tried again. A zero field is
+// the server's default.
+type RetryPolicy struct {
+	MaxAttempts int
+	Delays      []time.Duration
+}
+
+// NonRetriableError is an error the application marked with retry.NonRetriable.
+type NonRetriableError struct {
+	Err error
+}
+
+func (e *NonRetriableError) Error() string { return e.Err.Error() }
+func (e *NonRetriableError) Unwrap() error { return e.Err }
+
+// RetryAfterError is an error the application marked with retry.After.
+type RetryAfterError struct {
+	Err   error
+	After time.Duration
+}
+
+func (e *RetryAfterError) Error() string { return e.Err.Error() }
+func (e *RetryAfterError) Unwrap() error { return e.Err }
+
+// MarkRetry adds to f what the marks on err say about retrying.
+func (f *Failure) MarkRetry(err error) {
+	var nr *NonRetriableError
+	f.NonRetriable = errors.As(err, &nr)
+
+	var ra *RetryAfterError
+	if errors.As(err, &ra) {
+		after := ra.After
+		f.RetryAfter = &after
+	}
 }
 
 // StepID returns the id a Step named name is stored under in this attempt: the name the

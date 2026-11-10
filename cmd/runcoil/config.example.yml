@@ -21,3 +21,12 @@ dispatcher:
   claim_interval: 1s
   heartbeat_interval: 10s
   worker_ttl: 30s
+
+retry:
+  max_attempts: 4
+  delays: [5s, 10s, 30s, 1m, 3m, 10m, 30m, 1h]
+  jitter: 0.2
+
+scheduler:
+  requeue_delayed_runs_interval: 1s
+  start_deadline_check_interval: 1s

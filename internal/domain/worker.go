@@ -28,8 +28,8 @@ func (e *RegistrationError) Error() string {
 	return e.Message
 }
 
-// Validate checks what the request rules cannot: the slots, and that each Task is
-// declared once.
+// Validate checks what the request rules do not: the slots, that each Task is declared
+// once, and the limits of each Task's retry policy and start deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {
 		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
@@ -46,6 +46,16 @@ func (r Registration) Validate() error {
 		}
 
 		seen[def.Name] = struct{}{}
+
+		if def.Retry != nil {
+			if err := def.Retry.Validate(); err != nil {
+				return &RegistrationError{Message: "retry policy: " + err.Error(), TaskName: def.Name}
+			}
+		}
+
+		if def.StartDeadline != nil && *def.StartDeadline <= 0 {
+			return &RegistrationError{Message: "start deadline must be greater than 0", TaskName: def.Name}
+		}
 	}
 
 	return nil

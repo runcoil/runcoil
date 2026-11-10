@@ -48,11 +48,28 @@ WHERE NOT EXISTS (
 );
 
 -- name: LeaseLock :one
--- First statement of every worker call on a Run.
-SELECT retry_step_id, retry_count
-FROM run_leases
-WHERE run_id = @run_id::uuid AND lease_epoch = @lease_epoch::bigint AND worker_id = @worker_id::uuid
-FOR UPDATE;
+-- First statement of every worker call on a Run. config is the Task's settings when the
+-- Run was created.
+SELECT l.retry_step_id, l.retry_count, r.config
+FROM run_leases l
+JOIN runs r ON r.id = l.run_id
+WHERE l.run_id = @run_id::uuid AND l.lease_epoch = @lease_epoch::bigint AND l.worker_id = @worker_id::uuid
+FOR UPDATE OF l;
+
+-- name: LeaseScheduleStepRetry :one
+-- Ends the attempt and puts the Run in run_delayed until @delay has passed. retry_count
+-- counts the failed tries of @step_id, and starts again at 1 when another Step fails.
+WITH released AS (
+    DELETE FROM run_leases
+    WHERE run_id = @run_id::uuid AND lease_epoch = @lease_epoch::bigint AND worker_id = @worker_id::uuid
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count
+)
+INSERT INTO run_delayed (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+SELECT run_id, project_id, task_id, now() + @delay::interval, @step_id::text,
+       CASE WHEN retry_step_id = @step_id::text THEN retry_count + 1 ELSE 1 END,
+       lost_count
+FROM released
+RETURNING retry_count, ready_at;
 
 -- name: LeaseResetStepRetry :exec
 UPDATE run_leases

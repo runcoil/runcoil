@@ -796,11 +796,12 @@ func (*CompleteStepRequest_Output) isCompleteStepRequest_Outcome() {}
 func (*CompleteStepRequest_Error) isCompleteStepRequest_Outcome() {}
 
 type StepError struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	NonRetriable  bool                   `protobuf:"varint,2,opt,name=non_retriable,json=nonRetriable,proto3" json:"non_retriable,omitempty"`
-	RetryAfter    *durationpb.Duration   `protobuf:"bytes,3,opt,name=retry_after,json=retryAfter,proto3" json:"retry_after,omitempty"`
-	Kind          ErrorKind              `protobuf:"varint,4,opt,name=kind,proto3,enum=runcoil.v1.ErrorKind" json:"kind,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Message      string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	NonRetriable bool                   `protobuf:"varint,2,opt,name=non_retriable,json=nonRetriable,proto3" json:"non_retriable,omitempty"`
+	// Replaces the policy's delay before the next try.
+	RetryAfter    *durationpb.Duration `protobuf:"bytes,3,opt,name=retry_after,json=retryAfter,proto3" json:"retry_after,omitempty"`
+	Kind          ErrorKind            `protobuf:"varint,4,opt,name=kind,proto3,enum=runcoil.v1.ErrorKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

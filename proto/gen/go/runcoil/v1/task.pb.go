@@ -24,10 +24,11 @@ const (
 )
 
 type TaskDefinition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Retry         *RetryPolicy           `protobuf:"bytes,2,opt,name=retry,proto3" json:"retry,omitempty"`
-	StartDeadline *durationpb.Duration   `protobuf:"bytes,3,opt,name=start_deadline,json=startDeadline,proto3" json:"start_deadline,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Retry *RetryPolicy           `protobuf:"bytes,2,opt,name=retry,proto3" json:"retry,omitempty"`
+	// Only for the first start. Unset: no deadline.
+	StartDeadline *durationpb.Duration `protobuf:"bytes,3,opt,name=start_deadline,json=startDeadline,proto3" json:"start_deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,9 +86,9 @@ func (x *TaskDefinition) GetStartDeadline() *durationpb.Duration {
 
 type RetryPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The first attempt included.
+	// The first attempt included. Zero: the server's default.
 	MaxAttempts uint32 `protobuf:"varint,1,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
-	// The last delay repeats.
+	// The last delay repeats. Empty: the server's default.
 	Delays        []*durationpb.Duration `protobuf:"bytes,2,rep,name=delays,proto3" json:"delays,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
