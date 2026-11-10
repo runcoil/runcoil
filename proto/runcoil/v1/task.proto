@@ -13,6 +13,8 @@ message TaskDefinition {
   RetryPolicy retry = 2;
   // Only for the first start. Unset: no deadline.
   google.protobuf.Duration start_deadline = 3;
+  // Unset: the Task has no schedule, and an earlier one is removed.
+  Schedule schedule = 4;
 }
 
 message RetryPolicy {
@@ -20,4 +22,21 @@ message RetryPolicy {
   uint32 max_attempts = 1;
   // The last delay repeats. Empty: the server's default.
   repeated google.protobuf.Duration delays = 2;
+}
+
+// A cron schedule, read in UTC.
+message Schedule {
+  // Five fields, or six with seconds first. The server parses it at Register.
+  string cron = 1;
+  OverlapPolicy overlap = 2;
+}
+
+// What a tick does while the schedule's last Run has not ended.
+enum OverlapPolicy {
+  // Treated as ALLOW.
+  OVERLAP_POLICY_UNSPECIFIED = 0;
+  // Create the Run anyway.
+  OVERLAP_POLICY_ALLOW = 1;
+  // Create no Run for this tick.
+  OVERLAP_POLICY_SKIP = 2;
 }
