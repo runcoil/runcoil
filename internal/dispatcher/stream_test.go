@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,10 +36,7 @@ func newStreamService(t *testing.T, store WorkerStore) *Service {
 	t.Helper()
 
 	cfg := Config{Port: 7070, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour}
-	s, err := New(cfg, slog.New(slog.DiscardHandler), store, nil)
-	require.NoError(t, err)
-
-	return s
+	return New(cfg, slog.New(slog.DiscardHandler), store, nil)
 }
 
 func newStream(workerID uuid.UUID, slots, free, buffer int) *stream {

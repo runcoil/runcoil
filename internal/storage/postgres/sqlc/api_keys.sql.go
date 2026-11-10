@@ -8,7 +8,7 @@ package sqlc
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const apiKeyGetForRegister = `-- name: ApiKeyGetForRegister :one

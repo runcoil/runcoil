@@ -61,11 +61,7 @@ func run() error {
 	workerStore := postgres.NewWorkerStore(db, queries)
 	runStore := postgres.NewRunStore(db, queries)
 
-	dispatcherService, err := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
-	if err != nil {
-		return fmt.Errorf("new dispatcher service: %w", err)
-	}
-
+	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
 	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore)
 
 	// The API serves the health checks of the whole process, so the probes call one port.

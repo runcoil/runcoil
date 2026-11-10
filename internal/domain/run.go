@@ -2,8 +2,7 @@ package domain
 
 import (
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // RunStatus is where a Run is in its life.

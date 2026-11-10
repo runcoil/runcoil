@@ -3,8 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // MaxSlots is the most Runs one worker process may run at once.
@@ -84,22 +83,12 @@ func NewWorkerSession(reg Registration, tokenHash []byte) (WorkerSession, error)
 		return WorkerSession{}, fmt.Errorf("validate registration: %w", err)
 	}
 
-	id, err := uuid.NewV7()
-	if err != nil {
-		return WorkerSession{}, fmt.Errorf("new worker id: %w", err)
-	}
-
 	taskIDs := make([]uuid.UUID, 0, len(reg.Tasks))
 	for range reg.Tasks {
-		taskID, err := uuid.NewV7()
-		if err != nil {
-			return WorkerSession{}, fmt.Errorf("new task id: %w", err)
-		}
-
-		taskIDs = append(taskIDs, taskID)
+		taskIDs = append(taskIDs, uuid.NewV7())
 	}
 
-	return WorkerSession{ID: id, TokenHash: tokenHash, Registration: reg, TaskIDs: taskIDs}, nil
+	return WorkerSession{ID: uuid.NewV7(), TokenHash: tokenHash, Registration: reg, TaskIDs: taskIDs}, nil
 }
 
 // Worker is a live worker session.
