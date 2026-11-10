@@ -18,12 +18,11 @@ pnpm preview    # serve dist/, with search
 Check the site before you open a pull request:
 
 ```sh
-pnpm lint:docs
 pnpm typecheck
 pnpm build && pnpm check
 ```
 
-`Docs CI` runs the same commands. `Docs Release` deploys `main` to Cloudflare.
+`pnpm check` runs the lint rules too, and needs the build. `Docs CI` runs the same commands. `Docs Release` deploys `main` to Cloudflare.
 
 ## Write a page
 
