@@ -1,0 +1,67 @@
+name: Docs CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-ci.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-ci.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: docs
+
+jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: docs/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: docs/.nvmrc
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+
+  # The audit runs the lint rules and reads the built site, so it runs after the build.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: docs/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: docs/.nvmrc
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run check

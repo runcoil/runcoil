@@ -6,11 +6,13 @@ on:
     paths:
       - '**'
       - '!ui/**'
+      - '!docs/**'
   push:
     branches: [main]
     paths:
       - '**'
       - '!ui/**'
+      - '!docs/**'
 
 permissions:
   contents: read

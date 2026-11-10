@@ -11,3 +11,6 @@ bin
 **/*.swp
 **/*.swo
 **/.DS_Store
+
+# The docs site has its own build and is not part of the server image
+docs

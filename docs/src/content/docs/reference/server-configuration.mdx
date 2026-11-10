@@ -1,0 +1,84 @@
+---
+title: Server configuration
+description: Every setting of the Runcoil server with its flag, environment variable, and default, and the order in which the server reads them.
+sidebar:
+  order: 1
+---
+
+The `runcoil` server reads each setting from a YAML file, the environment, or a flag.
+
+## Sources
+
+The server reads a setting from these sources. A later source wins over an earlier one.
+
+1. The default.
+2. The YAML file passed with `--config`. A key is the flag name, nested at each dot, with underscores: `dispatcher.worker-ttl` is `worker_ttl` under `dispatcher`.
+3. The environment variable. The name is the flag name in upper case with underscores: `DISPATCHER_WORKER_TTL`.
+4. The flag: `--dispatcher.worker-ttl=30s`.
+
+The server does not read a `.env` file. A duration is a Go duration, such as `10s` or `1m`.
+
+## Settings
+
+### Server
+
+| Flag | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `--auto-migrate` | `AUTO_MIGRATE` | `false` | Apply the pending database migrations at boot |
+| `--api.port` | `API_PORT` | `8080` | Port of the API and the health checks, `/livez` and `/readyz` |
+| `--log.level` | `LOG_LEVEL` | `info` | Lowest level written: `debug`, `info`, `warn`, or `error` |
+| `--log.format` | `LOG_FORMAT` | `text` | `text` for a terminal, `json` for production |
+
+### PostgreSQL
+
+| Flag | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `--postgres.host` | `POSTGRES_HOST` | `localhost` | Host |
+| `--postgres.port` | `POSTGRES_PORT` | `5432` | Port |
+| `--postgres.user` | `POSTGRES_USER` | `postgres` | User |
+| `--postgres.password` | `POSTGRES_PASSWORD` | `postgres` | Password |
+| `--postgres.db` | `POSTGRES_DB` | `postgres` | Database |
+| `--postgres.ssl-mode` | `POSTGRES_SSL_MODE` | `disable` | TLS mode: `disable`, `require`, or `verify-full` |
+| `--postgres.max-conns` | `POSTGRES_MAX_CONNS` | `10` | Most connections in the pool |
+
+### Workers
+
+| Flag | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `--dispatcher.port` | `DISPATCHER_PORT` | `7070` | Port that workers connect to |
+| `--dispatcher.claim-interval` | `DISPATCHER_CLAIM_INTERVAL` | `1s` | How often the server claims queued Runs for the workers with free slots |
+| `--dispatcher.heartbeat-interval` | `DISPATCHER_HEARTBEAT_INTERVAL` | `10s` | How often a worker sends a heartbeat, and the server a keepalive |
+| `--dispatcher.worker-ttl` | `DISPATCHER_WORKER_TTL` | `30s` | With no heartbeat for longer than this, a worker session ends. Must be longer than the heartbeat interval |
+
+### Retries
+
+| Flag | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `--retry.max-attempts` | `RETRY_MAX_ATTEMPTS` | `4` | Attempts of a failed Step, the first one included, when neither the Step nor its Task sets them |
+| `--retry.delays` | `RETRY_DELAYS` | `5s,10s,30s,1m,3m,10m,30m,1h` | Delays before each retry when neither the Step nor its Task sets them. The last one repeats |
+| `--retry.jitter` | `RETRY_JITTER` | `0.2` | Fraction by which each retry delay is spread either way, from 0 to 1 |
+
+### Scheduler
+
+| Flag | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `--scheduler.requeue-delayed-runs-interval` | `SCHEDULER_REQUEUE_DELAYED_RUNS_INTERVAL` | `1s` | How often Runs whose wait is over, such as the delay before a retry, go back to the queue |
+| `--scheduler.start-deadline-check-interval` | `SCHEDULER_START_DEADLINE_CHECK_INTERVAL` | `1s` | How often the server fails queued Runs that did not start before their start deadline |
+
+## Example file
+
+```yaml
+auto_migrate: true
+
+log:
+  level: info
+  format: json
+
+postgres:
+  host: db.internal
+  ssl_mode: verify-full
+
+retry:
+  max_attempts: 6
+  delays: [1s, 5s, 30s]
+```

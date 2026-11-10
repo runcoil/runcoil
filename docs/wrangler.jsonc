@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "runcoil-docs",
+  "compatibility_date": "2026-11-10",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "docs.runcoil.dev", "custom_domain": true }]
+}

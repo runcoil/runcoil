@@ -1,0 +1,64 @@
+---
+/**
+ * Pagination — previous/next page links in one plain row under a hairline,
+ * the same layout as the Cloudflare docs.
+ *
+ * Pass `prevNext` for the docs default, or compose your own links:
+ *
+ *   <Pagination>
+ *     <PaginationLink rel="prev" href="/blog/older" label="Older">Older post</PaginationLink>
+ *     <PaginationLink rel="next" href="/blog/newer" label="Newer">Newer post</PaginationLink>
+ *   </Pagination>
+ */
+import { cn } from "@/lib/cn";
+import type { HTMLAttributes } from "astro/types";
+import type { PrevNext } from "@cloudflare/nimbus-docs/types";
+import { withBase } from "@cloudflare/nimbus-docs/runtime";
+import PaginationLink from "./PaginationLink.astro";
+
+interface Props extends HTMLAttributes<"nav"> {
+  /** The page's neighbours. Ignored when links are passed as children. */
+  prevNext?: PrevNext;
+  /** Caption above the previous page's title. */
+  prevLabel?: string;
+  /** Caption above the next page's title. */
+  nextLabel?: string;
+}
+
+const {
+  prevNext,
+  prevLabel = "Previous",
+  nextLabel = "Next",
+  class: className,
+  ...attrs
+} = Astro.props;
+const composed = Astro.slots.has("default");
+const prev = composed ? undefined : prevNext?.prev;
+const next = composed ? undefined : prevNext?.next;
+---
+
+{(composed || prev || next) && (
+  <nav
+    aria-label="Pagination"
+    data-slot="pagination"
+    class={cn("mt-12 flex items-center justify-between gap-6 border-t border-border pt-6", className)}
+    {...attrs}
+  >
+    {composed ? (
+      <slot />
+    ) : (
+      <>
+        {prev && (
+          <PaginationLink rel="prev" href={withBase(prev.href, import.meta.env.BASE_URL)} label={prevLabel}>
+            {prev.label}
+          </PaginationLink>
+        )}
+        {next && (
+          <PaginationLink rel="next" href={withBase(next.href, import.meta.env.BASE_URL)} label={nextLabel}>
+            {next.label}
+          </PaginationLink>
+        )}
+      </>
+    )}
+  </nav>
+)}

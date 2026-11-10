@@ -1,0 +1,71 @@
+---
+title: Tasks and Runs
+description: A Task is a named function that a worker registers. A Run is one execution of a Task, with a status of queued, running, succeeded, or failed.
+sidebar:
+  order: 1
+---
+
+A Task is reusable work with a name. A Run is one execution of a Task, with its own input, output, and status.
+
+## Tasks
+
+A worker adds each Task with a name and a handler, then starts:
+
+```go
+worker, err := runcoil.NewWorker(client, "shop", runcoil.Slots(10))
+if err != nil {
+	log.Fatal(err)
+}
+
+if err := worker.NewTask("process-order", runcoil.HandlerFunc(processOrder)); err != nil {
+	log.Fatal(err)
+}
+
+if err := worker.Start(ctx); err != nil {
+	log.Fatal(err)
+}
+```
+
+`"shop"` is the app. A Task is identified by its app and its name, so every process that runs the same Tasks uses the same app name. `Start` sends the Tasks to the server and returns when the server accepts them.
+
+## Handlers
+
+A handler is a function of the form `func(context.Context, In) (Out, error)`. `runcoil.HandlerFunc` adapts it:
+
+- The SDK decodes the input of the Run from JSON into `In`. An empty input gives the zero value.
+- The SDK encodes the returned `Out` to JSON as the output of the Run.
+- `runcoil.RunInfoFromContext(ctx)` returns the Run ID, the app, and the Task name.
+
+Everything Runcoil adds reaches the handler through the context. Your application brings its own logger and its own clients.
+
+## Run statuses
+
+A Run has one of four statuses:
+
+<pre class="mermaid">{`
+stateDiagram-v2
+    [*] --> queued
+    queued --> running: a worker with a free slot takes the Run
+    queued --> failed: the start deadline passes
+    running --> succeeded: the handler returns an output
+    running --> failed: the handler returns an error or panics
+    succeeded --> [*]
+    failed --> [*]
+`}</pre>
+
+A Run stays `running` while it waits for the retry of a failed Step. The Run does not go back to `queued`.
+
+## Why a Run fails
+
+A Run fails in one of these cases:
+
+- The handler returns an error. When that error is the final error of a Step, the Run records the ID of the Step.
+- The handler panics.
+- The output cannot be encoded to JSON.
+- The Run does not start before its start deadline. `runcoil.StartDeadline(d)` sets the deadline on a Task. Without it, a Run waits for a free worker as long as it takes.
+
+An error that the handler returns outside any Step fails the Run at once, with no retry. To retry work, put it in a [Step](/concepts/steps/).
+
+:::note
+**Task settings do not reach a Run yet.** The server stores `runcoil.Retry` and `runcoil.StartDeadline` when the worker registers, and copies them to each Run that `Invoke` or a schedule creates. Both are still to come, so today a Run has no start deadline.
+:::

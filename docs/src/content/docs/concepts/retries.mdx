@@ -1,0 +1,75 @@
+---
+title: Retries
+description: A failed Step retries with a delay. The policy comes from the Step, then the Task, then the server default of 4 attempts with delays of 5s, 10s, and 30s.
+sidebar:
+  order: 3
+---
+
+When the function of a Step returns an error, the server tries the Step again after a delay. Each retry is a new attempt of the Run, which [replays](/concepts/steps/#replay) the Steps already done.
+
+## Default policy
+
+Without a policy of your own, a Step gets 4 attempts. The first attempt counts, so a Step retries 3 times, after 5, 10, and 30 seconds. The server spreads each delay by up to 20% either way, so Steps that failed together do not retry together.
+
+| Retry | Delay | Shortest | Longest |
+| --- | --- | --- | --- |
+| 1 | 5s | 4s | 6s |
+| 2 | 10s | 8s | 12s |
+| 3 | 30s | 24s | 36s |
+
+The server settings `retry.max-attempts`, `retry.delays`, and `retry.jitter` change the default. See [Server configuration](/reference/server-configuration/#retries).
+
+## Custom policies
+
+A policy has two fields. The server takes each field from the first place that sets it: the Step, then the Task, then the server default.
+
+```go
+worker.NewTask("process-order", runcoil.HandlerFunc(processOrder),
+	runcoil.Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
+)
+
+id, err := step.Do(ctx, "charge", pay, step.Retry(retry.Policy{MaxAttempts: 3}))
+```
+
+- `MaxAttempts` counts every try, the first one included. The limit is 30.
+- `Delays` are the waits before each retry. The last delay repeats. The limit is 32 delays.
+
+:::note
+**A Task policy does not apply yet.** The server copies `runcoil.Retry` to a Run when `Invoke` or a schedule creates the Run, and both are still to come. Today a Run uses the policy of the Step, or the server default.
+:::
+
+## Growing delays
+
+`retry.Exponential(initial, factor, limit, n)` builds `n` delays that grow by `factor` and stop at `limit`:
+
+```go
+retry.Policy{MaxAttempts: 9, Delays: retry.Exponential(time.Second, 2, time.Minute, 8)}
+```
+
+This policy waits 1s, 2s, 4s, 8s, 16s, 32s, 60s, and 60s. The limit of one minute caps the last two delays.
+
+## Error marks
+
+Mark an error to change what the server does with it:
+
+```go
+id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
+	id, err := pay(ctx)
+	if errors.Is(err, errCardDeclined) {
+		return "", retry.NonRetriable(err) // fail now
+	}
+	if errors.Is(err, errRateLimited) {
+		return "", retry.After(err, 30*time.Second) // wait this long instead
+	}
+	return id, err
+})
+```
+
+- `retry.NonRetriable(err)` fails the Step for good at once.
+- `retry.After(err, d)` makes the next retry wait `d` in place of the delay of the policy. The server uses `d` as it is, with no spread. It does not add tries.
+
+## What never retries
+
+- A panic in a Step.
+- A Step output that JSON cannot encode.
+- An error that the handler returns outside any Step. That error fails the Run at once.

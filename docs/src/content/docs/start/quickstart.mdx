@@ -1,0 +1,80 @@
+---
+title: Quickstart
+description: Start the Runcoil server and PostgreSQL with Docker Compose, create a local API key, and connect the hello example worker.
+sidebar:
+  order: 1
+---
+
+You start the Runcoil server on your machine and connect the `hello` example worker to it.
+
+You need Docker, Git, and Go 1.26 or later.
+
+## Start the server
+
+Clone the repository and start PostgreSQL 18 and the server:
+
+```sh
+git clone https://github.com/runcoil/runcoil.git
+cd runcoil
+docker compose up -d
+```
+
+The server applies its database migrations when it starts. Check that it is ready:
+
+```sh
+curl localhost:8080/readyz
+# ok
+```
+
+The server listens on two ports. Port `8080` has the health checks, and port `7070` is the port that workers connect to.
+
+## Create an API key
+
+A worker sends an API key when it registers. Runcoil has no command that creates keys yet, so add one to the Compose database by hand. The server stores only the SHA-256 hash of a key:
+
+```sh
+docker compose exec -T postgres psql -U postgres <<'SQL'
+INSERT INTO projects (id, name) VALUES ('01900000-0000-7000-8000-000000000001', 'default');
+INSERT INTO api_keys (id, project_id, name, key_hash)
+VALUES ('01900000-0000-7000-8000-000000000002', '01900000-0000-7000-8000-000000000001', 'local', sha256('rc_api_local_dev'));
+SQL
+```
+
+The key is now `rc_api_local_dev`. Use it for local work only.
+
+## Start a worker
+
+The `hello` example is a worker of the app `hello` with one Task, `greet`. Run it from the SDK directory:
+
+```sh
+cd sdks/go
+RUNCOIL_URL=http://localhost:7070 RUNCOIL_API_KEY=rc_api_local_dev go run ./examples/hello
+```
+
+The worker registers its Task and logs a line like this one:
+
+```text
+level=INFO msg="worker registered" app=hello worker_id=<id> slots=2 tasks=[greet]
+```
+
+The worker now waits for Runs of `greet`.
+
+:::note
+**You cannot start a Run from the SDK yet.** The call that creates a Run, `Invoke`, is not built. This page grows when it is.
+:::
+
+## Stop the worker
+
+Press Ctrl-C in the worker terminal. The worker stops taking Runs, waits up to 30 seconds for its running handlers, and exits:
+
+```text
+level=INFO msg="worker shutting down" running=0
+level=INFO msg="worker stopped" gave_up=0
+```
+
+To stop the server and PostgreSQL, run `docker compose down` in the repository root.
+
+## Next
+
+- Read the code you ran in [`sdks/go/examples/hello`](https://github.com/runcoil/runcoil/tree/main/sdks/go/examples/hello).
+- Learn what the worker registered in [Tasks and Runs](/concepts/tasks-and-runs/).
