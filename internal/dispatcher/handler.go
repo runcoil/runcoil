@@ -135,6 +135,19 @@ func (h workerHandler) CompleteRun(
 	return &runcoilv1.CompleteRunResponse{}, nil
 }
 
+func (h workerHandler) Deregister(ctx context.Context, req *runcoilv1.DeregisterRequest) (*runcoilv1.DeregisterResponse, error) {
+	worker, err := h.authenticate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authenticate: %w", err)
+	}
+
+	if err := h.s.Deregister(ctx, worker, req.GetReason()); err != nil {
+		return nil, fmt.Errorf("deregister: %w", err)
+	}
+
+	return &runcoilv1.DeregisterResponse{}, nil
+}
+
 // authenticate returns the session of the request. Every call but Register takes the
 // session token as its bearer token.
 func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) {

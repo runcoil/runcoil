@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 )
@@ -21,6 +22,9 @@ import (
 const (
 	defaultSlots = 10
 	handlerWait  = 2 * time.Second // how long Shutdown waits for the handlers it cancelled
+	// deregisterTimeout bounds the Deregister at the end of Shutdown, so a server that is
+	// down holds up the shutdown for no longer.
+	deregisterTimeout = 5 * time.Second
 )
 
 // WorkerOption configures a Worker in NewWorker.
@@ -274,8 +278,10 @@ func (w *Worker) Start(ctx context.Context) error {
 // Shutdown stops the worker. It closes the Listen stream first, so the server sends no
 // new Run, and then waits for the running handlers to finish. When drainCtx ends first,
 // it cancels the handlers that are still running and waits up to 2 seconds for them to
-// return. Their Runs are not reported, and the server takes them back later. A Step
-// function must return promptly when its context is cancelled.
+// return. Their Runs are not reported. Last, it ends the worker's session on the server,
+// which puts those Runs back in the queue at once, without counting them as lost. When
+// that call fails, the server takes them back after the worker TTL. A Step function must
+// return promptly when its context is cancelled.
 //
 // Shutdown returns an error naming the Runs it gave up. Calling it again returns the
 // first result.
@@ -326,6 +332,7 @@ func (w *Worker) shutdown(drainCtx context.Context) error {
 	beatStop()
 	<-beatDone
 	w.conn.stop()
+	w.deregister(drainCtx)
 
 	w.logger.InfoContext(drainCtx, "worker stopped", slog.Int("gave_up", len(gaveUp)))
 
@@ -375,5 +382,23 @@ func wait(done <-chan struct{}, d time.Duration) bool {
 		return true
 	case <-timer.C:
 		return false
+	}
+}
+
+// deregister ends the worker's session at the end of a shutdown. A session the server has
+// already ended needs nothing more.
+func (w *Worker) deregister(ctx context.Context) {
+	callCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deregisterTimeout)
+	defer cancel()
+
+	_, err := w.rpc.Deregister(callCtx, &runcoilv1.DeregisterRequest{Reason: "shutdown"})
+	switch {
+	case err == nil:
+		w.logger.DebugContext(ctx, "worker deregistered")
+	case errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_UNAUTHENTICATED:
+		w.logger.DebugContext(ctx, "worker session already ended", slog.Any("error", err))
+	default:
+		w.logger.WarnContext(ctx, "deregister failed; the server takes the given up runs back after the worker ttl",
+			slog.Any("error", err))
 	}
 }

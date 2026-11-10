@@ -121,6 +121,31 @@ func (s *Service) Heartbeat(worker domain.Worker) {
 	s.beats[worker.ID] = time.Now()
 }
 
+// Deregister ends the worker's session at the end of its drain. The attempts it still
+// holds go back to the queue without counting as lost, and its stream on this server
+// ends.
+func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason string) error {
+	released, err := s.workerStore.Deregister(ctx, worker.ID)
+	if errors.Is(err, domain.ErrSessionEnded) {
+		return errInvalidSessionToken
+	}
+
+	if err != nil {
+		return fmt.Errorf("deregister: %w", err)
+	}
+
+	s.endWorker(worker.ID)
+
+	s.logger.InfoContext(ctx, "worker deregistered",
+		slog.String("worker_id", worker.ID.String()),
+		slog.String("app", worker.App),
+		slog.String("reason", reason),
+		slog.Int("released", released),
+	)
+
+	return nil
+}
+
 // CompleteStep stores the outcome of one try of a Do Step and returns its record. A
 // failed try that may be tried again ends the attempt instead: the result carries the
 // retry, the Run waits for its next try, and the worker's slot is free.
@@ -131,6 +156,7 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
 	if errors.Is(err, domain.ErrStaleLease) {
+		s.release(params.WorkerID, params.Lease)
 		return domain.StepResult{}, errStaleLease
 	}
 
@@ -139,7 +165,7 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 	}
 
 	if result.Retry != nil {
-		s.release(params.WorkerID)
+		s.release(params.WorkerID, params.Lease)
 
 		s.logger.DebugContext(ctx, "step retry scheduled",
 			slog.String("run_id", params.Lease.RunID.String()),
@@ -207,11 +233,13 @@ func jitter(d time.Duration, fraction float64) time.Duration {
 	return d + time.Duration(spread)
 }
 
-// CompleteRun ends the attempt with the handler's result.
+// CompleteRun ends the attempt with the handler's result. Unless the store fails, the
+// worker no longer holds the attempt afterwards, so its slot is free.
 func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease domain.Lease, result domain.RunResult) error {
 	end := result.End()
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)
 	if errors.Is(err, domain.ErrStaleLease) {
+		s.release(worker.ID, lease)
 		return errStaleLease
 	}
 
@@ -219,12 +247,12 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 		return fmt.Errorf("finish run: %w", err)
 	}
 
+	s.release(worker.ID, lease)
+
 	if !ended {
 		s.logger.DebugContext(ctx, "run already ended", slog.String("run_id", lease.RunID.String()))
 		return nil
 	}
-
-	s.release(worker.ID)
 
 	attrs := []slog.Attr{
 		slog.String("run_id", lease.RunID.String()),

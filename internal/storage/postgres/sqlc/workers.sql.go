@@ -9,12 +9,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
 )
 
 const workerAttachStream = `-- name: WorkerAttachStream :one
 UPDATE workers
-SET dispatcher_id = $1::uuid, stream_id = $2::uuid
+SET dispatcher_id = $1::uuid, stream_id = $2::uuid, heartbeat_at = now()
 WHERE id IN (
     SELECT id FROM workers
     WHERE id = $3::uuid AND ended_at IS NULL
@@ -36,7 +37,9 @@ type WorkerAttachStreamRow struct {
 }
 
 // FOR UPDATE, not the UPDATE's own lock: only FOR UPDATE conflicts with the claim's
-// FOR KEY SHARE, so a claim in flight on this worker commits first.
+// FOR KEY SHARE, so a claim in flight on this worker commits first. A worker that opens a
+// stream is alive, so the attach counts as a heartbeat: the reaper does not end a worker
+// that moved to this server before the server's first flush.
 func (q *Queries) WorkerAttachStream(ctx context.Context, db DBTX, arg WorkerAttachStreamParams) (WorkerAttachStreamRow, error) {
 	row := db.QueryRow(ctx, workerAttachStream, arg.DispatcherID, arg.StreamID, arg.ID)
 	var i WorkerAttachStreamRow
@@ -71,6 +74,65 @@ func (q *Queries) WorkerCreate(ctx context.Context, db DBTX, arg WorkerCreatePar
 		arg.Slots,
 	)
 	return err
+}
+
+const workerDeregister = `-- name: WorkerDeregister :one
+UPDATE workers
+SET ended_at = now(), end_reason = 'deregistered', stream_id = NULL
+WHERE id IN (
+    SELECT id FROM workers
+    WHERE id = $1::uuid AND ended_at IS NULL
+    FOR UPDATE
+)
+RETURNING id
+`
+
+// FOR UPDATE: a claim in flight on this worker commits first, then its fence fails.
+func (q *Queries) WorkerDeregister(ctx context.Context, db DBTX, id uuid.UUID) (uuid.UUID, error) {
+	row := db.QueryRow(ctx, workerDeregister, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const workerEndDead = `-- name: WorkerEndDead :many
+UPDATE workers
+SET ended_at = now(), end_reason = 'heartbeat_timeout', stream_id = NULL
+WHERE id IN (
+    SELECT id FROM workers
+    WHERE ended_at IS NULL AND heartbeat_at < now() - $1::interval
+    ORDER BY heartbeat_at
+    LIMIT $2::integer
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id
+`
+
+type WorkerEndDeadParams struct {
+	Ttl       pgtype.Interval
+	BatchSize int32
+}
+
+// Ends at most @batch_size sessions with no heartbeat for longer than @ttl. SKIP LOCKED: a
+// worker with a claim or a Listen in flight is taken on a later sweep.
+func (q *Queries) WorkerEndDead(ctx context.Context, db DBTX, arg WorkerEndDeadParams) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, workerEndDead, arg.Ttl, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const workerFlushHeartbeats = `-- name: WorkerFlushHeartbeats :exec

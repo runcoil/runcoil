@@ -36,19 +36,27 @@ func TestNewSessionTokenHashesTheToken(t *testing.T) {
 	assert.Len(t, firstHash, 32)
 }
 
-// fakeRunStore answers CompleteStep with result and keeps the decider it was given.
+// fakeRunStore answers CompleteStep with result or err, keeps the decider it was given,
+// and answers FinishRun with ended or err.
 type fakeRunStore struct {
 	result domain.StepResult
+	err    error
+	ended  bool
 	decide domain.RetryDecider
 }
 
 func (f *fakeRunStore) CompleteStep(_ context.Context, _ domain.CompleteStepParams, decide domain.RetryDecider) (domain.StepResult, error) {
 	f.decide = decide
-	return f.result, nil
+	return f.result, f.err
 }
 
 func (f *fakeRunStore) FinishRun(context.Context, uuid.UUID, domain.Lease, domain.RunEnd) (bool, error) {
-	return true, nil
+	return f.ended, f.err
+}
+
+// heldStream returns a one-slot stream of workerID that holds lease.
+func heldStream(workerID uuid.UUID, lease domain.Lease) *stream {
+	return &stream{id: uuid.New(), workerID: workerID, slots: 1, held: map[domain.Lease]struct{}{lease: {}}}
 }
 
 func retryService(jitter float64, runStore RunStore) *Service {
@@ -66,26 +74,61 @@ func retryService(jitter float64, runStore RunStore) *Service {
 
 func TestCompleteStepFreesTheSlotOfARetry(t *testing.T) {
 	workerID := uuid.New()
-	params := domain.CompleteStepParams{WorkerID: workerID, StepID: "charge"}
+	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+	params := domain.CompleteStepParams{WorkerID: workerID, Lease: lease, StepID: "charge"}
 
 	tests := []struct {
 		name     string
 		result   domain.StepResult
+		err      error
 		wantFree int
 	}{
 		{name: "a retry ends the attempt", result: domain.StepResult{Retry: &domain.ScheduledRetry{TryCount: 1}}, wantFree: 1},
+		{name: "a stale lease is no longer held", err: domain.ErrStaleLease, wantFree: 1},
 		{name: "a record keeps it", result: domain.StepResult{Record: domain.StepRecord{StepID: "charge"}}, wantFree: 0},
+		{name: "a failed store keeps it", err: errors.New("timeout"), wantFree: 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := retryService(0, &fakeRunStore{result: tt.result})
-			s.streams[workerID] = &stream{id: uuid.New(), workerID: workerID, slots: 1, free: 0}
+			s := retryService(0, &fakeRunStore{result: tt.result, err: tt.err})
+			s.streams[workerID] = heldStream(workerID, lease)
 
 			got, err := s.CompleteStep(context.Background(), params)
-			require.NoError(t, err)
-			assert.Equal(t, tt.result, got)
-			assert.Equal(t, tt.wantFree, s.streams[workerID].free)
+			if tt.err == nil {
+				require.NoError(t, err)
+				assert.Equal(t, tt.result, got)
+			}
+
+			assert.Equal(t, tt.wantFree, s.streams[workerID].free())
+		})
+	}
+}
+
+func TestCompleteRunFreesTheSlot(t *testing.T) {
+	worker := domain.Worker{ID: uuid.New()}
+	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+
+	tests := []struct {
+		name     string
+		store    *fakeRunStore
+		wantErr  bool
+		wantFree int
+	}{
+		{name: "the run ended", store: &fakeRunStore{ended: true}, wantFree: 1},
+		{name: "the run had already ended", store: &fakeRunStore{}, wantFree: 1},
+		{name: "a stale lease", store: &fakeRunStore{err: domain.ErrStaleLease}, wantErr: true, wantFree: 1},
+		{name: "a failed store", store: &fakeRunStore{err: errors.New("timeout")}, wantErr: true, wantFree: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := retryService(0, tt.store)
+			s.streams[worker.ID] = heldStream(worker.ID, lease)
+
+			err := s.CompleteRun(context.Background(), worker, lease, domain.RunResult{})
+			assert.Equal(t, tt.wantErr, err != nil)
+			assert.Equal(t, tt.wantFree, s.streams[worker.ID].free())
 		})
 	}
 }
@@ -183,4 +226,38 @@ func TestJitterStaysInItsRange(t *testing.T) {
 
 	assert.Equal(t, 10*time.Second, jitter(10*time.Second, 0))
 	assert.Zero(t, jitter(0, 0.2))
+}
+
+// deregisterStore answers Deregister with released or err.
+type deregisterStore struct {
+	WorkerStore
+
+	released int
+	err      error
+}
+
+func (f *deregisterStore) Deregister(context.Context, uuid.UUID) (int, error) {
+	return f.released, f.err
+}
+
+func TestDeregisterEndsTheStream(t *testing.T) {
+	s := newStreamService(t, &deregisterStore{released: 2})
+	worker := domain.Worker{ID: uuid.New(), App: "shop"}
+	st := newStream(worker.ID, 1, 1, 1)
+	s.put(st)
+
+	require.NoError(t, s.Deregister(context.Background(), worker, "shutdown"))
+
+	assert.True(t, isEnded(st))
+	assert.NotContains(t, s.streams, worker.ID)
+}
+
+func TestDeregisterOfAnEndedSession(t *testing.T) {
+	s := newStreamService(t, &deregisterStore{err: domain.ErrSessionEnded})
+
+	err := s.Deregister(context.Background(), domain.Worker{ID: uuid.New()}, "shutdown")
+
+	var apiErr *apierr.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, apierr.CodeUnauthenticated, apiErr.Code)
 }

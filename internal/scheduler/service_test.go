@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // fakeRunStore counts the calls of each job. A job with full set returns a full batch
@@ -54,8 +56,43 @@ func (f *fakeRunStore) calls() (promotes, expires int) {
 	return f.promotes, f.expires
 }
 
+// fakeWorkerStore keeps what each sweep of the reaper asked for.
+type fakeWorkerStore struct {
+	mu     sync.Mutex
+	sweeps int
+	ttl    time.Duration
+	lost   int
+}
+
+func (f *fakeWorkerStore) EndDeadWorkers(_ context.Context, ttl time.Duration, maxLost, _ int) (domain.DeadWorkers, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.sweeps++
+	f.ttl, f.lost = ttl, maxLost
+
+	return domain.DeadWorkers{Ended: 1, Requeued: 2}, nil
+}
+
+func (f *fakeWorkerStore) calls() (sweeps int, ttl time.Duration, maxLost int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.sweeps, f.ttl, f.lost
+}
+
+func testConfig() Config {
+	return Config{
+		RequeueDelayedRunsInterval: 10 * time.Millisecond,
+		StartDeadlineCheckInterval: 10 * time.Millisecond,
+		DeadWorkerCheckInterval:    10 * time.Millisecond,
+		MaxLostAttempts:            5,
+		WorkerTTL:                  20 * time.Millisecond,
+	}
+}
+
 func newService(runStore RunStore) *Service {
-	return New(Config{RequeueDelayedRunsInterval: 10 * time.Millisecond, StartDeadlineCheckInterval: 10 * time.Millisecond}, slog.New(slog.DiscardHandler), runStore)
+	return New(testConfig(), slog.New(slog.DiscardHandler), runStore, &fakeWorkerStore{})
 }
 
 // start runs s until the test ends, and returns the channel Run's error arrives on.
@@ -109,6 +146,31 @@ func TestAFailedJobIsTriedAgainAtTheNextTick(t *testing.T) {
 		"a failed requeue is tried at each tick, and the start deadline check still runs")
 }
 
+func TestTheReaperEndsDeadWorkersWithTheWorkerTTL(t *testing.T) {
+	workers := &fakeWorkerStore{}
+	s := New(testConfig(), slog.New(slog.DiscardHandler), &fakeRunStore{}, workers)
+	start(t, s)
+
+	require.Eventually(t, func() bool { n, _, _ := workers.calls(); return n >= 2 }, time.Second, 5*time.Millisecond)
+
+	_, ttl, maxLost := workers.calls()
+	assert.Equal(t, 20*time.Millisecond, ttl)
+	assert.Equal(t, 5, maxLost)
+}
+
+func TestTheReaperWaitsOneTTLAfterTheStart(t *testing.T) {
+	cfg := testConfig()
+	cfg.WorkerTTL = time.Hour
+	workers := &fakeWorkerStore{}
+	s := New(cfg, slog.New(slog.DiscardHandler), &fakeRunStore{}, workers)
+	start(t, s)
+
+	time.Sleep(60 * time.Millisecond)
+
+	sweeps, _, _ := workers.calls()
+	assert.Zero(t, sweeps, "the heartbeats of the workers are stale right after a restart")
+}
+
 func TestReady(t *testing.T) {
 	s := newService(&fakeRunStore{})
 	require.Error(t, s.Ready(context.Background()), "not running before Run")
@@ -122,7 +184,31 @@ func TestReady(t *testing.T) {
 }
 
 func TestConfigValidate(t *testing.T) {
-	assert.NoError(t, (&Config{RequeueDelayedRunsInterval: time.Second, StartDeadlineCheckInterval: time.Second}).Validate())
-	assert.EqualError(t, (&Config{StartDeadlineCheckInterval: time.Second}).Validate(), "requeue delayed runs interval must be greater than 0")
-	assert.EqualError(t, (&Config{RequeueDelayedRunsInterval: time.Second}).Validate(), "start deadline check interval must be greater than 0")
+	tests := []struct {
+		name   string
+		modify func(*Config)
+		want   string
+	}{
+		{name: "valid", modify: func(*Config) {}},
+		{name: "no lost attempts allowed", modify: func(c *Config) { c.MaxLostAttempts = 0 }},
+		{name: "requeue", modify: func(c *Config) { c.RequeueDelayedRunsInterval = 0 }, want: "requeue delayed runs interval must be greater than 0"},
+		{name: "start deadline", modify: func(c *Config) { c.StartDeadlineCheckInterval = 0 }, want: "start deadline check interval must be greater than 0"},
+		{name: "dead worker", modify: func(c *Config) { c.DeadWorkerCheckInterval = 0 }, want: "dead worker check interval must be greater than 0"},
+		{name: "lost attempts negative", modify: func(c *Config) { c.MaxLostAttempts = -1 }, want: "max lost attempts must be between 0 and 100"},
+		{name: "lost attempts too many", modify: func(c *Config) { c.MaxLostAttempts = 101 }, want: "max lost attempts must be between 0 and 100"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig()
+			tt.modify(&cfg)
+
+			if tt.want == "" {
+				assert.NoError(t, cfg.Validate())
+				return
+			}
+
+			assert.EqualError(t, cfg.Validate(), tt.want)
+		})
+	}
 }
