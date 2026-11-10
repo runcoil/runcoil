@@ -23,12 +23,67 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// What a tick does while the schedule's last Run has not ended.
+type OverlapPolicy int32
+
+const (
+	// Treated as ALLOW.
+	OverlapPolicy_OVERLAP_POLICY_UNSPECIFIED OverlapPolicy = 0
+	// Create the Run anyway.
+	OverlapPolicy_OVERLAP_POLICY_ALLOW OverlapPolicy = 1
+	// Create no Run for this tick.
+	OverlapPolicy_OVERLAP_POLICY_SKIP OverlapPolicy = 2
+)
+
+// Enum value maps for OverlapPolicy.
+var (
+	OverlapPolicy_name = map[int32]string{
+		0: "OVERLAP_POLICY_UNSPECIFIED",
+		1: "OVERLAP_POLICY_ALLOW",
+		2: "OVERLAP_POLICY_SKIP",
+	}
+	OverlapPolicy_value = map[string]int32{
+		"OVERLAP_POLICY_UNSPECIFIED": 0,
+		"OVERLAP_POLICY_ALLOW":       1,
+		"OVERLAP_POLICY_SKIP":        2,
+	}
+)
+
+func (x OverlapPolicy) Enum() *OverlapPolicy {
+	p := new(OverlapPolicy)
+	*p = x
+	return p
+}
+
+func (x OverlapPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OverlapPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_runcoil_v1_task_proto_enumTypes[0].Descriptor()
+}
+
+func (OverlapPolicy) Type() protoreflect.EnumType {
+	return &file_runcoil_v1_task_proto_enumTypes[0]
+}
+
+func (x OverlapPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OverlapPolicy.Descriptor instead.
+func (OverlapPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_runcoil_v1_task_proto_rawDescGZIP(), []int{0}
+}
+
 type TaskDefinition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Retry *RetryPolicy           `protobuf:"bytes,2,opt,name=retry,proto3" json:"retry,omitempty"`
 	// Only for the first start. Unset: no deadline.
 	StartDeadline *durationpb.Duration `protobuf:"bytes,3,opt,name=start_deadline,json=startDeadline,proto3" json:"start_deadline,omitempty"`
+	// Unset: the Task has no schedule, and an earlier one is removed.
+	Schedule      *Schedule `protobuf:"bytes,4,opt,name=schedule,proto3" json:"schedule,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -80,6 +135,13 @@ func (x *TaskDefinition) GetRetry() *RetryPolicy {
 func (x *TaskDefinition) GetStartDeadline() *durationpb.Duration {
 	if x != nil {
 		return x.StartDeadline
+	}
+	return nil
+}
+
+func (x *TaskDefinition) GetSchedule() *Schedule {
+	if x != nil {
+		return x.Schedule
 	}
 	return nil
 }
@@ -138,20 +200,82 @@ func (x *RetryPolicy) GetDelays() []*durationpb.Duration {
 	return nil
 }
 
+// A cron schedule, read in UTC.
+type Schedule struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Five fields, or six with seconds first. The server parses it at Register.
+	Cron          string        `protobuf:"bytes,1,opt,name=cron,proto3" json:"cron,omitempty"`
+	Overlap       OverlapPolicy `protobuf:"varint,2,opt,name=overlap,proto3,enum=runcoil.v1.OverlapPolicy" json:"overlap,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Schedule) Reset() {
+	*x = Schedule{}
+	mi := &file_runcoil_v1_task_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Schedule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Schedule) ProtoMessage() {}
+
+func (x *Schedule) ProtoReflect() protoreflect.Message {
+	mi := &file_runcoil_v1_task_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Schedule.ProtoReflect.Descriptor instead.
+func (*Schedule) Descriptor() ([]byte, []int) {
+	return file_runcoil_v1_task_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Schedule) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *Schedule) GetOverlap() OverlapPolicy {
+	if x != nil {
+		return x.Overlap
+	}
+	return OverlapPolicy_OVERLAP_POLICY_UNSPECIFIED
+}
+
 var File_runcoil_v1_task_proto protoreflect.FileDescriptor
 
 const file_runcoil_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15runcoil/v1/task.proto\x12\n" +
-	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa1\x01\n" +
+	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd3\x01\n" +
 	"\x0eTaskDefinition\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01(\xff\x01R\x04name\x12-\n" +
 	"\x05retry\x18\x02 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x12@\n" +
-	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rstartDeadline\"c\n" +
+	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rstartDeadline\x120\n" +
+	"\bschedule\x18\x04 \x01(\v2\x14.runcoil.v1.ScheduleR\bschedule\"c\n" +
 	"\vRetryPolicy\x12!\n" +
 	"\fmax_attempts\x18\x01 \x01(\rR\vmaxAttempts\x121\n" +
-	"\x06delays\x18\x02 \x03(\v2\x19.google.protobuf.DurationR\x06delaysB\xa2\x01\n" +
+	"\x06delays\x18\x02 \x03(\v2\x19.google.protobuf.DurationR\x06delays\"S\n" +
+	"\bSchedule\x12\x12\n" +
+	"\x04cron\x18\x01 \x01(\tR\x04cron\x123\n" +
+	"\aoverlap\x18\x02 \x01(\x0e2\x19.runcoil.v1.OverlapPolicyR\aoverlap*b\n" +
+	"\rOverlapPolicy\x12\x1e\n" +
+	"\x1aOVERLAP_POLICY_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14OVERLAP_POLICY_ALLOW\x10\x01\x12\x17\n" +
+	"\x13OVERLAP_POLICY_SKIP\x10\x02B\xa2\x01\n" +
 	"\x0ecom.runcoil.v1B\tTaskProtoP\x01Z<github.com/runcoil/runcoil/proto/gen/go/runcoil/v1;runcoilv1\xa2\x02\x03RXX\xaa\x02\n" +
 	"Runcoil.V1\xca\x02\n" +
 	"Runcoil\\V1\xe2\x02\x16Runcoil\\V1\\GPBMetadata\xea\x02\vRuncoil::V1b\x06proto3"
@@ -168,21 +292,26 @@ func file_runcoil_v1_task_proto_rawDescGZIP() []byte {
 	return file_runcoil_v1_task_proto_rawDescData
 }
 
-var file_runcoil_v1_task_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_runcoil_v1_task_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_runcoil_v1_task_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_runcoil_v1_task_proto_goTypes = []any{
-	(*TaskDefinition)(nil),      // 0: runcoil.v1.TaskDefinition
-	(*RetryPolicy)(nil),         // 1: runcoil.v1.RetryPolicy
-	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
+	(OverlapPolicy)(0),          // 0: runcoil.v1.OverlapPolicy
+	(*TaskDefinition)(nil),      // 1: runcoil.v1.TaskDefinition
+	(*RetryPolicy)(nil),         // 2: runcoil.v1.RetryPolicy
+	(*Schedule)(nil),            // 3: runcoil.v1.Schedule
+	(*durationpb.Duration)(nil), // 4: google.protobuf.Duration
 }
 var file_runcoil_v1_task_proto_depIdxs = []int32{
-	1, // 0: runcoil.v1.TaskDefinition.retry:type_name -> runcoil.v1.RetryPolicy
-	2, // 1: runcoil.v1.TaskDefinition.start_deadline:type_name -> google.protobuf.Duration
-	2, // 2: runcoil.v1.RetryPolicy.delays:type_name -> google.protobuf.Duration
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: runcoil.v1.TaskDefinition.retry:type_name -> runcoil.v1.RetryPolicy
+	4, // 1: runcoil.v1.TaskDefinition.start_deadline:type_name -> google.protobuf.Duration
+	3, // 2: runcoil.v1.TaskDefinition.schedule:type_name -> runcoil.v1.Schedule
+	4, // 3: runcoil.v1.RetryPolicy.delays:type_name -> google.protobuf.Duration
+	0, // 4: runcoil.v1.Schedule.overlap:type_name -> runcoil.v1.OverlapPolicy
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_runcoil_v1_task_proto_init() }
@@ -195,13 +324,14 @@ func file_runcoil_v1_task_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runcoil_v1_task_proto_rawDesc), len(file_runcoil_v1_task_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_runcoil_v1_task_proto_goTypes,
 		DependencyIndexes: file_runcoil_v1_task_proto_depIdxs,
+		EnumInfos:         file_runcoil_v1_task_proto_enumTypes,
 		MessageInfos:      file_runcoil_v1_task_proto_msgTypes,
 	}.Build()
 	File_runcoil_v1_task_proto = out.File
