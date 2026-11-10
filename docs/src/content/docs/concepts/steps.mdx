@@ -1,0 +1,63 @@
+---
+title: Steps
+description: step.Do saves the result of a piece of work on the server. When a Run runs again, finished Steps return their saved result and do not run twice.
+sidebar:
+  order: 2
+---
+
+A Step is a piece of work whose result the server saves. When a Run runs again, each finished Step returns its saved result and its function is not called.
+
+## Side effects
+
+`step.Do(ctx, id, fn)` runs `fn` and saves what it returns:
+
+```go
+chargeID, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
+	return charge(ctx, in.OrderID)
+})
+```
+
+Wrap every side effect in a Step: a payment, an email, a call to another service. Code outside a Step runs again each time the Run runs.
+
+## Replay
+
+A retry is a new attempt of the same Run. The handler starts again from its first line, and `step.Do` decides for each Step whether to call the function or to return the saved result.
+
+1. Attempt 1 starts. `step.Do` runs `charge`, and the server saves its result.
+2. `email` fails. The server schedules a retry, and the attempt ends inside `step.Do`.
+3. Attempt 2 starts the handler from the top.
+4. `charge` is not called again. `step.Do` returns the saved result.
+5. `email` runs again and succeeds. The server saves its result.
+6. The handler returns, and the Run is `succeeded`.
+
+## Step IDs
+
+The server stores a Step under its `id`. A later Step with the same `id` in the same Run gets a counter: `charge`, `charge#2`, `charge#3`. A loop that calls one Step is fine if it calls the Steps in the same order on every attempt.
+
+## Failed Steps
+
+A failed Step is tried again first, by its [retry policy](/concepts/retries/). When it has no tries left, `step.Do` returns a `*step.Error`. The handler can run another Step as a fallback, or return the error to fail the Run.
+
+The SDK rebuilds the error from the saved text, so `errors.Is` does not match your own error values. Use `errors.As`:
+
+```go
+_, err := step.Do(ctx, "email", sendReceipt)
+
+var stepErr *step.Error
+if errors.As(err, &stepErr) {
+	// The email Step failed for good. Run a fallback Step, or return err.
+}
+```
+
+## Handler rules
+
+The SDK stops a handler by panicking inside `step.Do`, for example when a retry is scheduled or when the server takes the Run away from the worker. Two rules keep that safe:
+
+- Call `step.Do` on the goroutine of the handler.
+- Code that recovers panics must panic again with any value that it does not recognise.
+
+A Step function must also return soon after its context is cancelled.
+
+## Tests
+
+Outside a Run, `step.Do` calls `fn` and returns its result. A unit test can call the handler as a normal function.

@@ -1,0 +1,74 @@
+---
+title: Go SDK configuration
+description: The environment variables and the options of the Runcoil Go SDK for clients, workers, Tasks, and Steps, with their defaults and limits.
+sidebar:
+  order: 2
+---
+
+The Go SDK is the module `github.com/runcoil/runcoil/sdks/go`. It needs Go 1.26 or later.
+
+```sh
+go get github.com/runcoil/runcoil/sdks/go
+```
+
+## Packages
+
+| Package | Contents |
+| --- | --- |
+| `pkg/runcoil` | Client, worker, Tasks, handlers |
+| `pkg/step` | `step.Do` and its options |
+| `pkg/retry` | Retry policies and error marks |
+
+## Options
+
+### Client
+
+`runcoil.NewClient(opts...)` reads the environment. An option wins over its environment variable. `NewClient` does not contact the server.
+
+| Option | Environment variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `runcoil.URL(u)` | `RUNCOIL_URL` | None, required | Address of the worker port of the server, such as `http://localhost:7070`. The scheme is `http` or `https` |
+| `runcoil.APIKey(key)` | `RUNCOIL_API_KEY` | None, required | API key of the project, `rc_api_...` |
+| `runcoil.Logger(l)` | | Logs nothing | The `*slog.Logger` for the log lines of the SDK |
+
+### Worker
+
+`runcoil.NewWorker(client, app, opts...)` returns a worker for the app.
+
+| Option | Default | Limit | Meaning |
+| --- | --- | --- | --- |
+| `runcoil.Slots(n)` | `10` | 1 to 100 | How many Runs the worker runs at one time |
+
+### Task
+
+`worker.NewTask(name, handler, opts...)` adds a Task. Call it before `worker.Start`. The name must be unique within the worker.
+
+| Option | Default | Limit | Meaning |
+| --- | --- | --- | --- |
+| `runcoil.Retry(policy)` | The server default | See [Retry policy](#retry-policy) | Retry policy of the Steps of the Task |
+| `runcoil.StartDeadline(d)` | No deadline | Greater than 0 | Fails a Run that has not started within `d` |
+
+The server stores both options when the worker registers. They do not reach a Run yet. See [Tasks and Runs](/concepts/tasks-and-runs/#why-a-run-fails).
+
+### Step
+
+`step.Do(ctx, id, fn, opts...)` runs one Step. The `id` must not be empty.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `step.Retry(policy)` | The policy of the Task, then the server default | Retry policy of this Step |
+
+## Retry policy
+
+`retry.Policy` has two fields. A zero field takes its value from the next policy in line.
+
+| Field | Limit | Meaning |
+| --- | --- | --- |
+| `MaxAttempts` | 0 to 30 | Every try of the Step, the first one included |
+| `Delays` | At most 32, none negative | Waits before each retry. The last one repeats |
+
+| Function | Meaning |
+| --- | --- |
+| `retry.Exponential(initial, factor, limit, n)` | Returns `n` delays that start at `initial`, grow by `factor`, and stop at `limit` |
+| `retry.NonRetriable(err)` | Marks `err` so that the Step fails for good at once |
+| `retry.After(err, d)` | Marks `err` so that the next retry waits `d` |

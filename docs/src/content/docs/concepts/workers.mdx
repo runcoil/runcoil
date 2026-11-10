@@ -1,0 +1,83 @@
+---
+title: Workers
+description: A worker is your process that runs Task code. It connects out to the server over HTTP/2, takes as many Runs as it has slots, and drains on shutdown.
+sidebar:
+  order: 4
+---
+
+A worker is the process of your application that runs Task code. The worker opens the connection to the server, so the server needs no route into your network.
+
+## Connection
+
+`runcoil.NewClient` reads the address of the server and the API key from the environment, and a worker is built on a client:
+
+```go
+client, err := runcoil.NewClient() // reads RUNCOIL_URL and RUNCOIL_API_KEY
+if err != nil {
+	log.Fatal(err)
+}
+
+worker, err := runcoil.NewWorker(client, "shop", runcoil.Slots(10))
+```
+
+`RUNCOIL_URL` has no default, so the SDK never sends a key to a host that you did not name. The SDK speaks HTTP/2 only: without TLS for an `http` URL, and over TLS for an `https` URL.
+
+## Protocol
+
+The worker sends every request. The server answers on the stream that the worker opened with Listen:
+
+<pre class="mermaid">{`
+sequenceDiagram
+    participant W as Worker
+    participant S as Server
+    W->>S: Register the app, its Tasks, and the slots
+    W->>S: Listen for Runs
+    S-->>W: A Run, with the Step results saved so far
+    W->>S: The result of each Step
+    W->>S: The result of the Run
+    loop Every 10 seconds
+        W->>S: Heartbeat
+    end
+    W->>S: Deregister on shutdown
+`}</pre>
+
+## Slots
+
+`runcoil.Slots(n)` sets how many Runs the worker runs at one time. The default is 10, and the server accepts at most 100. The server never sends a worker more Runs than it has free slots.
+
+To run more Runs, start more processes with the same app name.
+
+## Lost connections
+
+The worker sends a heartbeat every 10 seconds. When the connection drops, the worker reconnects by itself, and waits at most 5 seconds between tries. Running handlers continue during a short outage.
+
+When the server hears no heartbeat for 30 seconds, it ends the session of the worker. A worker that comes back registers again and reports the Runs that it still runs. The server puts every other Run of that worker back in the queue. If the server already gave a Run to another attempt, the worker stops the handler of that Run inside `step.Do`.
+
+The server settings `dispatcher.heartbeat-interval` and `dispatcher.worker-ttl` set both times. See [Server configuration](/reference/server-configuration/#workers).
+
+## Shutdown
+
+`worker.Shutdown(ctx)` stops taking new Runs and waits for the running handlers:
+
+```go
+drainCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+if err := worker.Shutdown(drainCtx); err != nil {
+	log.Print(err)
+}
+```
+
+When `drainCtx` ends first, `Shutdown` cancels the handlers that are still running, waits up to 2 seconds, and returns an error that names the Runs it gave up. The server takes those Runs back later.
+
+## Logs
+
+The SDK logs nothing unless you pass a logger with `runcoil.Logger`. With one, it logs these events:
+
+| Level | Events |
+| --- | --- |
+| Info | Registration, shutdown, a Step retry, the start and the end of an outage |
+| Debug | Each Run, each Step, each reconnect attempt |
+| Warn and error | Refused reports, panics, lost connections |
+
+Each line about a Run carries `run_id`, `task_name`, and `epoch`.
