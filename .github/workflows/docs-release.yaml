@@ -21,10 +21,12 @@ defaults:
     working-directory: docs
 
 jobs:
-  # A run started by hand deploys only from main, never from another branch.
+  # The Cloudflare secrets live in the docs-production environment, which only main may use.
+  # A run started by hand from another branch is skipped.
   deploy:
     name: Deploy to Cloudflare
     if: github.ref == 'refs/heads/main'
+    environment: docs-production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
