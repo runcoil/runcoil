@@ -53,6 +53,10 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session doma
 				return fmt.Errorf("upsert task %q: %w", def.Name, err)
 			}
 
+			if err := s.syncSchedule(ctx, tx, key.ProjectID, id, def.Schedule); err != nil {
+				return fmt.Errorf("task %q: %w", def.Name, err)
+			}
+
 			taskIDs = append(taskIDs, id)
 		}
 
@@ -84,6 +88,42 @@ func (s *WorkerStore) Register(ctx context.Context, keyHash []byte, session doma
 	}
 
 	return worker, nil
+}
+
+// syncSchedule stores the Task's schedule, or removes the one it had when it declares
+// none. A new or changed cron starts from its first tick after now.
+func (s *WorkerStore) syncSchedule(ctx context.Context, tx DB, projectID, taskID uuid.UUID, schedule *domain.Schedule) error {
+	if schedule == nil {
+		if err := s.queries.ScheduleDelete(ctx, tx, taskID); err != nil {
+			return fmt.Errorf("delete schedule: %w", err)
+		}
+
+		return nil
+	}
+
+	c, err := domain.ParseCron(schedule.Cron)
+	if err != nil {
+		return fmt.Errorf("parse schedule: %w", err)
+	}
+
+	now, err := s.queries.ScheduleNow(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("read database clock: %w", err)
+	}
+
+	err = s.queries.ScheduleUpsert(ctx, tx, sqlc.ScheduleUpsertParams{
+		ID:            uuid.NewV7(),
+		ProjectID:     projectID,
+		TaskID:        taskID,
+		Cron:          c.String(),
+		OverlapPolicy: string(schedule.Overlap),
+		NextTickAt:    c.Next(now),
+	})
+	if err != nil {
+		return fmt.Errorf("upsert schedule: %w", err)
+	}
+
+	return nil
 }
 
 // byTaskName returns the indexes of tasks in name order. Every Register locks the Task

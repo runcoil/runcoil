@@ -62,6 +62,10 @@ func (w *Worker) register(ctx context.Context) error {
 	req := w.registerRequest()
 	resp, err := w.rpc.Register(ctx, req)
 	if err != nil {
+		if name := errorDetail(err).GetTaskName(); name != "" {
+			return fmt.Errorf("register: task %q: %w", name, err)
+		}
+
 		return fmt.Errorf("register: %w", err)
 	}
 

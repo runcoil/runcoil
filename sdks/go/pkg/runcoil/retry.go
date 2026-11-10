@@ -79,9 +79,14 @@ func retryable(err error) bool {
 // errorCode returns the Runcoil error code in the details of err, or
 // ERROR_CODE_UNSPECIFIED when there is none.
 func errorCode(err error) runcoilv1.ErrorCode {
+	return errorDetail(err).GetCode()
+}
+
+// errorDetail returns the server's ErrorDetail carried by err, or nil.
+func errorDetail(err error) *runcoilv1.ErrorDetail {
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
-		return runcoilv1.ErrorCode_ERROR_CODE_UNSPECIFIED
+		return nil
 	}
 
 	for _, d := range ce.Details() {
@@ -91,11 +96,11 @@ func errorCode(err error) runcoilv1.ErrorCode {
 		}
 
 		if detail, ok := msg.(*runcoilv1.ErrorDetail); ok {
-			return detail.GetCode()
+			return detail
 		}
 	}
 
-	return runcoilv1.ErrorCode_ERROR_CODE_UNSPECIFIED
+	return nil
 }
 
 // sleep waits for d and reports false when ctx ends first.

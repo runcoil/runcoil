@@ -247,3 +247,67 @@ func (s *RunStore) ExpireStartDeadlines(ctx context.Context, batchSize int) (int
 
 	return len(ids), nil
 }
+
+// FireDueSchedules fires at most batchSize schedules whose tick has come, in one
+// transaction: each makes a queued Run, unless it skips overlaps and its last Run has not
+// ended, and moves to its first tick after the database clock. So a schedule that missed
+// ticks while the server was down fires once (catch-up latest).
+func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.ScheduleTicks, error) {
+	var ticks domain.ScheduleTicks
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		rows, err := s.queries.ScheduleTakeDue(ctx, tx, int32(batchSize)) //nolint:gosec // A small batch size.
+		if err != nil {
+			return fmt.Errorf("take due schedules: %w", err)
+		}
+
+		if len(rows) == 0 {
+			return nil
+		}
+
+		now := rows[0].Now
+		advance := sqlc.ScheduleAdvanceParams{}
+		runs := sqlc.RunCreateScheduledParams{}
+		for _, row := range rows {
+			c, err := domain.ParseCron(row.Cron)
+			if err != nil {
+				// Register parses every cron before it stores it, so only a changed parser
+				// gets here. The schedule stays due and is reported at each sweep.
+				ticks.Broken++
+				continue
+			}
+
+			runID := uuid.Nil()
+			if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunActive {
+				ticks.Skipped++
+			} else {
+				runID = uuid.NewV7()
+				runs.Ids = append(runs.Ids, runID)
+				runs.TaskIds = append(runs.TaskIds, row.TaskID)
+				ticks.Fired++
+			}
+
+			advance.Ids = append(advance.Ids, row.ID)
+			advance.NextTickAts = append(advance.NextTickAts, c.Next(now))
+			advance.RunIds = append(advance.RunIds, runID)
+		}
+
+		if len(runs.Ids) > 0 {
+			if err := s.queries.RunCreateScheduled(ctx, tx, runs); err != nil {
+				return fmt.Errorf("create scheduled runs: %w", err)
+			}
+		}
+
+		if len(advance.Ids) > 0 {
+			if err := s.queries.ScheduleAdvance(ctx, tx, advance); err != nil {
+				return fmt.Errorf("advance schedules: %w", err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.ScheduleTicks{}, fmt.Errorf("fire due schedules in transaction: %w", err)
+	}
+
+	return ticks, nil
+}

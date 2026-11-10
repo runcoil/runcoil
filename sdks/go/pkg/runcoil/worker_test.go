@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -361,6 +362,28 @@ func TestStartFailsWhenRegisterIsRefused(t *testing.T) {
 	assert.ErrorContains(t, w.Start(ctx), "start worker: register:", "a failed Start can be tried again")
 }
 
+func TestARefusedRegisterNamesTheTask(t *testing.T) {
+	f, url := newFakeServer(t)
+	detail, err := connectproto.NewErrorDetail(&runcoilv1.ErrorDetail{
+		Code:     runcoilv1.ErrorCode_ERROR_CODE_INVALID_REGISTRATION,
+		TaskName: "cleanup",
+	})
+	require.NoError(t, err)
+	f.set(func(f *fakeServer) {
+		f.regAnswer = connect.NewError(connect.CodeInvalidArgument, "schedule: cron never fires").WithDetail(detail)
+	})
+
+	client, err := NewClient(URL(url), APIKey(testAPIKey))
+	require.NoError(t, err)
+	w, err := NewWorker(client, "shop")
+	require.NoError(t, err)
+	require.NoError(t, w.NewTask("cleanup", HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
+		Cron("0 0 30 2 *")))
+
+	assert.EqualError(t, w.Start(context.Background()),
+		`start worker: register: task "cleanup": invalid_argument: schedule: cron never fires`)
+}
+
 func TestRetryable(t *testing.T) {
 	assert.True(t, retryable(connect.NewError(connect.CodeUnavailable, "down")))
 	assert.False(t, retryable(connect.NewError(connect.CodeInvalidArgument, "bad")))
@@ -710,8 +733,9 @@ func TestRegisterCarriesTheTaskOptions(t *testing.T) {
 	require.NoError(t, w.NewTask("charge", h,
 		Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
 		StartDeadline(10*time.Minute),
+		Cron("0 2 * * *", SkipOverlap()),
 	))
-	require.NoError(t, w.NewTask("plain", h))
+	require.NoError(t, w.NewTask("plain", h, Cron("*/10 * * * * *")))
 
 	require.NoError(t, w.Start(context.Background()))
 	t.Cleanup(func() { _ = w.Shutdown(context.Background()) })
@@ -725,8 +749,12 @@ func TestRegisterCarriesTheTaskOptions(t *testing.T) {
 	assert.Equal(t, []time.Duration{time.Second, time.Minute},
 		[]time.Duration{defs[0].GetRetry().GetDelays()[0].AsDuration(), defs[0].GetRetry().GetDelays()[1].AsDuration()})
 	assert.Equal(t, 10*time.Minute, defs[0].GetStartDeadline().AsDuration())
+	assert.Equal(t, "0 2 * * *", defs[0].GetSchedule().GetCron())
+	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP, defs[0].GetSchedule().GetOverlap())
 	assert.Nil(t, defs[1].GetRetry(), "no policy: the server's default")
 	assert.Nil(t, defs[1].GetStartDeadline(), "no deadline")
+	assert.Equal(t, "*/10 * * * * *", defs[1].GetSchedule().GetCron())
+	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW, defs[1].GetSchedule().GetOverlap())
 }
 
 func TestNewTaskValidatesItsOptions(t *testing.T) {
@@ -746,4 +774,8 @@ func TestNewTaskValidatesItsOptions(t *testing.T) {
 		`new task "c": start deadline must be greater than 0, got -1s`)
 	assert.EqualError(t, w.NewTask("d", h, StartDeadline(0)),
 		`new task "d": start deadline must be greater than 0, got 0s`)
+	assert.EqualError(t, w.NewTask("e", h, Cron("0 * * * *"), Cron("30 * * * *")),
+		`new task "e": a task has at most one schedule: declare another task on the same handler for another cron`)
+	assert.EqualError(t, w.NewTask("f", h, Cron("  ")),
+		`new task "f": cron is empty`)
 }

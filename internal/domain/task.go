@@ -18,6 +18,8 @@ type TaskDefinition struct {
 	Name          string
 	Retry         *RetryPolicy
 	StartDeadline *time.Duration
+	// Schedule makes a Run at each tick of its cron. Nil: the Task has no schedule.
+	Schedule *Schedule
 }
 
 // RetryPolicy says how often and how late a failed Step is tried again.

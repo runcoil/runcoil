@@ -6,7 +6,7 @@ is saved on the server, so a Run that starts again skips the Steps already done.
 
 > [!NOTE]
 > **The SDK is in early development.** Expect breaking changes until the first release.
-> Schedules, `Invoke` and waits are not here yet.
+> `Invoke` and waits are not here yet.
 
 ## Install
 
@@ -193,11 +193,45 @@ id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
 started within `d`, for example because no worker was free. It applies to the first start
 only, and `d` must be greater than 0.
 
-> [!NOTE]
-> The server keeps a Task's retry policy and start deadline with each Run when the Run is
-> created. Nothing creates Runs that way yet: `Invoke` and schedules come later. Until then,
-> `runcoil.Retry` and `runcoil.StartDeadline` are sent at Register and stored, but a Run
-> uses the Step's own policy, or else the server's default, and has no start deadline.
+The server keeps a Task's retry policy and start deadline with each Run when the Run is
+created, so a new policy applies to new Runs only. Today only schedules create Runs;
+`Invoke` comes later.
+
+## Schedules
+
+`runcoil.Cron(expr)` makes a Run of the Task at each tick of a cron expression, read in
+UTC:
+
+```go
+worker.NewTask("cleanup", runcoil.HandlerFunc(cleanup),
+	runcoil.Cron("0 3 * * *"), // 03:00 UTC every day
+)
+
+worker.NewTask("sync", runcoil.HandlerFunc(sync),
+	runcoil.Cron("*/30 * * * * *", runcoil.SkipOverlap()), // every 30s, skipped while the last Run has not ended
+)
+```
+
+- **Five fields**, or **six with seconds first**. Descriptors such as `@daily` and time
+  zone prefixes such as `TZ=` are refused. The server checks the expression at Register,
+  so a bad one makes `Start` fail with the Task's name.
+- **One schedule per Task.** A Task that needs two cadences is two Tasks on the same
+  handler. A list such as `0 2,14 * * *` covers several times of one day.
+- **A scheduled Run has no input**: the handler gets the zero value of its input type.
+- **Overlap**: a tick makes a Run even when the schedule's last Run has not ended.
+  `runcoil.SkipOverlap()` skips the tick instead, while that Run is queued, running or
+  waiting to retry. It reads only the schedule's last Run, so it does not stop every
+  overlap: a Run started with `Invoke`, or one a tick started before `SkipOverlap` was
+  turned on, can still run at the same time.
+- **Downtime**: a schedule that missed ticks while the server was down fires once, then
+  follows its cron from the current time. With `SkipOverlap`, that one tick is skipped
+  too if the last Run has not ended.
+- **Changing the cron** keeps the schedule and starts from the new expression's next tick.
+  Removing `runcoil.Cron` removes the schedule at the next Register.
+- **The last Register wins**, as for every setting of a Task. While old and new versions
+  of a worker run side by side, an old worker that registers after the new ones puts
+  back its own schedule, or removes it if it had none. Stop the old workers before the
+  new ones start, or restart a new worker after the deploy.
 
 ## Shutdown
 

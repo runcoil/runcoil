@@ -97,6 +97,13 @@ func taskDefinitionToProto(t *task) *runcoilv1.TaskDefinition {
 		def.StartDeadline = durationpb.New(*d)
 	}
 
+	if s := t.cfg.schedule; s != nil {
+		def.Schedule = &runcoilv1.Schedule{Cron: s.cron, Overlap: runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW}
+		if s.skipOverlap {
+			def.Schedule.Overlap = runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP
+		}
+	}
+
 	return def
 }
 

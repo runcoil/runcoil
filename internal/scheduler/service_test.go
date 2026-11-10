@@ -20,6 +20,7 @@ type fakeRunStore struct {
 	mu          sync.Mutex
 	promotes    int
 	expires     int
+	fires       int
 	fullPromote bool
 	promoteErr  error
 }
@@ -47,6 +48,15 @@ func (f *fakeRunStore) ExpireStartDeadlines(context.Context, int) (int, error) {
 	f.expires++
 
 	return 0, nil
+}
+
+func (f *fakeRunStore) FireDueSchedules(context.Context, int) (domain.ScheduleTicks, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.fires++
+
+	return domain.ScheduleTicks{Fired: 1}, nil
 }
 
 func (f *fakeRunStore) calls() (promotes, expires int) {
@@ -86,6 +96,7 @@ func testConfig() Config {
 		RequeueDelayedRunsInterval: 10 * time.Millisecond,
 		StartDeadlineCheckInterval: 10 * time.Millisecond,
 		DeadWorkerCheckInterval:    10 * time.Millisecond,
+		ScheduleCheckInterval:      10 * time.Millisecond,
 		MaxLostAttempts:            5,
 		WorkerTTL:                  20 * time.Millisecond,
 	}
@@ -171,6 +182,19 @@ func TestTheReaperWaitsOneTTLAfterTheStart(t *testing.T) {
 	assert.Zero(t, sweeps, "the heartbeats of the workers are stale right after a restart")
 }
 
+func TestSchedulesFireAtEachTick(t *testing.T) {
+	store := &fakeRunStore{fullPromote: true}
+	s := newService(store)
+	start(t, s)
+
+	require.Eventually(t, func() bool {
+		store.mu.Lock()
+		defer store.mu.Unlock()
+
+		return store.fires >= 3
+	}, time.Second, 5*time.Millisecond, "a backlog of delayed Runs does not hold up the schedules")
+}
+
 func TestReady(t *testing.T) {
 	s := newService(&fakeRunStore{})
 	require.Error(t, s.Ready(context.Background()), "not running before Run")
@@ -194,6 +218,7 @@ func TestConfigValidate(t *testing.T) {
 		{name: "requeue", modify: func(c *Config) { c.RequeueDelayedRunsInterval = 0 }, want: "requeue delayed runs interval must be greater than 0"},
 		{name: "start deadline", modify: func(c *Config) { c.StartDeadlineCheckInterval = 0 }, want: "start deadline check interval must be greater than 0"},
 		{name: "dead worker", modify: func(c *Config) { c.DeadWorkerCheckInterval = 0 }, want: "dead worker check interval must be greater than 0"},
+		{name: "schedule", modify: func(c *Config) { c.ScheduleCheckInterval = 0 }, want: "schedule check interval must be greater than 0"},
 		{name: "lost attempts negative", modify: func(c *Config) { c.MaxLostAttempts = -1 }, want: "max lost attempts must be between 0 and 100"},
 		{name: "lost attempts too many", modify: func(c *Config) { c.MaxLostAttempts = 101 }, want: "max lost attempts must be between 0 and 100"},
 	}
