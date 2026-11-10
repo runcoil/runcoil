@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 )
 
 // fakeRun is a run state whose reports are stored as the server would store them.
@@ -203,9 +204,9 @@ func TestDoMarksTheRetryOfAFailure(t *testing.T) {
 		retryAfter   *time.Duration
 	}{
 		{name: "a plain error", err: base},
-		{name: "non retriable", err: NonRetriable(base), nonRetriable: true},
-		{name: "retry after", err: RetryAfter(base, time.Minute), retryAfter: ptr(time.Minute)},
-		{name: "wrapped retry after", err: fmt.Errorf("charge: %w", RetryAfter(base, time.Second)), retryAfter: ptr(time.Second)},
+		{name: "non retriable", err: retry.NonRetriable(base), nonRetriable: true},
+		{name: "retry after", err: retry.After(base, time.Minute), retryAfter: ptr(time.Minute)},
+		{name: "wrapped retry after", err: fmt.Errorf("charge: %w", retry.After(base, time.Second)), retryAfter: ptr(time.Second)},
 	}
 
 	for _, tt := range tests {
@@ -228,7 +229,7 @@ func TestDoSendsTheStepRetryPolicy(t *testing.T) {
 	f, ctx := newFakeRun(nil)
 
 	_, err := Do(ctx, "charge", func(context.Context) (int, error) { return 1, nil },
-		Retry(RetryPolicy{MaxAttempts: 2, Delays: []time.Duration{time.Second}}))
+		Retry(retry.Policy{MaxAttempts: 2, Delays: []time.Duration{time.Second}}))
 	require.NoError(t, err)
 
 	require.Len(t, f.reports, 1)
@@ -240,7 +241,7 @@ func TestDoRefusesAnInvalidRetryPolicy(t *testing.T) {
 
 	called := false
 	_, err := Do(ctx, "charge", func(context.Context) (int, error) { called = true; return 1, nil },
-		Retry(RetryPolicy{MaxAttempts: 31}))
+		Retry(retry.Policy{MaxAttempts: 31}))
 
 	assert.EqualError(t, err, `step "charge": retry policy: max attempts must be between 0 and 30, got 31`)
 	assert.False(t, called)

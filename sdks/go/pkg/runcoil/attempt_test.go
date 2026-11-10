@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 	"github.com/runcoil/runcoil/sdks/go/pkg/step"
 )
 
@@ -33,8 +34,8 @@ func TestAScheduledRetryStopsTheHandler(t *testing.T) {
 	w := startWorker(t, url, map[string]Handler{
 		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
 			_, err := step.Do(ctx, "charge", func(context.Context) (int, error) {
-				return 0, step.RetryAfter(errors.New("rate limited"), 30*time.Second)
-			}, step.Retry(step.RetryPolicy{MaxAttempts: 3, Delays: []time.Duration{time.Second}}))
+				return 0, retry.After(errors.New("rate limited"), 30*time.Second)
+			}, step.Retry(retry.Policy{MaxAttempts: 3, Delays: []time.Duration{time.Second}}))
 			after.Store(true)
 
 			return orderOutput{}, err
@@ -67,7 +68,7 @@ func TestANonRetriableErrorIsMarked(t *testing.T) {
 	declined := errors.New("card declined")
 	startWorker(t, url, map[string]Handler{
 		"order": HandlerFunc(func(ctx context.Context, _ orderInput) (orderOutput, error) {
-			_, err := step.Do(ctx, "charge", func(context.Context) (int, error) { return 0, step.NonRetriable(declined) })
+			_, err := step.Do(ctx, "charge", func(context.Context) (int, error) { return 0, retry.NonRetriable(declined) })
 			return orderOutput{}, err
 		}),
 	})

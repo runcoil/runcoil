@@ -15,7 +15,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
-	"github.com/runcoil/runcoil/sdks/go/pkg/step"
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 )
 
 const (
@@ -97,7 +97,7 @@ type TaskOption func(*taskCfg)
 
 // taskCfg holds what the options of a Task set, sent with the Task at Register.
 type taskCfg struct {
-	retry         *step.RetryPolicy
+	retry         *retry.Policy
 	startDeadline *time.Duration
 }
 
@@ -117,10 +117,10 @@ func (c *taskCfg) validate() error {
 	return nil
 }
 
-// TaskRetry sets the retry policy of the Task's Steps. A Step's own step.Retry comes
+// Retry sets the retry policy of the Task's Steps. A Step's own step.Retry comes
 // first, and a zero field takes the server's default. The server keeps the policy of a Run
 // from when the Run was created, so a new policy applies to new Runs only.
-func TaskRetry(p step.RetryPolicy) TaskOption {
+func Retry(p retry.Policy) TaskOption {
 	return func(c *taskCfg) { c.retry = &p }
 }
 
@@ -183,7 +183,7 @@ func Slots(n int) WorkerOption {
 // NewTask adds a Task with its handler to the worker. The name must be unique within the
 // worker. It fails when the name is empty or taken, when the handler is zero, when an
 // option is invalid, or when the worker has started. Call it before Start; Start
-// registers the Task with the server. Options such as TaskRetry and StartDeadline set the
+// registers the Task with the server. Options such as Retry and StartDeadline set the
 // Task's settings.
 func (w *Worker) NewTask(name string, h Handler, opts ...TaskOption) error {
 	if name == "" {

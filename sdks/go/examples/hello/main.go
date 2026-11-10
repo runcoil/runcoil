@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 	"github.com/runcoil/runcoil/sdks/go/pkg/runcoil"
 	"github.com/runcoil/runcoil/sdks/go/pkg/step"
 )
@@ -64,7 +65,7 @@ func run() error {
 
 	t := &tasks{logger: logger, tries: map[string]int{}}
 	err = worker.NewTask("greet", runcoil.HandlerFunc(t.greet),
-		runcoil.TaskRetry(step.RetryPolicy{MaxAttempts: 4, Delays: []time.Duration{time.Second, 2 * time.Second}}),
+		runcoil.Retry(retry.Policy{MaxAttempts: 4, Delays: []time.Duration{time.Second, 2 * time.Second}}),
 	)
 	if err != nil {
 		return fmt.Errorf("new task: %w", err)
@@ -100,7 +101,7 @@ func (t *tasks) greet(ctx context.Context, in greetInput) (greetOutput, error) {
 
 	greeting, err := step.Do(ctx, "compose", func(ctx context.Context) (string, error) {
 		if in.FailAt == "compose" {
-			return "", step.NonRetriable(errors.New("compose failed"))
+			return "", retry.NonRetriable(errors.New("compose failed"))
 		}
 
 		if t.try(ctx) <= in.FailTimes {

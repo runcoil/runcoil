@@ -23,10 +23,10 @@ type Error = runstate.StepError
 //
 // A Step whose fn returns an error is tried again by its retry policy: Retry sets the
 // Step's own, otherwise the Task's applies. A retry ends the attempt and runs the Run
-// again later, so the handler stops inside Do. Wrap the error with NonRetriable to fail
-// at once, or with RetryAfter to choose the wait. A panic, or an output that JSON cannot
-// encode, is never tried again. A Step that fails for good returns *Error, and the
-// handler may run a fallback or return it to fail the Run.
+// again later, so the handler stops inside Do. Wrap the error with retry.NonRetriable to
+// fail at once, or with retry.After to choose the wait. A panic, or an output that JSON
+// cannot encode, is never tried again. A Step that fails for good returns *Error, and
+// the handler may run a fallback or return it to fail the Run.
 //
 // The Step is stored under id the first time; a later Step with the same id in the same
 // Run gets a counter (charge, charge#2).
@@ -105,7 +105,7 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 	rep := report(stepID, out)
 	rep.StartedAt, rep.EndedAt = startedAt, endedAt
 	if c.retry != nil {
-		rep.Retry = c.retry.runstate()
+		rep.Retry = retryPolicyToRunstate(*c.retry)
 	}
 
 	rec, ok := st.Report(ctx, rep)
@@ -172,7 +172,7 @@ func report[T any](stepID string, out outcome[T]) runstate.StepReport {
 		rep.Failure = &runstate.Failure{Kind: runstate.KindPanic, Message: fmt.Sprintf("step panicked: %v", out.panicValue)}
 	case out.err != nil:
 		rep.Failure = &runstate.Failure{Kind: runstate.KindError, Message: out.err.Error()}
-		retryFailure(rep.Failure, out.err)
+		rep.Failure.MarkRetry(out.err)
 	default:
 		b, err := json.Marshal(out.value)
 		if err != nil {

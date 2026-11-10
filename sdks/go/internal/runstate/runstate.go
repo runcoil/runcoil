@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -82,6 +83,35 @@ type Failure struct {
 type RetryPolicy struct {
 	MaxAttempts int
 	Delays      []time.Duration
+}
+
+// NonRetriableError is an error the application marked with retry.NonRetriable.
+type NonRetriableError struct {
+	Err error
+}
+
+func (e *NonRetriableError) Error() string { return e.Err.Error() }
+func (e *NonRetriableError) Unwrap() error { return e.Err }
+
+// RetryAfterError is an error the application marked with retry.After.
+type RetryAfterError struct {
+	Err   error
+	After time.Duration
+}
+
+func (e *RetryAfterError) Error() string { return e.Err.Error() }
+func (e *RetryAfterError) Unwrap() error { return e.Err }
+
+// MarkRetry adds to f what the marks on err say about retrying.
+func (f *Failure) MarkRetry(err error) {
+	var nr *NonRetriableError
+	f.NonRetriable = errors.As(err, &nr)
+
+	var ra *RetryAfterError
+	if errors.As(err, &ra) {
+		after := ra.After
+		f.RetryAfter = &after
+	}
 }
 
 // StepID returns the id a Step named name is stored under in this attempt: the name the

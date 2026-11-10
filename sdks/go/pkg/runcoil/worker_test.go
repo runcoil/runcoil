@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
+	"github.com/runcoil/runcoil/sdks/go/pkg/retry"
 	"github.com/runcoil/runcoil/sdks/go/pkg/step"
 )
 
@@ -698,7 +699,7 @@ func TestRegisterCarriesTheTaskOptions(t *testing.T) {
 
 	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, w.NewTask("charge", h,
-		TaskRetry(step.RetryPolicy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
+		Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
 		StartDeadline(10*time.Minute),
 	))
 	require.NoError(t, w.NewTask("plain", h))
@@ -728,9 +729,9 @@ func TestNewTaskValidatesItsOptions(t *testing.T) {
 
 	h := HandlerFunc(func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	assert.EqualError(t, w.NewTask("a", h, TaskRetry(step.RetryPolicy{MaxAttempts: 31})),
+	assert.EqualError(t, w.NewTask("a", h, Retry(retry.Policy{MaxAttempts: 31})),
 		`new task "a": retry policy: max attempts must be between 0 and 30, got 31`)
-	assert.EqualError(t, w.NewTask("b", h, TaskRetry(step.RetryPolicy{Delays: []time.Duration{-time.Second}})),
+	assert.EqualError(t, w.NewTask("b", h, Retry(retry.Policy{Delays: []time.Duration{-time.Second}})),
 		`new task "b": retry policy: delays must not be negative, got -1s`)
 	assert.EqualError(t, w.NewTask("c", h, StartDeadline(-time.Second)),
 		`new task "c": start deadline must be greater than 0, got -1s`)
