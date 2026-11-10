@@ -212,7 +212,13 @@ function fitSvgToContents(svg: SVGSVGElement): void {
 	svg.style.maxWidth = `${width}px`;
 }
 
+// A theme switch or a page change can start a render while an older one is
+// still waiting on Mermaid. Each run takes a number, and stops when a newer
+// run has started, so a stale run never paints over the current theme.
+let renderGeneration = 0;
+
 async function render() {
+	const generation = ++renderGeneration;
 	diagrams.forEach(captureDiagramSource);
 
 	let mermaid: typeof import("mermaid").default;
@@ -225,6 +231,7 @@ async function render() {
 		console.error("Mermaid load failed:", e);
 		return;
 	}
+	if (generation !== renderGeneration) return;
 
 	const isLight =
 		document.documentElement.getAttribute("data-mode") !== "dark";
@@ -294,10 +301,12 @@ async function render() {
 	}
 
 	for (const diagram of diagrams) {
+		if (generation !== renderGeneration) return;
 		try {
 			const def = diagram.getAttribute("data-diagram") as string;
 
 			const { svg } = await mermaid.render(uniqueMermaidId(), def);
+			if (generation !== renderGeneration) return;
 			diagram.innerHTML = svg;
 			diagram.removeAttribute("data-error");
 

@@ -63,4 +63,4 @@ Do not write a new component when Nimbus has one. These copied files differ from
 | `src/components/Header.astro`, `src/layouts/DocsLayout.astro` | The Runcoil lockup and the Docs chip |
 | `src/components/ui/pagination/` | A plain previous and next row |
 | `src/pages/og/_card.ts` | The social card shows the lockup. `Logo.astro` and `logo.ts` are gone |
-| `src/scripts/mermaid.ts` | Diagram lines take the brand color |
+| `src/scripts/mermaid.ts` | Diagram lines take the brand color, and a stale render stops when a newer one starts |

@@ -21,8 +21,10 @@ defaults:
     working-directory: docs
 
 jobs:
+  # A run started by hand deploys only from main, never from another branch.
   deploy:
     name: Deploy to Cloudflare
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
