@@ -1,8 +1,8 @@
 # Runcoil docs site
 
-The source of [docs.runcoil.dev](https://docs.runcoil.dev). The site is built with [Nimbus](https://github.com/cloudflare/nimbus), the docs framework of Cloudflare, on Astro. This page is for people who edit the docs. It is not published.
+The source of [docs.runcoil.dev](https://docs.runcoil.dev). The site is built with [Nimbus](https://github.com/cloudflare/nimbus), the docs framework of Cloudflare, on Astro. This file explains how to run and edit the site.
 
-Agents read [AGENT.md](AGENT.md) first. It has the rules of a Nimbus site and the commands that check one.
+Agents read [AGENTS.md](AGENTS.md) first. It has the rules of a Nimbus site and the commands that check one.
 
 ## Run it
 
@@ -24,17 +24,6 @@ pnpm build && pnpm check
 ```
 
 `Docs CI` runs the same commands. `Docs Release` deploys `main` to Cloudflare.
-
-## Layout
-
-| Path | Contents |
-| --- | --- |
-| `src/content/docs/` | The pages. A folder is a section of the sidebar |
-| `astro.config.ts` | Site title, sidebar groups, and lint rules |
-| `src/styles/globals.css` | Color and layout tokens, `--nb-*` |
-| `src/components/`, `src/layouts/` | Components and layouts that Nimbus copied in |
-| `public/` | Favicons |
-| `logo/` | The logo lockups, for the header and for the repository README |
 
 ## Write a page
 
@@ -74,4 +63,5 @@ Do not write a new component when Nimbus has one. These copied files differ from
 | `src/styles/globals.css` | Brand green, and softer dark colors |
 | `src/components/Header.astro`, `src/layouts/DocsLayout.astro` | The Runcoil lockup and the Docs chip |
 | `src/components/ui/pagination/` | A plain previous and next row |
+| `src/pages/og/_card.ts` | The social card shows the lockup. `Logo.astro` and `logo.ts` are gone |
 | `src/scripts/mermaid.ts` | Diagram lines take the brand color |
