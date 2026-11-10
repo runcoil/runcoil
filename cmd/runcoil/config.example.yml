@@ -30,3 +30,7 @@ retry:
 scheduler:
   requeue_delayed_runs_interval: 1s
   start_deadline_check_interval: 1s
+  dead_worker_check_interval: 5s
+
+run:
+  max_lost_attempts: 5

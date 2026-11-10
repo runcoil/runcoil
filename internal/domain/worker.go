@@ -127,3 +127,13 @@ type StreamMessage struct {
 	LeaseLost *Lease
 	Keepalive bool
 }
+
+// DeadWorkers is what one sweep of the reaper did: the sessions it ended, and what became
+// of the attempts they held.
+type DeadWorkers struct {
+	Ended    int
+	Requeued int
+	// Failed counts the Runs lost more often than the cap, which failed with
+	// FailureCodeAttemptLost.
+	Failed int
+}

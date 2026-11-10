@@ -27,7 +27,15 @@ type stream struct {
 	// ended is closed when the dispatcher ends the stream, so its Listen returns.
 	ended chan struct{}
 
-	free int
+	// held is the attempts the worker runs on this stream: the ones it reported at the
+	// attach and still holds, and the ones pushed since. A worker's calls reach the server
+	// that holds its stream, so every attempt that ends passes through here.
+	held map[domain.Lease]struct{}
+}
+
+// free returns how many more attempts the worker can take.
+func (st *stream) free() int {
+	return max(st.slots-len(st.held), 0)
 }
 
 // claimTarget is a stream with free slots, copied out of the map for one claim.
@@ -60,6 +68,7 @@ func (s *Service) Listen(
 		slots:    worker.Slots,
 		out:      make(chan domain.StreamMessage, streamBuffer),
 		ended:    make(chan struct{}),
+		held:     make(map[domain.Lease]struct{}, len(running)),
 	}
 
 	// The stream goes in the map while the worker row is locked, so the map follows the
@@ -71,8 +80,15 @@ func (s *Service) Listen(
 		StreamID:     streamID,
 		Running:      running,
 		Attached: func(notHeld []domain.Lease) {
-			free = max(worker.Slots-(len(running)-len(notHeld)), 0)
-			st.free = free
+			for _, l := range running {
+				st.held[l] = struct{}{}
+			}
+
+			for _, l := range notHeld {
+				delete(st.held, l)
+			}
+
+			free = st.free()
 			s.put(st)
 		},
 	})
@@ -187,12 +203,12 @@ func (s *Service) claimable() []claimTarget {
 
 	targets := make([]claimTarget, 0, len(s.streams))
 	for _, st := range s.streams {
-		if st.free > 0 {
+		if free := st.free(); free > 0 {
 			targets = append(targets, claimTarget{
 				workerID: st.workerID,
 				streamID: st.id,
 				taskIDs:  st.taskIDs,
-				free:     st.free,
+				free:     free,
 			})
 		}
 	}
@@ -221,10 +237,10 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 		return
 	}
 
-	st.free -= len(assigns)
 	for _, a := range assigns {
 		select {
 		case st.out <- domain.StreamMessage{Assign: &a}:
+			st.held[a.Lease] = struct{}{}
 			s.logger.DebugContext(ctx, "run assigned",
 				slog.String("run_id", a.Lease.RunID.String()),
 				slog.Int64("epoch", a.Lease.Epoch),
@@ -243,13 +259,25 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 	}
 }
 
-// release gives back the slot of an attempt that ended.
-func (s *Service) release(workerID uuid.UUID) {
+// release gives back the slot of an attempt that ended, or that the worker no longer
+// holds. An attempt the worker's stream does not hold frees nothing, so a release that
+// arrives after a reconnect never frees a slot twice.
+func (s *Service) release(workerID uuid.UUID, lease domain.Lease) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if st, ok := s.streams[workerID]; ok && st.free < st.slots {
-		st.free++
+	if st, ok := s.streams[workerID]; ok {
+		delete(st.held, lease)
+	}
+}
+
+// endWorker ends the worker's stream on this server, whichever it is.
+func (s *Service) endWorker(workerID uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if st, ok := s.streams[workerID]; ok {
+		s.endLocked(st)
 	}
 }
 

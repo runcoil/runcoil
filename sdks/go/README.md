@@ -203,8 +203,14 @@ only, and `d` must be greater than 0.
 
 `worker.Shutdown(ctx)` stops taking new Runs and waits for the running handlers. When
 `ctx` ends first, it cancels the handlers that are still running, waits up to two
-seconds, and returns an error naming the Runs it gave up. The server takes those Runs
-back later.
+seconds, and returns an error naming the Runs it gave up.
+
+Last, `Shutdown` deregisters the worker. The server puts the Runs it gave up back in the
+queue at once, and they do not count as lost. When the worker cannot reach the server,
+or the process dies without `Shutdown`, the server ends the session after
+`dispatcher.worker-ttl` (30s) with no heartbeat, and the Runs go back to the queue then.
+Each such loss counts; a Run lost more than `run.max-lost-attempts` times (5) fails with
+`attempt_lost`.
 
 ## Logs
 

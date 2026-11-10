@@ -62,7 +62,8 @@ func run() error {
 	runStore := postgres.NewRunStore(db, queries)
 
 	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
-	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore)
+	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
+	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore, workerStore)
 
 	// The API serves the health checks of the whole process, so the probes call one port.
 	checks := healthutil.New()

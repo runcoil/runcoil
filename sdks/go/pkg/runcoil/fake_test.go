@@ -49,6 +49,10 @@ type fakeServer struct {
 	steps      []*runcoilv1.CompleteStepRequest
 	runs       []*runcoilv1.CompleteRunRequest
 	heartbeats int
+	// deregisters is the reason of each Deregister, and runsAtDeregister how many Runs
+	// had completed by then.
+	deregisters      []string
+	runsAtDeregister []int
 	sessions   int
 	stepAnswer func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error)
 	runAnswer  func(context.Context) error
@@ -151,6 +155,16 @@ func (f *fakeServer) Listen(ctx context.Context, req *runcoilv1.ListenRequest, o
 			return nil
 		}
 	}
+}
+
+func (f *fakeServer) Deregister(_ context.Context, req *runcoilv1.DeregisterRequest) (*runcoilv1.DeregisterResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.deregisters = append(f.deregisters, req.GetReason())
+	f.runsAtDeregister = append(f.runsAtDeregister, len(f.runs))
+
+	return &runcoilv1.DeregisterResponse{}, nil
 }
 
 func (f *fakeServer) Heartbeat(context.Context, *runcoilv1.HeartbeatRequest) (*runcoilv1.HeartbeatResponse, error) {

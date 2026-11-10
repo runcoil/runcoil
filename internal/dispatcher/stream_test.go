@@ -39,15 +39,21 @@ func newStreamService(t *testing.T, store WorkerStore) *Service {
 	return New(cfg, slog.New(slog.DiscardHandler), store, nil)
 }
 
+// newStream returns a stream whose worker already runs slots - free attempts.
 func newStream(workerID uuid.UUID, slots, free, buffer int) *stream {
-	return &stream{
+	st := &stream{
 		id:       uuid.New(),
 		workerID: workerID,
 		slots:    slots,
 		out:      make(chan domain.StreamMessage, buffer),
 		ended:    make(chan struct{}),
-		free:     free,
+		held:     map[domain.Lease]struct{}{},
 	}
+	for range slots - free {
+		st.held[assign().Lease] = struct{}{}
+	}
+
+	return st
 }
 
 func assign() domain.Assign {
@@ -107,9 +113,12 @@ func TestPushTakesSlotsAndSends(t *testing.T) {
 	st := newStream(uuid.New(), 3, 3, 3)
 	s.put(st)
 
-	s.push(context.Background(), st.workerID, st.id, []domain.Assign{assign(), assign()})
+	a, b := assign(), assign()
+	s.push(context.Background(), st.workerID, st.id, []domain.Assign{a, b})
 
-	assert.Equal(t, 1, st.free)
+	assert.Equal(t, 1, st.free())
+	assert.Contains(t, st.held, a.Lease)
+	assert.Contains(t, st.held, b.Lease)
 	assert.Len(t, st.out, 2)
 }
 
@@ -135,15 +144,34 @@ func TestPushEndsTheStreamWhenItsBufferIsFull(t *testing.T) {
 	assert.NotContains(t, s.streams, st.workerID)
 }
 
-func TestReleaseStopsAtTheSlots(t *testing.T) {
+func TestReleaseFreesOnlyTheSlotOfAHeldLease(t *testing.T) {
 	s := newStreamService(t, nil)
-	st := newStream(uuid.New(), 2, 1, 1)
+	st := newStream(uuid.New(), 2, 2, 2)
 	s.put(st)
 
-	s.release(st.workerID)
-	s.release(st.workerID)
+	a := assign()
+	s.push(context.Background(), st.workerID, st.id, []domain.Assign{a, assign()})
+	require.Equal(t, 0, st.free())
 
-	assert.Equal(t, 2, st.free)
+	s.release(st.workerID, a.Lease)
+	s.release(st.workerID, a.Lease)
+	assert.Equal(t, 1, st.free(), "releasing the same lease twice frees one slot")
+
+	s.release(st.workerID, assign().Lease)
+	assert.Equal(t, 1, st.free(), "a lease the stream does not hold frees nothing")
+}
+
+func TestEndWorkerEndsWhicheverStream(t *testing.T) {
+	s := newStreamService(t, nil)
+	st := newStream(uuid.New(), 1, 1, 1)
+	s.put(st)
+
+	s.endWorker(uuid.New())
+	assert.False(t, isEnded(st))
+
+	s.endWorker(st.workerID)
+	assert.True(t, isEnded(st))
+	assert.NotContains(t, s.streams, st.workerID)
 }
 
 func TestClaimAllEndsTheStream(t *testing.T) {
@@ -175,7 +203,7 @@ func TestClaimAllPushesTheAssigns(t *testing.T) {
 
 	assert.Equal(t, 2, got.Slots)
 	assert.Equal(t, s.id, got.DispatcherID)
-	assert.Equal(t, 1, st.free)
+	assert.Equal(t, 1, st.free())
 	assert.Len(t, st.out, 1)
 }
 
@@ -209,10 +237,12 @@ func TestListen(t *testing.T) {
 
 	s.mu.Lock()
 	st := s.streams[worker.ID]
-	free := st.free
+	free := st.free()
+	_, holdsHeld := st.held[held]
 	s.mu.Unlock()
 
 	assert.Equal(t, 2, free, "the held attempt takes a slot, the lost one does not")
+	assert.True(t, holdsHeld)
 
 	s.end(worker.ID, st.id)
 

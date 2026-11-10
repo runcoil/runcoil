@@ -116,6 +116,7 @@ type WorkerStore interface {
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
 	BeatDispatcher(ctx context.Context, id uuid.UUID) error
 	ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error)
+	Deregister(ctx context.Context, workerID uuid.UUID) (int, error)
 }
 
 // RunStore keeps the Runs and their journal.

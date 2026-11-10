@@ -75,3 +75,52 @@ RETURNING retry_count, ready_at;
 UPDATE run_leases
 SET retry_step_id = NULL, retry_count = 0
 WHERE run_id = @run_id::uuid AND retry_step_id = @step_id::text;
+
+-- name: LeaseReleaseOfWorker :many
+-- The leases of a worker that deregistered go back to the queue. Not the worker's fault:
+-- lost_count stays as it is.
+WITH released AS (
+    DELETE FROM run_leases
+    WHERE run_id IN (
+        SELECT run_id FROM run_leases
+        WHERE worker_id = @worker_id::uuid
+        ORDER BY run_id
+        FOR UPDATE
+    )
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count
+)
+INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
+FROM released
+RETURNING run_id;
+
+-- name: LeaseRequeueLost :many
+-- The leases of dead workers: lost_count + 1, then back to the queue, or, above
+-- @max_lost, the Run fails with attempt_lost. lost is true for a Run that failed.
+WITH lost AS (
+    DELETE FROM run_leases
+    WHERE run_id IN (
+        SELECT run_id FROM run_leases
+        WHERE worker_id = ANY (@worker_ids::uuid[])
+        ORDER BY run_id
+        FOR UPDATE
+    )
+    RETURNING run_id, project_id, task_id, retry_step_id, retry_count, lost_count + 1 AS lost_count
+), failed AS (
+    UPDATE runs
+    SET status = 'failed', error_code = 'attempt_lost',
+        error_message = 'the run was lost by too many workers that stopped while running it',
+        ended_at = now()
+    FROM lost
+    WHERE runs.id = lost.run_id AND lost.lost_count > @max_lost::integer
+    RETURNING runs.id
+), requeued AS (
+    INSERT INTO run_queue (run_id, project_id, task_id, ready_at, retry_step_id, retry_count, lost_count)
+    SELECT run_id, project_id, task_id, now(), retry_step_id, retry_count, lost_count
+    FROM lost
+    WHERE lost_count <= @max_lost::integer
+    RETURNING run_id
+)
+SELECT id AS run_id, true AS failed FROM failed
+UNION ALL
+SELECT run_id, false AS failed FROM requeued;

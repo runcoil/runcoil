@@ -309,6 +309,11 @@ func TestShutdownWaitsForTheHandlers(t *testing.T) {
 
 	run := f.waitRun(t)
 	assert.JSONEq(t, `{"receipt":"done"}`, string(run.GetOutput()))
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, []string{"shutdown"}, f.deregisters)
+	assert.Equal(t, []int{1}, f.runsAtDeregister, "Deregister comes after the result")
 }
 
 func TestShutdownGivesUpAtItsDeadline(t *testing.T) {
@@ -336,6 +341,10 @@ func TestShutdownGivesUpAtItsDeadline(t *testing.T) {
 	assert.EqualError(t, err, "shutdown: gave up 1 runs before their result was sent: [run-1]")
 
 	f.noRun(t)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, []string{"shutdown"}, f.deregisters, "a drain that gave up still deregisters")
 }
 
 func TestStartFailsWhenRegisterIsRefused(t *testing.T) {

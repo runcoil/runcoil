@@ -358,3 +358,79 @@ func stepRecord(params stepRecordParams) domain.StepRecord {
 
 	return record
 }
+
+// Deregister ends the worker's session and puts the attempts it still holds back in the
+// queue, in one transaction. A drain is not the worker's fault, so they do not count as
+// lost. It returns how many it put back, and domain.ErrSessionEnded when the session has
+// already ended.
+func (s *WorkerStore) Deregister(ctx context.Context, workerID uuid.UUID) (int, error) {
+	var released int
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		_, err := s.queries.WorkerDeregister(ctx, tx, workerID)
+		if isNoRowsError(err) {
+			return domain.ErrSessionEnded
+		}
+
+		if err != nil {
+			return fmt.Errorf("end session: %w", err)
+		}
+
+		ids, err := s.queries.LeaseReleaseOfWorker(ctx, tx, workerID)
+		if err != nil {
+			return fmt.Errorf("release leases: %w", err)
+		}
+
+		released = len(ids)
+
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("deregister in transaction: %w", err)
+	}
+
+	return released, nil
+}
+
+// EndDeadWorkers ends at most batchSize sessions with no heartbeat for longer than ttl,
+// and puts the attempts they held back in the queue, in one transaction. Each attempt
+// counts as lost; a Run lost more than maxLost times fails with attempt_lost instead.
+func (s *WorkerStore) EndDeadWorkers(ctx context.Context, ttl time.Duration, maxLost, batchSize int) (domain.DeadWorkers, error) {
+	var dead domain.DeadWorkers
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		ids, err := s.queries.WorkerEndDead(ctx, tx, sqlc.WorkerEndDeadParams{
+			Ttl:       interval(&ttl),
+			BatchSize: int32(batchSize), //nolint:gosec // A small batch size.
+		})
+		if err != nil {
+			return fmt.Errorf("end dead sessions: %w", err)
+		}
+
+		if len(ids) == 0 {
+			return nil
+		}
+
+		rows, err := s.queries.LeaseRequeueLost(ctx, tx, sqlc.LeaseRequeueLostParams{
+			WorkerIds: ids,
+			MaxLost:   int32(maxLost), //nolint:gosec // Validated against a small cap.
+		})
+		if err != nil {
+			return fmt.Errorf("requeue lost leases: %w", err)
+		}
+
+		dead.Ended = len(ids)
+		for _, row := range rows {
+			if row.Failed {
+				dead.Failed++
+			} else {
+				dead.Requeued++
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.DeadWorkers{}, fmt.Errorf("end dead workers in transaction: %w", err)
+	}
+
+	return dead, nil
+}
