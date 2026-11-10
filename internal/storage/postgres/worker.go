@@ -7,8 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"

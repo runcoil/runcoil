@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,10 +54,7 @@ func newTestService(t *testing.T, port int) *Service {
 	t.Helper()
 
 	cfg := Config{Port: port, ClaimInterval: time.Hour, HeartbeatInterval: time.Hour, WorkerTTL: 2 * time.Hour}
-	s, err := New(cfg, slog.New(slog.DiscardHandler), fakeWorkerStore{}, nil)
-	require.NoError(t, err)
-
-	return s
+	return New(cfg, slog.New(slog.DiscardHandler), fakeWorkerStore{}, nil)
 }
 
 // start serves s on a listener of its own and returns its base URL and the result of serve.

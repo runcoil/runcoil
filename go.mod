@@ -5,7 +5,6 @@ go 1.27
 require (
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/validate v0.9.0
-	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/lmittmann/tint v1.2.1
 	github.com/pressly/goose/v3 v3.29.0

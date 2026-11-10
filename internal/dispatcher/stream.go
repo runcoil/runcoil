@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/runcoil/runcoil/internal/apierr"
 	"github.com/runcoil/runcoil/internal/domain"
@@ -53,11 +52,7 @@ func (s *Service) Listen(
 		return apierr.Unavailable("", "server is shutting down")
 	}
 
-	streamID, err := uuid.NewV7()
-	if err != nil {
-		return fmt.Errorf("new stream id: %w", err)
-	}
-
+	streamID := uuid.NewV7()
 	st := &stream{
 		id:       streamID,
 		workerID: worker.ID,

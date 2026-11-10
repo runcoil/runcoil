@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/domain"
@@ -149,22 +149,17 @@ type Service struct {
 }
 
 // New creates the dispatcher. It serves and claims nothing until Run.
-func New(cfg Config, logger *slog.Logger, workerStore WorkerStore, runStore RunStore) (*Service, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("new dispatcher id: %w", err)
-	}
-
+func New(cfg Config, logger *slog.Logger, workerStore WorkerStore, runStore RunStore) *Service {
 	return &Service{
 		cfg:         cfg,
 		logger:      logger,
 		workerStore: workerStore,
 		runStore:    runStore,
-		id:          id,
+		id:          uuid.NewV7(),
 		streams:     make(map[uuid.UUID]*stream),
 		beats:       make(map[uuid.UUID]time.Time),
 		stopped:     make(chan struct{}),
-	}, nil
+	}
 }
 
 // Run serves the worker protocol, claims, flushes heartbeats and records that this

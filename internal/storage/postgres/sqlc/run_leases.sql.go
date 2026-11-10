@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"uuid"
 )
 
 const leaseClaim = `-- name: LeaseClaim :many
