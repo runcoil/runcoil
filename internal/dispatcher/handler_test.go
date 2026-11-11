@@ -66,15 +66,15 @@ func TestStepRecordToProto(t *testing.T) {
 func TestStreamMessageToProto(t *testing.T) {
 	lease := domain.Lease{RunID: uuid.New(), Epoch: 7}
 
-	assign := streamMessageToProto(domain.StreamMessage{Assign: &domain.Assign{Lease: lease, TaskName: "charge"}})
+	assign := streamMessageToProto(streamMessage{Assign: &domain.Assign{Lease: lease, TaskName: "charge"}})
 	assert.Equal(t, lease.RunID.String(), assign.GetAssign().GetLease().GetRunId())
 	assert.Equal(t, int64(7), assign.GetAssign().GetLease().GetEpoch())
 	assert.Equal(t, "charge", assign.GetAssign().GetTaskName())
 
-	lost := streamMessageToProto(domain.StreamMessage{LeaseLost: &lease})
+	lost := streamMessageToProto(streamMessage{LeaseLost: &lease})
 	assert.Equal(t, runcoilv1.Cancel_REASON_LEASE_LOST, lost.GetCancel().GetReason())
 
-	assert.NotNil(t, streamMessageToProto(domain.StreamMessage{Keepalive: true}).GetKeepalive())
+	assert.NotNil(t, streamMessageToProto(streamMessage{Keepalive: true}).GetKeepalive())
 }
 
 func TestCompleteStepParams(t *testing.T) {
