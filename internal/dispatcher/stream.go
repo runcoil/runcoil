@@ -23,7 +23,7 @@ type stream struct {
 	workerID uuid.UUID
 	taskIDs  []uuid.UUID
 	slots    int
-	out      chan domain.StreamMessage
+	out      chan streamMessage
 	// ended is closed when the dispatcher ends the stream, so its Listen returns.
 	ended chan struct{}
 
@@ -36,6 +36,14 @@ type stream struct {
 // free returns how many more attempts the worker can take.
 func (st *stream) free() int {
 	return max(st.slots-len(st.held), 0)
+}
+
+// streamMessage is one message for a worker's stream: exactly one field is set.
+type streamMessage struct {
+	Assign *domain.Assign
+	// LeaseLost names an attempt the worker runs but no longer holds.
+	LeaseLost *domain.Lease
+	Keepalive bool
 }
 
 // claimTarget is a stream with free slots, copied out of the map for one claim.
@@ -54,7 +62,7 @@ func (s *Service) Listen(
 	ctx context.Context,
 	worker domain.Worker,
 	running []domain.Lease,
-	send func(domain.StreamMessage) error,
+	send func(streamMessage) error,
 ) error {
 	if s.isStopping() {
 		return apierr.Unavailable("", "server is shutting down")
@@ -66,7 +74,7 @@ func (s *Service) Listen(
 		workerID: worker.ID,
 		taskIDs:  worker.TaskIDs,
 		slots:    worker.Slots,
-		out:      make(chan domain.StreamMessage, streamBuffer),
+		out:      make(chan streamMessage, streamBuffer),
 		ended:    make(chan struct{}),
 		held:     make(map[domain.Lease]struct{}, len(running)),
 	}
@@ -123,7 +131,7 @@ func (s *Service) Listen(
 // pump sends the messages of st until the worker goes, the server stops, or the
 // dispatcher ends the stream. It first tells the worker which of the attempts it reported
 // are no longer its own.
-func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, send func(domain.StreamMessage) error) error {
+func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, send func(streamMessage) error) error {
 	for _, l := range notHeld {
 		s.logger.InfoContext(ctx, "lease lost sent",
 			slog.String("worker_id", st.workerID.String()),
@@ -131,7 +139,7 @@ func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, 
 			slog.Int64("epoch", l.Epoch),
 		)
 
-		if err := send(domain.StreamMessage{LeaseLost: &l}); err != nil {
+		if err := send(streamMessage{LeaseLost: &l}); err != nil {
 			return fmt.Errorf("send lease lost: %w", err)
 		}
 	}
@@ -152,7 +160,7 @@ func (s *Service) pump(ctx context.Context, st *stream, notHeld []domain.Lease, 
 				return fmt.Errorf("send message: %w", err)
 			}
 		case <-keepalive.C:
-			if err := send(domain.StreamMessage{Keepalive: true}); err != nil {
+			if err := send(streamMessage{Keepalive: true}); err != nil {
 				return fmt.Errorf("send keepalive: %w", err)
 			}
 		}
@@ -239,7 +247,7 @@ func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assign
 
 	for _, a := range assigns {
 		select {
-		case st.out <- domain.StreamMessage{Assign: &a}:
+		case st.out <- streamMessage{Assign: &a}:
 			st.held[a.Lease] = struct{}{}
 			s.logger.DebugContext(ctx, "run assigned",
 				slog.String("run_id", a.Lease.RunID.String()),

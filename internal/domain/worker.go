@@ -120,14 +120,6 @@ type ClaimRunsParams struct {
 	Slots        int
 }
 
-// StreamMessage is one message for a worker's stream: exactly one field is set.
-type StreamMessage struct {
-	Assign *Assign
-	// LeaseLost names an attempt the worker runs but no longer holds.
-	LeaseLost *Lease
-	Keepalive bool
-}
-
 // DeadWorkers is what one sweep of the reaper did: the sessions it ended, and what became
 // of the attempts they held.
 type DeadWorkers struct {

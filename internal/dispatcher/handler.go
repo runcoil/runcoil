@@ -62,7 +62,7 @@ func (h workerHandler) Listen(
 		running = append(running, lease)
 	}
 
-	err = h.s.Listen(ctx, worker, running, func(msg domain.StreamMessage) error {
+	err = h.s.Listen(ctx, worker, running, func(msg streamMessage) error {
 		return out.Send(streamMessageToProto(msg))
 	})
 	if err != nil {
@@ -256,7 +256,7 @@ func leaseToProto(l domain.Lease) *runcoilv1.Lease {
 	return &runcoilv1.Lease{RunId: l.RunID.String(), Epoch: l.Epoch}
 }
 
-func streamMessageToProto(msg domain.StreamMessage) *runcoilv1.ListenResponse {
+func streamMessageToProto(msg streamMessage) *runcoilv1.ListenResponse {
 	switch {
 	case msg.Assign != nil:
 		a := msg.Assign

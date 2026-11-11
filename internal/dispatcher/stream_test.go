@@ -45,7 +45,7 @@ func newStream(workerID uuid.UUID, slots, free, buffer int) *stream {
 		id:       uuid.New(),
 		workerID: workerID,
 		slots:    slots,
-		out:      make(chan domain.StreamMessage, buffer),
+		out:      make(chan streamMessage, buffer),
 		ended:    make(chan struct{}),
 		held:     map[domain.Lease]struct{}{},
 	}
@@ -214,9 +214,9 @@ func TestListen(t *testing.T) {
 
 	var (
 		mu   sync.Mutex
-		sent []domain.StreamMessage
+		sent []streamMessage
 	)
-	send := func(msg domain.StreamMessage) error {
+	send := func(msg streamMessage) error {
 		mu.Lock()
 		defer mu.Unlock()
 		sent = append(sent, msg)
@@ -263,7 +263,7 @@ func TestListenRefusesWhileStopping(t *testing.T) {
 	s := newStreamService(t, &streamStore{})
 	s.Stop()
 
-	err := s.Listen(context.Background(), domain.Worker{ID: uuid.New(), Slots: 1}, nil, func(domain.StreamMessage) error { return nil })
+	err := s.Listen(context.Background(), domain.Worker{ID: uuid.New(), Slots: 1}, nil, func(streamMessage) error { return nil })
 
 	assert.ErrorContains(t, err, "shutting down")
 }
