@@ -15,6 +15,8 @@ You host Runcoil yourself. It is one server and PostgreSQL, with nothing else to
 
 Your Task code runs in your own process, called a worker. The server keeps the state of every Run and decides which worker runs it.
 
+<CrashReplay />
+
 1. Your worker starts and connects out to the Runcoil server. The server never calls into your network.
 2. A Run of the Task `process-order` is queued in PostgreSQL.
 3. The server sends the Run to a worker with a free slot.
