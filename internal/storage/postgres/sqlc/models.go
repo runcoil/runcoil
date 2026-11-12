@@ -118,6 +118,14 @@ type Task struct {
 	LastRegisteredAt time.Time
 }
 
+type User struct {
+	ID            uuid.UUID
+	Username      string
+	PasswordHash  string
+	IsServerAdmin bool
+	CreatedAt     time.Time
+}
+
 type Worker struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID

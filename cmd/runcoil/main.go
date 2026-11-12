@@ -12,6 +12,7 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
+	"github.com/runcoil/runcoil/internal/service/seed"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 	"github.com/runcoil/runcoil/pkg/configutil"
@@ -60,6 +61,12 @@ func run() error {
 	queries := sqlc.Queries{}
 	workerStore := postgres.NewWorkerStore(db, queries)
 	runStore := postgres.NewRunStore(db, queries)
+	userStore := postgres.NewUserStore(db, queries)
+
+	seedService := seed.New(cfg.Seed, logger, userStore)
+	if err := seedService.Seed(ctx); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
 
 	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
 	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
