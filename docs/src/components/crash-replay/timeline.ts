@@ -1,10 +1,10 @@
 /**
- * Keyframe timelines for SVG diagrams. Pure: the caller owns the clock, so the
+ * Keyframe timelines for SVG animation. Pure: the caller owns the clock, so the
  * server-rendered poster, the animation loop and reduced motion all sample the
  * same tracks.
  */
 
-export type Ease = 'linear' | 'out' | 'hold';
+type Ease = "linear" | "out" | "hold";
 
 export interface Keyframe {
   /** Time on the loop clock, in ms. Keyframes must be sorted ascending. */
@@ -26,45 +26,45 @@ export interface Keyframe {
 }
 
 interface Resolved {
-  t: number;
-  x: number;
-  y: number;
-  opacity: number;
-  scale: number;
-  state: string;
-  ease: Ease;
+  readonly t: number;
+  readonly x: number;
+  readonly y: number;
+  readonly opacity: number;
+  readonly scale: number;
+  readonly state: string;
+  readonly ease: Ease;
 }
 
 export interface Track {
-  id: string;
-  keys: Resolved[];
+  readonly id: string;
+  readonly keys: readonly Resolved[];
 }
 
-export interface Pose {
+interface Pose {
   /** False outside the track's time range. */
-  alive: boolean;
-  x: number;
-  y: number;
-  opacity: number;
-  scale: number;
-  state: string;
+  readonly alive: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly opacity: number;
+  readonly scale: number;
+  readonly state: string;
 }
 
-const EASE: Record<Exclude<Ease, 'hold'>, (p: number) => number> = {
+const EASE: Readonly<Record<Exclude<Ease, "hold">, (p: number) => number>> = {
   linear: (p) => p,
   out: (p) => 1 - (1 - p) ** 3,
 };
 
-const DEAD: Pose = { alive: false, x: 0, y: 0, opacity: 0, scale: 1, state: '' };
+const DEAD: Pose = { alive: false, x: 0, y: 0, opacity: 0, scale: 1, state: "" };
 
 /** Builds a track, carrying omitted values forward. Throws if keyframes are unsorted. */
-export function track(id: string, keys: Keyframe[]): Track {
+export function track(id: string, keys: readonly Keyframe[]): Track {
   let x = 0;
   let y = 0;
   let opacity = 1;
   let scale = 1;
-  let state = '';
-  const resolved = keys.map((k, i) => {
+  let state = "";
+  const resolved = keys.map((k, i): Resolved => {
     if (i > 0 && k.t < keys[i - 1].t) {
       throw new Error(`Track "${id}": keyframe ${i} (t=${k.t}) is before the previous one`);
     }
@@ -73,13 +73,13 @@ export function track(id: string, keys: Keyframe[]): Track {
     opacity = k.opacity ?? opacity;
     scale = k.scale ?? scale;
     state = k.state ?? state;
-    return { t: k.t, x, y, opacity, scale, state, ease: k.ease ?? 'linear' };
+    return { t: k.t, x, y, opacity, scale, state, ease: k.ease ?? "linear" };
   });
   return { id, keys: resolved };
 }
 
 /** Evaluates a track at time `t` (ms). */
-export function sample(tr: Track, t: number): Pose {
+function sample(tr: Track, t: number): Pose {
   const ks = tr.keys;
   const first = ks[0];
   const last = ks[ks.length - 1];
@@ -89,11 +89,11 @@ export function sample(tr: Track, t: number): Pose {
   while (i < ks.length - 1 && ks[i + 1].t <= t) i++;
   const a = ks[i];
   const b = ks[i + 1];
-  const base = { alive: true, x: a.x, y: a.y, opacity: a.opacity, scale: a.scale, state: a.state };
-  if (!b || b.ease === 'hold') return base;
+  const base: Pose = { alive: true, x: a.x, y: a.y, opacity: a.opacity, scale: a.scale, state: a.state };
+  if (!b || b.ease === "hold") return base;
 
   const p = (t - a.t) / (b.t - a.t);
-  const e = EASE[b.ease](p);
+  const e = EASE[b.ease as Exclude<Ease, "hold">](p);
   return {
     alive: true,
     x: a.x + (b.x - a.x) * e,
@@ -104,11 +104,11 @@ export function sample(tr: Track, t: number): Pose {
   };
 }
 
-const fmt = (n: number) => String(Math.round(n * 100) / 100);
+const fmt = (n: number): string => String(Math.round(n * 100) / 100);
 
 /** The attributes a tracked SVG element carries at time `t`. */
 export function attrsAt(tr: Track, t: number): { transform: string; opacity: string; state: string } {
   const p = sample(tr, t);
-  const transform = `translate(${fmt(p.x)} ${fmt(p.y)})` + (p.scale === 1 ? '' : ` scale(${fmt(p.scale)})`);
+  const transform = `translate(${fmt(p.x)} ${fmt(p.y)})` + (p.scale === 1 ? "" : ` scale(${fmt(p.scale)})`);
   return { transform, opacity: fmt(p.alive ? p.opacity : 0), state: p.state };
 }

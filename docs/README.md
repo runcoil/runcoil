@@ -42,10 +42,6 @@ sequenceDiagram
 `}</pre>
 ```
 
-## The crash diagram
-
-`CrashReplay` is the animated diagram from the landing page at runcoil.dev. Its timeline and geometry live in `src/lib/crash-replay.ts`.
-
 ## Agent copies
 
 The build writes what agents read next to the HTML: `llms.txt`, one `llms.txt` per section, `llms-full.txt`, and an `index.md` copy of every page. Every page also links to its Markdown copy in its `<head>`.

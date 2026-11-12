@@ -1,6 +1,6 @@
 ---
-import { BEATS, NARROW, POSTER_T, SCENES, WIDE, type Layout } from "@/lib/crash-replay";
-import { attrsAt } from "@/lib/flow";
+import { BEATS, LAYOUTS, POSTER_T, SCENES, type Layout } from "./scene";
+import { attrsAt } from "./timeline";
 
 /** Attributes of a tracked element at the poster time. Static elements get none. */
 const pose = (key: Layout["key"], id: string) => {
@@ -10,13 +10,12 @@ const pose = (key: Layout["key"], id: string) => {
   return { transform: a.transform, opacity: a.opacity, "data-state": a.state };
 };
 
-const compositions = [WIDE, NARROW];
 ---
 
-<!-- The landing page's "What happens when a worker crashes" diagram at runcoil.dev. Timeline: src/lib/crash-replay.ts. -->
+<!-- Animated diagram of one Run that crashes on worker-a and replays on worker-b. Timeline and layouts: ./scene.ts -->
 <div class="cr" data-crash>
   {
-    compositions.map((L) => (
+    LAYOUTS.map((L) => (
       <svg
         class={`cr-svg cr-svg-${L.key}`}
         viewBox={`0 0 ${L.w} ${L.h}`}
@@ -133,9 +132,8 @@ const compositions = [WIDE, NARROW];
 
 <style>
   /*
-   * Colors are tokens on .cr. The light values are picked for the docs page
-   * (--nb-brand, --nb-border and friends); the dark values are the landing's
-   * --rc-* tokens, so dark mode matches runcoil.dev.
+   * Colors are tokens on .cr. Light values sit on the page's light surfaces;
+   * dark values are the diagram's own palette.
    */
   .cr {
     /* Light */

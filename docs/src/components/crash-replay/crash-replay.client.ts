@@ -1,14 +1,24 @@
 /**
- * Plays the How it works diagram (CrashReplay.astro). One requestAnimationFrame
- * loop writes each tracked element's pose. The loop runs only while the diagram
- * is on screen, the tab is visible and the reader has not paused it. With
- * reduced motion the loop stops and the poster frame shows; the setting is
- * followed live. mount() calls the teardown on astro:before-swap, so the loop,
- * the observer and the listeners all stop when the reader navigates away.
+ * crash-replay.client.ts — Plays the crash replay diagram (CrashReplay.astro).
+ *
+ * One requestAnimationFrame loop writes each tracked element's pose. The loop
+ * runs only while the diagram is on screen, the tab is visible and the reader
+ * has not paused it. With reduced motion the loop stops and the poster frame
+ * shows; the setting is followed live. mount() calls the teardown on
+ * astro:before-swap, so the loop, the observer and the listeners all stop when
+ * the reader navigates away.
  */
+
 import { mount } from "@cloudflare/nimbus-docs/client";
-import { DURATION, POSTER_T, SCENES } from "@/lib/crash-replay";
-import { attrsAt, type Track } from "@/lib/flow";
+import { DURATION, POSTER_T, SCENES } from "./scene";
+import { attrsAt, type Track } from "./timeline";
+
+interface Part {
+  readonly el: SVGElement;
+  readonly tr: Track;
+  /** The last written value, so only changes touch the DOM. */
+  last: string;
+}
 
 function initCrashReplay(root: HTMLElement): () => void {
   const progress = root.querySelector<HTMLElement>("[data-crash-progress]");
@@ -17,14 +27,15 @@ function initCrashReplay(root: HTMLElement): () => void {
   const restart = root.querySelector<HTMLButtonElement>("[data-crash-restart]");
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-  // Tracked elements of both compositions, with the last written value so only changes touch the DOM.
-  const parts = [...root.querySelectorAll<SVGSVGElement>("svg[data-layout]")].flatMap((svg) => {
+  // Tracked elements of both compositions.
+  const parts: Part[] = [];
+  for (const svg of root.querySelectorAll<SVGSVGElement>("svg[data-layout]")) {
     const scene = SCENES[svg.dataset.layout as keyof typeof SCENES];
-    return [...svg.querySelectorAll<SVGElement>("[data-t]")].flatMap((el) => {
+    for (const el of svg.querySelectorAll<SVGElement>("[data-t]")) {
       const tr: Track | undefined = scene[el.dataset.t ?? ""];
-      return tr ? [{ el, tr, last: "" }] : [];
-    });
-  });
+      if (tr) parts.push({ el, tr, last: "" });
+    }
+  }
 
   let time = 0;
   let last = 0;
@@ -32,7 +43,7 @@ function initCrashReplay(root: HTMLElement): () => void {
   let inView = false;
   let paused = false;
 
-  function render(t: number) {
+  function render(t: number): void {
     for (const p of parts) {
       const a = attrsAt(p.tr, t);
       const key = `${a.transform}|${a.opacity}|${a.state}`;
@@ -45,7 +56,7 @@ function initCrashReplay(root: HTMLElement): () => void {
     progress?.style.setProperty("--p", String(t / DURATION));
   }
 
-  function tick(now: number) {
+  function tick(now: number): void {
     // Clamp long frames so a stall cannot skip a beat, and never run the clock backwards.
     time = (time + Math.max(0, Math.min(now - last, 64))) % DURATION;
     last = now;
@@ -53,7 +64,7 @@ function initCrashReplay(root: HTMLElement): () => void {
     raf = requestAnimationFrame(tick);
   }
 
-  function sync() {
+  function sync(): void {
     const shouldRun = inView && !document.hidden && !paused && !reduce.matches;
     if (shouldRun && !raf) {
       last = performance.now();
@@ -73,19 +84,19 @@ function initCrashReplay(root: HTMLElement): () => void {
   );
   observer.observe(root);
 
-  const onVisibility = () => sync();
-  const onReduceChange = () => {
+  const onVisibility = (): void => sync();
+  const onReduceChange = (): void => {
     render(reduce.matches ? POSTER_T : time);
     sync();
   };
-  const onToggle = () => {
+  const onToggle = (): void => {
     paused = !paused;
     if (toggleLabel) toggleLabel.textContent = paused ? "play" : "pause";
     toggle?.toggleAttribute("data-paused", paused);
     toggle?.setAttribute("aria-label", paused ? "Play" : "Pause");
     sync();
   };
-  const onRestart = () => {
+  const onRestart = (): void => {
     time = 0;
     last = performance.now();
     render(time);
