@@ -36,7 +36,6 @@ interface Resolved {
 }
 
 export interface Track {
-  readonly id: string;
   readonly keys: readonly Resolved[];
 }
 
@@ -75,7 +74,7 @@ export function track(id: string, keys: readonly Keyframe[]): Track {
     state = k.state ?? state;
     return { t: k.t, x, y, opacity, scale, state, ease: k.ease ?? "linear" };
   });
-  return { id, keys: resolved };
+  return { keys: resolved };
 }
 
 /** Evaluates a track at time `t` (ms). */
@@ -93,7 +92,7 @@ function sample(tr: Track, t: number): Pose {
   if (!b || b.ease === "hold") return base;
 
   const p = (t - a.t) / (b.t - a.t);
-  const e = EASE[b.ease as Exclude<Ease, "hold">](p);
+  const e = EASE[b.ease](p);
   return {
     alive: true,
     x: a.x + (b.x - a.x) * e,

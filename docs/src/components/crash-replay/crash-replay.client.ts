@@ -23,7 +23,6 @@ interface Part {
 function initCrashReplay(root: HTMLElement): () => void {
   const progress = root.querySelector<HTMLElement>("[data-crash-progress]");
   const toggle = root.querySelector<HTMLButtonElement>("[data-crash-toggle]");
-  const toggleLabel = root.querySelector<HTMLElement>("[data-crash-toggle-label]");
   const restart = root.querySelector<HTMLButtonElement>("[data-crash-restart]");
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -42,6 +41,8 @@ function initCrashReplay(root: HTMLElement): () => void {
   let raf = 0;
   let inView = false;
   let paused = false;
+  // False until the loop first runs: the server-rendered poster holds until then.
+  let started = false;
 
   function render(t: number): void {
     for (const p of parts) {
@@ -67,6 +68,10 @@ function initCrashReplay(root: HTMLElement): () => void {
   function sync(): void {
     const shouldRun = inView && !document.hidden && !paused && !reduce.matches;
     if (shouldRun && !raf) {
+      if (!started) {
+        started = true;
+        time = 0;
+      }
       last = performance.now();
       raf = requestAnimationFrame(tick);
     } else if (!shouldRun && raf) {
@@ -76,7 +81,10 @@ function initCrashReplay(root: HTMLElement): () => void {
   }
 
   const observer = new IntersectionObserver(
-    ([entry]) => {
+    (entries) => {
+      // The last entry of a batch is the newest state.
+      const entry = entries[entries.length - 1];
+      if (!entry) return;
       inView = entry.isIntersecting;
       sync();
     },
@@ -86,16 +94,16 @@ function initCrashReplay(root: HTMLElement): () => void {
 
   const onVisibility = (): void => sync();
   const onReduceChange = (): void => {
-    render(reduce.matches ? POSTER_T : time);
+    if (reduce.matches) render(POSTER_T);
+    else if (started) render(time);
     sync();
   };
-  // Sets the paused state on the diagram, the toggle button and its label.
+  // Sets the paused state on the diagram and on the toggle button.
   function setPaused(value: boolean): void {
     paused = value;
-    if (toggleLabel) toggleLabel.textContent = paused ? "play" : "pause";
     root.toggleAttribute("data-paused", paused);
     toggle?.toggleAttribute("data-paused", paused);
-    toggle?.setAttribute("aria-label", paused ? "Play" : "Pause");
+    toggle?.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
   }
   const onToggle = (): void => {
     setPaused(!paused);
@@ -118,8 +126,7 @@ function initCrashReplay(root: HTMLElement): () => void {
   // Shows the controls. Without this attribute they stay hidden, so a page without JavaScript shows only the poster.
   root.setAttribute("data-crash-ready", "");
 
-  // Start from the first frame, out of view, so the scene fades in when it scrolls in.
-  if (!reduce.matches) render(time);
+  // Nothing is drawn here: the poster frame stays until the diagram first scrolls into view.
   sync();
 
   return () => {

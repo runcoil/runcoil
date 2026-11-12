@@ -28,7 +28,6 @@ export const BEATS: readonly Beat[] = [
 const BEAT_END = 13600;
 
 interface WorkerLayout {
-  readonly id: "a" | "b";
   readonly box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
   readonly titleY: number;
   readonly labelY: number;
@@ -93,7 +92,6 @@ const WIDE: Layout = {
   bus: "M360 352 H430 V130 H500 M430 304 H500",
   workers: {
     a: {
-      id: "a",
       box: { x: 500, y: 36, w: 420, h: 150 },
       titleY: 64,
       labelY: 92,
@@ -103,7 +101,6 @@ const WIDE: Layout = {
       cellXs: [524, 620, 716, 812],
     },
     b: {
-      id: "b",
       box: { x: 500, y: 210, w: 420, h: 150 },
       titleY: 238,
       labelY: 266,
@@ -137,7 +134,6 @@ const NARROW: Layout = {
   bus: "M64 272 H36 V582 H64 M36 412 H64",
   workers: {
     a: {
-      id: "a",
       box: { x: 64, y: 324, w: 284, h: 150 },
       titleY: 352,
       labelY: 386,
@@ -147,7 +143,6 @@ const NARROW: Layout = {
       cellXs: [84, 148, 212, 276],
     },
     b: {
-      id: "b",
       box: { x: 64, y: 494, w: 284, h: 150 },
       titleY: 522,
       labelY: 556,

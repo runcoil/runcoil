@@ -1,4 +1,9 @@
 ---
+// Animated diagram of one Run that crashes on worker-a and replays on worker-b.
+// Timeline and layouts: ./scene.ts. Client behaviour: ./crash-replay.client.ts.
+import Button from "@/components/ui/button/Button.astro";
+import { buttonIconSize } from "@/components/ui/button/variants";
+import Icon from "@cloudflare/nimbus-docs/components/Icon.astro";
 import { BEATS, LAYOUTS, POSTER_T, SCENES, type Layout } from "./scene";
 import { attrsAt } from "./timeline";
 
@@ -12,7 +17,6 @@ const pose = (key: Layout["key"], id: string) => {
 
 ---
 
-<!-- Animated diagram of one Run that crashes on worker-a and replays on worker-b. Timeline and layouts: ./scene.ts -->
 <div class="cr" data-crash>
   {
     LAYOUTS.map((L) => (
@@ -24,7 +28,7 @@ const pose = (key: Layout["key"], id: string) => {
         aria-hidden="true"
       >
         <g data-t="scene" {...pose(L.key, "scene")}>
-          <!-- Runcoil server: saved Steps on top, queue below the divider. -->
+          {/* Runcoil server: saved Steps on top, queue below the divider. */}
           <rect class="cr-frame cr-frame-server" rx="14" x={L.server.x} y={L.server.y} width={L.server.w} height={L.server.h} />
           <text class="cr-label cr-strong" x={L.server.x + L.pad} y={L.serverTitleY}>Runcoil server</text>
           <text class="cr-label" x={L.server.x + L.pad} y={L.savedY}>Saved Steps</text>
@@ -43,12 +47,14 @@ const pose = (key: Layout["key"], id: string) => {
           <text class="cr-label" x={L.server.x + L.pad} y={L.queueLabelY}>Queue</text>
           <line class="cr-dots" x1={L.queueLane.x1} x2={L.queueLane.x2} y1={L.queueY} y2={L.queueY} />
 
-          <!-- Dispatch connector from the queue to both workers. -->
+          {/* Dispatch connector from the queue to both workers. */}
           <path class="cr-dots" d={L.bus} />
 
           {(["a", "b"] as const).map((id) => {
             const W = L.workers[id];
             const n = id === "a" ? 1 : 2;
+            // Half the length of the cross that marks a lost Step: 15% of the cell's shorter side.
+            const cross = Math.min(W.cellW, W.cellH) * 0.15;
             return (
               <g data-t={`box-${id}`} {...pose(L.key, `box-${id}`)}>
                 <g class="cr-box-body">
@@ -65,6 +71,9 @@ const pose = (key: Layout["key"], id: string) => {
                   {W.cellXs.map((cx, i) => (
                     <g data-t={`cell-${id}${i + 1}`} {...pose(L.key, `cell-${id}${i + 1}`)}>
                       <rect class="cr-cell" rx="8" x={cx} y={W.cellY} width={W.cellW} height={W.cellH} />
+                      {/* A lost Step is also marked by a cross, so the state does not rely on color. */}
+                      <line class="cr-cross" x1={cx + W.cellW / 2 - cross} y1={W.cellY + W.cellH / 2 - cross} x2={cx + W.cellW / 2 + cross} y2={W.cellY + W.cellH / 2 + cross} />
+                      <line class="cr-cross" x1={cx + W.cellW / 2 + cross} y1={W.cellY + W.cellH / 2 - cross} x2={cx + W.cellW / 2 - cross} y2={W.cellY + W.cellH / 2 + cross} />
                     </g>
                   ))}
                 </g>
@@ -109,17 +118,14 @@ const pose = (key: Layout["key"], id: string) => {
     <div class="cr-progress" aria-hidden="true">
       <span class="cr-progress-fill" data-crash-progress></span>
     </div>
-    <button type="button" class="cr-btn" data-crash-toggle aria-label="Pause">
-      <svg class="cr-ico cr-ico-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="2.5" height="10" rx="1" /><rect x="9.5" y="3" width="2.5" height="10" rx="1" /></svg>
-      <svg class="cr-ico cr-ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L5.9 2.7a.6.6 0 0 0-.9.5z" /></svg>
-      <span class="sr-only" data-crash-toggle-label>pause</span>
-    </button>
-    <button type="button" class="cr-btn" data-crash-restart aria-label="Restart">
-      <svg class="cr-ico cr-ico-line" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.75 8a5.25 5.25 0 1 0 1.54-3.71" /><path d="M2.75 2.5v3.25H6" /></svg>
-    </button>
+    <Button variant="outline" shape="circle" size="sm" aria-label="Pause animation" data-crash-toggle>
+      <Icon name="ph:pause" class={`${buttonIconSize.sm} cr-icon-pause`} />
+      <Icon name="ph:play" class={`${buttonIconSize.sm} cr-icon-play`} />
+    </Button>
+    <Button variant="outline" shape="circle" size="sm" icon="ph:arrow-counter-clockwise" aria-label="Restart animation" data-crash-restart />
   </div>
 
-  <ol class="sr-only" aria-label="The six beats of the diagram in text">
+  <ol class="sr-only" aria-label="The diagram, step by step">
     {BEATS.map((b) => (
       <li>{b.text}.</li>
     ))}
@@ -304,6 +310,19 @@ const pose = (key: Layout["key"], id: string) => {
     stroke: var(--cr-danger);
   }
 
+  /* A lost Step is also marked by a cross, so the state does not rely on color. */
+  .cr-cross {
+    fill: none;
+    stroke: var(--cr-danger);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    opacity: 0;
+  }
+  [data-state="lost"] .cr-cross {
+    opacity: 1;
+  }
+
   /* Checkpoint chips land in saved rows; stored results travel back out. */
   .cr-chip {
     fill: var(--cr-accent);
@@ -409,41 +428,11 @@ const pose = (key: Layout["key"], id: string) => {
     transform-origin: left;
     transform: scaleX(var(--p, 0));
   }
-  .cr-btn {
-    display: inline-grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 99px;
-    color: var(--cr-text-2);
-    box-shadow: inset 0 0 0 1px var(--cr-border-strong);
-    transition: color 160ms, background-color 160ms;
-  }
-  .cr-btn:hover {
-    color: var(--cr-text-1);
-    background: rgb(var(--cr-tint) / 0.05);
-  }
-  .cr-btn:focus-visible {
-    outline: 2px solid var(--nb-ring);
-    outline-offset: 2px;
-  }
-  .cr-ico {
-    width: 14px;
-    height: 14px;
-    fill: currentColor;
-  }
-  .cr-ico-line {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .cr-ico-play,
-  [data-paused] .cr-ico-pause {
+  .cr-icon-play,
+  [data-paused] .cr-icon-pause {
     display: none;
   }
-  [data-paused] .cr-ico-play {
+  [data-paused] .cr-icon-play {
     display: block;
   }
 

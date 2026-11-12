@@ -3,6 +3,8 @@ title: Introduction
 description: What Runcoil is, how a worker and the server run a Task together, and which parts work in this early version.
 ---
 
+import { CrashReplay } from "@/components/crash-replay";
+
 Runcoil runs your functions as durable background Tasks. You write a Task as a normal Go function and wrap each piece of work in a Step. The server saves the result of every Step, so a crash, a deploy, or a retry does not repeat the work that already finished.
 
 You host Runcoil yourself. It is one server and PostgreSQL, with nothing else to run.
@@ -22,6 +24,8 @@ Your Task code runs in your own process, called a worker. The server keeps the s
 3. The server sends the Run to a worker with a free slot.
 4. The worker runs your handler. Each Step reports its result, and the server saves it.
 5. The handler returns. The server marks the Run `succeeded` and keeps its output.
+
+If a worker stops in the middle of a Run, the server puts the Run back in the queue, and the next attempt can run on another worker. The Steps that already finished return their saved results, so only the rest of the handler runs again. In the diagram, worker-a is lost during Step 3, and worker-b returns Steps 1 and 2 from their saved results, then runs Steps 3 and 4. [Lost connections](/concepts/workers/#lost-connections) says when the server decides that a worker is gone.
 
 ## A Task in Go
 
