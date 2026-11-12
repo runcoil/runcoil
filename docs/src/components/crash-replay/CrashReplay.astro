@@ -409,8 +409,8 @@ const pose = (key: Layout["key"], id: string) => {
   .cr[data-crash-ready] .cr-controls {
     display: flex;
   }
-  /* Pause stops every motion in the diagram, not only the timeline (WCAG 2.2.2). */
-  .cr[data-paused] .cr-svg * {
+  /* Every CSS animation stops whenever the loop does: paused, out of view or hidden tab (WCAG 2.2.2). */
+  .cr[data-stopped] .cr-svg * {
     animation-play-state: paused;
   }
   .cr-progress {

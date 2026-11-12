@@ -67,6 +67,8 @@ function initCrashReplay(root: HTMLElement): () => void {
 
   function sync(): void {
     const shouldRun = inView && !document.hidden && !paused && !reduce.matches;
+    // CSS animations follow the loop: they stop whenever it does, for any reason.
+    root.toggleAttribute("data-stopped", !shouldRun);
     if (shouldRun && !raf) {
       if (!started) {
         started = true;
@@ -101,7 +103,6 @@ function initCrashReplay(root: HTMLElement): () => void {
   // Sets the paused state on the diagram and on the toggle button.
   function setPaused(value: boolean): void {
     paused = value;
-    root.toggleAttribute("data-paused", paused);
     toggle?.toggleAttribute("data-paused", paused);
     toggle?.setAttribute("aria-label", paused ? "Play animation" : "Pause animation");
   }
