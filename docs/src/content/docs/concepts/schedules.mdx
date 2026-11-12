@@ -1,0 +1,54 @@
+---
+title: Schedules
+description: runcoil.Cron makes a Run of a Task at each tick of a cron expression in UTC. A tick is skipped while the last Run of the schedule has not ended, unless the schedule allows overlaps.
+sidebar:
+  order: 5
+---
+
+A schedule makes a Run of a Task at each tick of a cron expression. You declare it on the Task, and the server fires it, so a schedule keeps its ticks while workers restart.
+
+## Cron expressions
+
+Pass `runcoil.Cron(expr)` to `worker.NewTask`:
+
+```go
+worker.NewTask("cleanup", runcoil.HandlerFunc(cleanup),
+	runcoil.Cron("0 3 * * *"), // 03:00 UTC every day
+)
+
+worker.NewTask("sync", runcoil.HandlerFunc(sync),
+	runcoil.Cron("*/30 * * * * *", runcoil.AllowOverlap()), // every 30s, even while the last Run has not ended
+)
+```
+
+- An expression has five fields, or six with seconds first. The server reads every expression in UTC.
+- Descriptors such as `@daily` and time zone prefixes such as `TZ=` are refused.
+- The server checks the expression when the worker registers, so a bad one makes `Start` fail.
+
+A Task has at most one schedule. A Task that needs two cadences is two Tasks on the same handler. A list such as `0 2,14 * * *` covers several times of one day.
+
+A scheduled Run has no input, so the handler gets the zero value of its input type. The Run takes the [retry policy](/concepts/retries/) and the start deadline of its Task.
+
+## Overlaps
+
+By default, a tick makes no Run while the last Run of the schedule is `queued` or `running`. A Run that waits for the retry of a Step is still `running`, so the tick is skipped too. `runcoil.AllowOverlap()` makes the Run anyway.
+
+Skipping reads only the last Run of the schedule. It is not a lock on the Task: a Run of the same Task that the schedule did not make can still run at the same time.
+
+## No free worker
+
+A scheduled Run waits for a worker as long as it takes. Meanwhile the schedule skips its ticks, and the Run starts when a worker comes back, however late. With `runcoil.AllowOverlap()`, each tick adds a Run to the queue instead.
+
+To bound the wait, set `runcoil.StartDeadline(d)` on the Task. A Run that has not started within `d` fails, and the next tick can make a new one.
+
+## Server downtime
+
+A schedule that missed ticks while the server was down fires once, then follows its cron from the current time. Unless the schedule allows overlaps, that one tick is skipped too if the last Run has not ended.
+
+## Changes and deploys
+
+- A changed expression keeps the schedule and its last Run, and starts from the next tick of the new expression.
+- Removing `runcoil.Cron` from a Task removes its schedule at the next registration.
+- The last registration wins, as for every setting of a Task. While old and new workers run side by side, an old worker that registers after the new ones puts its own schedule back, or removes it if it had none. Stop the old workers before the new ones start, or restart a new worker after the deploy.
+
+The server looks for due ticks every second. The server setting `scheduler.schedule-check-interval` changes that, and a cron with seconds fires no more often than it. See [Server configuration](/reference/server-configuration/#scheduler).

@@ -67,5 +67,5 @@ A Run fails in one of these cases:
 An error that the handler returns outside any Step fails the Run at once, with no retry. To retry work, put it in a [Step](/concepts/steps/).
 
 :::note
-**Task settings do not reach a Run yet.** The server stores `runcoil.Retry` and `runcoil.StartDeadline` when the worker registers, and copies them to each Run that `Invoke` or a schedule creates. Both are still to come, so today a Run has no start deadline.
+**Only scheduled Runs take Task settings today.** The server stores `runcoil.Retry` and `runcoil.StartDeadline` when the worker registers, and copies them to each Run that a [schedule](/concepts/schedules/) or `Invoke` creates. `Invoke` is still to come.
 :::

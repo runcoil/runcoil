@@ -58,8 +58,9 @@ func processOrder(ctx context.Context, in orderInput) (orderOutput, error) {
 - **Workers.** A Go worker registers its Tasks, receives Runs, reconnects after an outage, and drains on shutdown.
 - **Steps.** The server saves each Step result, and a Run that runs again skips the Steps already done.
 - **Retries.** A failed Step retries with a delay, by its own policy or the server default.
+- **Schedules.** A Task with a cron expression gets a Run at each tick.
 
-These parts are not built yet: an SDK call that starts a Run, schedules, waits, a dashboard, and API key management.
+These parts are not built yet: an SDK call that starts a Run, waits, a dashboard, and API key management.
 
 ## Next
 
