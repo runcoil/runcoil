@@ -1,20 +1,19 @@
 # Runcoil Go SDK
 
-The Go SDK runs Runcoil Tasks in your own process. A worker connects to the Runcoil
-server, receives Runs, and calls your handlers. Each Step a handler wraps in `step.Do`
-is saved on the server, so a Run that starts again skips the Steps already done.
+Run durable Tasks in your own Go process. Wrap each side effect in a Step: Runcoil saves
+its result, so a crash, a deploy or a retry picks up after the last finished Step instead
+of starting over.
 
 > [!NOTE]
 > **The SDK is in early development.** Expect breaking changes until the first release.
-> `Invoke` and waits are not here yet.
 
 ## Install
-
-The SDK needs Go 1.26 or later.
 
 ```sh
 go get github.com/runcoil/runcoil/sdks/go
 ```
+
+The SDK needs Go 1.26 or later.
 
 ## Quick start
 
@@ -94,178 +93,39 @@ func main() {
 
 `charge` and `sendReceipt` stand for your own code.
 
-## Configuration
+Set `RUNCOIL_URL` to the server's worker port and `RUNCOIL_API_KEY` to your project's API
+key, then run it. The [quickstart](https://docs.runcoil.dev/start/quickstart/) starts a
+local server for you.
 
-`NewClient` reads its settings from the environment. An option given to `NewClient`
-takes precedence.
+## Retries and schedules
 
-| Variable | Option | Meaning |
-| --- | --- | --- |
-| `RUNCOIL_URL` | `runcoil.URL` | The server's worker port, such as `http://localhost:7070`. There is no default |
-| `RUNCOIL_API_KEY` | `runcoil.APIKey` | The project's API key (`rc_api_...`) |
-| | `runcoil.Logger` | The `*slog.Logger` the SDK writes to. Without it, the SDK logs nothing |
-
-The SDK speaks HTTP/2 only: h2c for an `http` URL, TLS for an `https` URL.
-
-`NewWorker(client, app, opts...)` names the app. Every process that runs the same Tasks
-uses the same app name. `runcoil.Slots(n)` sets how many Runs the worker runs at one
-time; the default is 10, and the server accepts at most 100.
-
-## Tasks and handlers
-
-- **`runcoil.HandlerFunc(fn)`** adapts `func(context.Context, In) (Out, error)` to a
-  handler. The input is decoded from JSON into `In`, and the output is encoded to JSON.
-- **The Run fails** when the handler returns an error or panics. An output that JSON
-  cannot encode also fails it.
-- **`runcoil.RunInfoFromContext(ctx)`** returns the Run ID, app and Task name inside a
-  handler.
-
-## Steps
-
-`step.Do(ctx, id, fn)` runs `fn` and saves its result on the server. When the Run runs
-again, `step.Do` returns the saved value, or the saved error, and does not call `fn`.
-
-- **Wrap every side effect** in a Step: a payment, an email, a call to another service.
-  Code outside a Step runs again each time the Run runs.
-- **The Step ID** is `id` the first time it is used in a Run. A later Step with the same
-  `id` gets a counter: `charge`, `charge#2`, `charge#3`. A loop that calls one Step is
-  fine, as long as it calls the Steps in the same order each time.
-- **A failed Step** is tried again first (see [Retries](#retries)). Once it fails for
-  good, it returns `*step.Error`. The handler may run another Step as a fallback, or return
-  the error to fail the Run with that Step's ID. The error is rebuilt from the
-  saved text, so `errors.Is` does not match your own error values; use `errors.As` with
-  `*step.Error`.
-- **Outside a Run**, `step.Do` calls `fn` and returns its result, so handlers can be unit
-  tested without a server.
-
-Two rules keep a handler safe when its Run is taken away from the worker, for example
-after the worker lost its connection for too long:
-
-- Call `step.Do` on the handler's own goroutine.
-- Code that recovers panics must re-panic any value it does not recognise. The SDK stops
-  a handler whose Run was taken away by panicking inside `step.Do`.
-
-A Step function should return soon after its context is cancelled.
-
-## Retries
-
-When a Step's function returns an error, the server tries the Step again. Each retry is
-a new attempt of the Run: the handler stops inside `step.Do`, and later runs again from
-the start, replaying the Steps already done, until it reaches the failed Step and runs it
-again.
-
-The policy comes from the first of these that sets it, field by field:
-
-1. the Step's own, `step.Retry(policy)` in `step.Do`;
-2. the Task's, `runcoil.Retry(policy)` in `NewTask`, kept with each Run when it is
-   created;
-3. the server's default (`retry.*` in the server config): 4 attempts, 5s, 10s and 30s
-   apart.
-
-The server spreads each delay by up to 20% either way (`retry.jitter`), so Steps that
-failed together do not retry together. A `retry.After` delay is used as it is.
+A failed Step retries on its own, with backoff. A Task can also run on cron:
 
 ```go
 worker.NewTask("process-order", runcoil.HandlerFunc(processOrder),
-	runcoil.Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
+	runcoil.Retry(retry.Policy{MaxAttempts: 5, Delays: retry.Exponential(time.Second, 2, time.Minute, 4)}),
 )
 
-id, err := step.Do(ctx, "charge", func(ctx context.Context) (string, error) {
-	id, err := pay(ctx)
-	if errors.Is(err, errCardDeclined) {
-		return "", retry.NonRetriable(err) // fail now
-	}
-	if errors.Is(err, errRateLimited) {
-		return "", retry.After(err, 30*time.Second) // wait this long instead
-	}
-	return id, err
-}, step.Retry(retry.Policy{MaxAttempts: 3}))
-```
-
-- `MaxAttempts` counts every try, the first one included, and is at most 30. `Delays` are
-  the waits before each retry, at most 32; the last one repeats.
-- `retry.Exponential(initial, factor, limit, n)` builds growing delays:
-  `retry.Exponential(time.Second, 2, time.Minute, 5)` is 1s, 2s, 4s, 8s and 16s.
-- A panic in a Step, or an output JSON cannot encode, is never tried again.
-- An error the handler returns outside any Step fails the Run at once.
-
-`runcoil.StartDeadline(d)` fails a Run of the Task with `start_deadline` when it has not
-started within `d`, for example because no worker was free. It applies to the first start
-only, and `d` must be greater than 0.
-
-The server keeps a Task's retry policy and start deadline with each Run when the Run is
-created, so a new policy applies to new Runs only. Today only schedules create Runs;
-`Invoke` comes later.
-
-## Schedules
-
-`runcoil.Cron(expr)` makes a Run of the Task at each tick of a cron expression, read in
-UTC:
-
-```go
 worker.NewTask("cleanup", runcoil.HandlerFunc(cleanup),
 	runcoil.Cron("0 3 * * *"), // 03:00 UTC every day
 )
-
-worker.NewTask("sync", runcoil.HandlerFunc(sync),
-	runcoil.Cron("*/30 * * * * *", runcoil.AllowOverlap()), // every 30s, even while the last Run has not ended
-)
 ```
 
-- **Five fields**, or **six with seconds first**. Descriptors such as `@daily` and time
-  zone prefixes such as `TZ=` are refused. The server checks the expression at Register,
-  so a bad one makes `Start` fail with the Task's name.
-- **One schedule per Task.** A Task that needs two cadences is two Tasks on the same
-  handler. A list such as `0 2,14 * * *` covers several times of one day.
-- **A scheduled Run has no input**: the handler gets the zero value of its input type.
-- **Overlap**: a tick makes no Run while the schedule's last Run is queued, running or
-  waiting to retry. `runcoil.AllowOverlap()` makes the Run anyway. Skipping reads only
-  the schedule's last Run, so it does not stop every overlap: a Run started with
-  `Invoke`, or one a tick started while the schedule allowed overlaps, can still run at
-  the same time.
-- **No worker**: a scheduled Run waits for a worker as long as it takes, like a Run made
-  with `Invoke`. Meanwhile the schedule skips its ticks, and the Run starts when a worker
-  comes back, however late. With `runcoil.AllowOverlap()` each tick adds a Run instead.
-  `runcoil.StartDeadline` on the Task fails a Run that has not started in time.
-- **Downtime**: a schedule that missed ticks while the server was down fires once, then
-  follows its cron from the current time. Unless the schedule allows overlaps, that one
-  tick is skipped too if the last Run has not ended.
-- **Changing the cron** keeps the schedule and starts from the new expression's next tick.
-  Removing `runcoil.Cron` removes the schedule at the next Register.
-- **The last Register wins**, as for every setting of a Task. While old and new versions
-  of a worker run side by side, an old worker that registers after the new ones puts
-  back its own schedule, or removes it if it had none. Stop the old workers before the
-  new ones start, or restart a new worker after the deploy.
+Inside a Step, `retry.NonRetriable(err)` fails at once, and `retry.After(err, d)` waits
+`d` before the next try.
 
-## Shutdown
+## Learn more
 
-`worker.Shutdown(ctx)` stops taking new Runs and waits for the running handlers. When
-`ctx` ends first, it cancels the handlers that are still running, waits up to two
-seconds, and returns an error naming the Runs it gave up.
-
-Last, `Shutdown` deregisters the worker. The server puts the Runs it gave up back in the
-queue at once, and they do not count as lost. When the worker cannot reach the server,
-or the process dies without `Shutdown`, the server ends the session after
-`dispatcher.worker-ttl` (30s) with no heartbeat, and the Runs go back to the queue then.
-Each such loss counts; a Run lost more than `run.max-lost-attempts` times (5) fails with
-`attempt_lost`.
-
-## Logs
-
-The SDK logs to the logger given with `runcoil.Logger`, and logs nothing without one.
-
-- At info: registration, shutdown, a Step retry, and the start and end of an outage.
-- At debug: each Run and Step, and each reconnect attempt.
-- At warn and error: refused reports, panics, and lost connections.
-
-Each line about a Run carries `run_id`, `task_name` and `epoch`.
-
-## Example
-
-[`examples/hello`](examples/hello) is a worker of the app `hello` with one Task,
-`greet`, of three Steps. The
-[developer guide](../../contribute/developer-guide.md#go-sdk) shows how to run it against
-a local server.
+- [Steps](https://docs.runcoil.dev/concepts/steps/): replay, Step IDs, and the rules a
+  handler follows
+- [Retries](https://docs.runcoil.dev/concepts/retries/): policies, delays, and errors that
+  never retry
+- [Workers](https://docs.runcoil.dev/concepts/workers/): slots, lost connections,
+  shutdown, and logs
+- [Tasks and Runs](https://docs.runcoil.dev/concepts/tasks-and-runs/): Run statuses, and
+  why a Run fails
+- [Go SDK configuration](https://docs.runcoil.dev/reference/go-sdk-configuration/): every
+  option and its default
 
 ## Development
 
@@ -276,3 +136,7 @@ task sdk-go:build   # build and vet the SDK and its examples
 task sdk-go:test    # tests with the race detector, against an in-process fake server
 task sdk-go:check   # lint, test, tidy and vuln
 ```
+
+[`examples/hello`](examples/hello) is a small worker; the
+[developer guide](../../contribute/developer-guide.md#go-sdk) runs it against a local
+server.
