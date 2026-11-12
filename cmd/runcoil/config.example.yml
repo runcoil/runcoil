@@ -35,3 +35,7 @@ scheduler:
 
 run:
   max_lost_attempts: 5
+
+bootstrap:
+  admin_username: admin
+  admin_password: admin
