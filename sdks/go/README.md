@@ -208,7 +208,7 @@ worker.NewTask("cleanup", runcoil.HandlerFunc(cleanup),
 )
 
 worker.NewTask("sync", runcoil.HandlerFunc(sync),
-	runcoil.Cron("*/30 * * * * *", runcoil.SkipOverlap()), // every 30s, skipped while the last Run has not ended
+	runcoil.Cron("*/30 * * * * *", runcoil.AllowOverlap()), // every 30s, even while the last Run has not ended
 )
 ```
 
@@ -218,14 +218,18 @@ worker.NewTask("sync", runcoil.HandlerFunc(sync),
 - **One schedule per Task.** A Task that needs two cadences is two Tasks on the same
   handler. A list such as `0 2,14 * * *` covers several times of one day.
 - **A scheduled Run has no input**: the handler gets the zero value of its input type.
-- **Overlap**: a tick makes a Run even when the schedule's last Run has not ended.
-  `runcoil.SkipOverlap()` skips the tick instead, while that Run is queued, running or
-  waiting to retry. It reads only the schedule's last Run, so it does not stop every
-  overlap: a Run started with `Invoke`, or one a tick started before `SkipOverlap` was
-  turned on, can still run at the same time.
+- **Overlap**: a tick makes no Run while the schedule's last Run is queued, running or
+  waiting to retry. `runcoil.AllowOverlap()` makes the Run anyway. Skipping reads only
+  the schedule's last Run, so it does not stop every overlap: a Run started with
+  `Invoke`, or one a tick started while the schedule allowed overlaps, can still run at
+  the same time.
+- **No worker**: a scheduled Run waits for a worker as long as it takes, like a Run made
+  with `Invoke`. Meanwhile the schedule skips its ticks, and the Run starts when a worker
+  comes back, however late. With `runcoil.AllowOverlap()` each tick adds a Run instead.
+  `runcoil.StartDeadline` on the Task fails a Run that has not started in time.
 - **Downtime**: a schedule that missed ticks while the server was down fires once, then
-  follows its cron from the current time. With `SkipOverlap`, that one tick is skipped
-  too if the last Run has not ended.
+  follows its cron from the current time. Unless the schedule allows overlaps, that one
+  tick is skipped too if the last Run has not ended.
 - **Changing the cron** keeps the schedule and starts from the new expression's next tick.
   Removing `runcoil.Cron` removes the schedule at the next Register.
 - **The last Register wins**, as for every setting of a Task. While old and new versions
