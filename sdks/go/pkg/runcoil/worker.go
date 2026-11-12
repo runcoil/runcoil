@@ -111,8 +111,8 @@ type taskCfg struct {
 
 // schedule is what Cron sets.
 type schedule struct {
-	cron        string
-	skipOverlap bool
+	cron         string
+	allowOverlap bool
 }
 
 // validate checks the options against the server's limits. Its errors do not name the
@@ -162,6 +162,10 @@ type CronOption func(*schedule)
 // at Register, so an expression it refuses makes Start fail. A scheduled Run has no
 // input: the handler gets the zero value of its input type.
 //
+// A tick makes no Run while the schedule's last Run has not ended; AllowOverlap changes
+// that. A scheduled Run waits for a worker as long as it takes unless the Task sets
+// StartDeadline, and a schedule that skips overlaps skips its ticks meanwhile.
+//
 // A Task has at most one schedule. A Task that needs two cadences is two Tasks on the
 // same handler. After the server was down, a schedule fires once for the ticks it missed.
 func Cron(expr string, opts ...CronOption) TaskOption {
@@ -176,10 +180,10 @@ func Cron(expr string, opts ...CronOption) TaskOption {
 	}
 }
 
-// SkipOverlap makes a tick create no Run while the schedule's last Run has not ended.
-// Without it, a tick makes a Run even when the last one still runs.
-func SkipOverlap() CronOption {
-	return func(s *schedule) { s.skipOverlap = true }
+// AllowOverlap makes a tick create a Run even when the schedule's last Run has not
+// ended. Without it, the tick creates none.
+func AllowOverlap() CronOption {
+	return func(s *schedule) { s.allowOverlap = true }
 }
 
 // NewWorker returns a Worker for app. The client must come from NewClient. The Worker does

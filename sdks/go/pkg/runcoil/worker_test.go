@@ -733,7 +733,7 @@ func TestRegisterCarriesTheTaskOptions(t *testing.T) {
 	require.NoError(t, w.NewTask("charge", h,
 		Retry(retry.Policy{MaxAttempts: 5, Delays: []time.Duration{time.Second, time.Minute}}),
 		StartDeadline(10*time.Minute),
-		Cron("0 2 * * *", SkipOverlap()),
+		Cron("0 2 * * *", AllowOverlap()),
 	))
 	require.NoError(t, w.NewTask("plain", h, Cron("*/10 * * * * *")))
 
@@ -750,11 +750,11 @@ func TestRegisterCarriesTheTaskOptions(t *testing.T) {
 		[]time.Duration{defs[0].GetRetry().GetDelays()[0].AsDuration(), defs[0].GetRetry().GetDelays()[1].AsDuration()})
 	assert.Equal(t, 10*time.Minute, defs[0].GetStartDeadline().AsDuration())
 	assert.Equal(t, "0 2 * * *", defs[0].GetSchedule().GetCron())
-	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP, defs[0].GetSchedule().GetOverlap())
+	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW, defs[0].GetSchedule().GetOverlap())
 	assert.Nil(t, defs[1].GetRetry(), "no policy: the server's default")
 	assert.Nil(t, defs[1].GetStartDeadline(), "no deadline")
 	assert.Equal(t, "*/10 * * * * *", defs[1].GetSchedule().GetCron())
-	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW, defs[1].GetSchedule().GetOverlap())
+	assert.Equal(t, runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP, defs[1].GetSchedule().GetOverlap(), "skip by default")
 }
 
 func TestNewTaskValidatesItsOptions(t *testing.T) {
