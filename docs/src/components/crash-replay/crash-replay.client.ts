@@ -89,17 +89,25 @@ function initCrashReplay(root: HTMLElement): () => void {
     render(reduce.matches ? POSTER_T : time);
     sync();
   };
-  const onToggle = (): void => {
-    paused = !paused;
+  // Sets the paused state on the diagram, the toggle button and its label.
+  function setPaused(value: boolean): void {
+    paused = value;
     if (toggleLabel) toggleLabel.textContent = paused ? "play" : "pause";
+    root.toggleAttribute("data-paused", paused);
     toggle?.toggleAttribute("data-paused", paused);
     toggle?.setAttribute("aria-label", paused ? "Play" : "Pause");
+  }
+  const onToggle = (): void => {
+    setPaused(!paused);
     sync();
   };
+  // Restart also resumes: a paused replay would otherwise show the empty first frame.
   const onRestart = (): void => {
+    setPaused(false);
     time = 0;
     last = performance.now();
     render(time);
+    sync();
   };
 
   document.addEventListener("visibilitychange", onVisibility);

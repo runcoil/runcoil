@@ -78,8 +78,8 @@ const WIDE: Layout = {
   w: 960,
   h: 440,
   // Sized for the docs column: the 960-unit canvas renders at about 0.7 scale.
-  labelSize: 16,
-  subtitleSize: 20,
+  labelSize: 18,
+  subtitleSize: 22,
   server: { x: 40, y: 36, w: 320, h: 340 },
   serverTitleY: 64,
   savedY: 94,

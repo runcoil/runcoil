@@ -132,8 +132,8 @@ const pose = (key: Layout["key"], id: string) => {
 
 <style>
   /*
-   * Colors are tokens on .cr. Light values sit on the page's light surfaces;
-   * dark values are the diagram's own palette.
+   * Colors are tokens on .cr. Surfaces, borders and text come from the page's
+   * tokens in both themes; the greens, lime and red are the diagram's own.
    */
   .cr {
     /* Light */
@@ -160,12 +160,12 @@ const pose = (key: Layout["key"], id: string) => {
     background: var(--cr-bg);
   }
   :global([data-mode="dark"]) .cr {
-    --cr-bg: #0c110e;
-    --cr-text-1: #e8f0ea;
-    --cr-text-2: #a3b3a8;
-    --cr-text-3: #7a8c80;
-    --cr-border: #1e2a23;
-    --cr-border-strong: #2b3b31;
+    --cr-bg: var(--nb-card);
+    --cr-text-1: var(--nb-foreground);
+    --cr-text-2: oklch(0.8 0 0);
+    --cr-text-3: var(--nb-muted-foreground);
+    --cr-border: var(--nb-border);
+    --cr-border-strong: var(--nb-border-strong);
     --cr-accent: #3ee07f;
     --cr-accent-strong: #22c55e;
     --cr-accent-rgb: 62 224 127;
@@ -281,7 +281,7 @@ const pose = (key: Layout["key"], id: string) => {
     stroke: var(--cr-lime);
   }
 
-  /* Step cells: running pulses, saved is solid green, replayed is hollow lime, lost is danger. */
+  /* Step cells: running pulses, saved is solid green, replayed is a hollow dashed lime outline, lost is danger. */
   [data-state="running"] .cr-cell {
     fill: var(--cr-accent);
     fill-opacity: 0.08;
@@ -294,9 +294,9 @@ const pose = (key: Layout["key"], id: string) => {
     stroke: var(--cr-accent);
   }
   [data-state="replay"] .cr-cell {
-    fill: var(--cr-lime);
-    fill-opacity: 0.06;
+    fill: none;
     stroke: var(--cr-lime);
+    stroke-dasharray: 5 4;
   }
   [data-state="lost"] .cr-cell {
     fill: var(--cr-danger);
@@ -354,7 +354,9 @@ const pose = (key: Layout["key"], id: string) => {
   [data-state="flicker"] .cr-box-body {
     animation: cr-flicker 420ms linear;
   }
-  [data-state="down"] .cr-box-body {
+  /* A down worker dims its frame and Step cells; its text stays readable. */
+  [data-state="down"] .cr-frame,
+  [data-state="down"] .cr-cell {
     opacity: 0.4;
   }
 
@@ -387,6 +389,10 @@ const pose = (key: Layout["key"], id: string) => {
   }
   .cr[data-crash-ready] .cr-controls {
     display: flex;
+  }
+  /* Pause stops every motion in the diagram, not only the timeline (WCAG 2.2.2). */
+  .cr[data-paused] .cr-svg * {
+    animation-play-state: paused;
   }
   .cr-progress {
     position: relative;
