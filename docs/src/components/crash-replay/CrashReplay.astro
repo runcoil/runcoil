@@ -1,0 +1,448 @@
+---
+// Animated diagram of one Run that crashes on worker-a and replays on worker-b.
+// Timeline and layouts: ./scene.ts. Client behaviour: ./crash-replay.client.ts.
+import Button from "@/components/ui/button/Button.astro";
+import { buttonIconSize } from "@/components/ui/button/variants";
+import Icon from "@cloudflare/nimbus-docs/components/Icon.astro";
+import { BEATS, LAYOUTS, POSTER_T, SCENES, type Layout } from "./scene";
+import { attrsAt } from "./timeline";
+
+/** Attributes of a tracked element at the poster time. Static elements get none. */
+const pose = (key: Layout["key"], id: string) => {
+  const tr = SCENES[key][id];
+  if (!tr) return {};
+  const a = attrsAt(tr, POSTER_T);
+  return { transform: a.transform, opacity: a.opacity, "data-state": a.state };
+};
+
+---
+
+<div class="cr" data-crash>
+  {
+    LAYOUTS.map((L) => (
+      <svg
+        class={`cr-svg cr-svg-${L.key}`}
+        viewBox={`0 0 ${L.w} ${L.h}`}
+        style={`--cr-label: ${L.labelSize}px; --cr-sub: ${L.subtitleSize}px`}
+        data-layout={L.key}
+        aria-hidden="true"
+      >
+        <g data-t="scene" {...pose(L.key, "scene")}>
+          {/* Runcoil server: saved Steps on top, queue below the divider. */}
+          <rect class="cr-frame cr-frame-server" rx="14" x={L.server.x} y={L.server.y} width={L.server.w} height={L.server.h} />
+          <text class="cr-label cr-strong" x={L.server.x + L.pad} y={L.serverTitleY}>Runcoil server</text>
+          <text class="cr-label" x={L.server.x + L.pad} y={L.savedY}>Saved Steps</text>
+          {L.rows.ys.map((cy, i) => (
+            <g data-t={`row-${i + 1}`} {...pose(L.key, `row-${i + 1}`)}>
+              <rect class="cr-row" rx="8" x={L.rows.x} y={cy - L.rows.h / 2} width={L.rows.w} height={L.rows.h} />
+              <text class="cr-text cr-row-text cr-row-saved" x={L.rows.textX} y={cy + L.labelSize * 0.35}>
+                Step {i + 1} · saved
+              </text>
+              <text class="cr-text cr-row-text cr-row-read" x={L.rows.textX} y={cy + L.labelSize * 0.35}>
+                Step {i + 1} · stored result
+              </text>
+            </g>
+          ))}
+          <line class="cr-dots" x1={L.server.x} x2={L.server.x + L.server.w} y1={L.dividerY} y2={L.dividerY} />
+          <text class="cr-label" x={L.server.x + L.pad} y={L.queueLabelY}>Queue</text>
+          <line class="cr-dots" x1={L.queueLane.x1} x2={L.queueLane.x2} y1={L.queueY} y2={L.queueY} />
+
+          {/* Dispatch connector from the queue to both workers. */}
+          <path class="cr-dots" d={L.bus} />
+
+          {(["a", "b"] as const).map((id) => {
+            const W = L.workers[id];
+            const n = id === "a" ? 1 : 2;
+            // Half the length of the cross that marks a lost Step: 15% of the cell's shorter side.
+            const cross = Math.min(W.cellW, W.cellH) * 0.15;
+            return (
+              <g data-t={`box-${id}`} {...pose(L.key, `box-${id}`)}>
+                <g class="cr-box-body">
+                  <rect class="cr-frame" rx="14" x={W.box.x} y={W.box.y} width={W.box.w} height={W.box.h} />
+                  <text class="cr-label cr-strong" x={W.box.x + L.pad} y={W.titleY}>worker-{id}</text>
+                  <g data-t={`att-${id}`} {...pose(L.key, `att-${id}`)}>
+                    <text class="cr-text cr-attempt" x={W.box.x + W.box.w - L.pad} y={W.titleY} text-anchor="end">
+                      attempt {n}
+                    </text>
+                  </g>
+                  {W.cellXs.map((cx, i) => (
+                    <text class="cr-label" x={cx} y={W.labelY}>Step {i + 1}</text>
+                  ))}
+                  {W.cellXs.map((cx, i) => (
+                    <g data-t={`cell-${id}${i + 1}`} {...pose(L.key, `cell-${id}${i + 1}`)}>
+                      <rect class="cr-cell" rx="8" x={cx} y={W.cellY} width={W.cellW} height={W.cellH} />
+                      {/* A lost Step is also marked by a cross, so the state does not rely on color. */}
+                      <line class="cr-cross" x1={cx + W.cellW / 2 - cross} y1={W.cellY + W.cellH / 2 - cross} x2={cx + W.cellW / 2 + cross} y2={W.cellY + W.cellH / 2 + cross} />
+                      <line class="cr-cross" x1={cx + W.cellW / 2 + cross} y1={W.cellY + W.cellH / 2 - cross} x2={cx + W.cellW / 2 - cross} y2={W.cellY + W.cellH / 2 + cross} />
+                    </g>
+                  ))}
+                </g>
+              </g>
+            );
+          })}
+
+          {[1, 2, 3, 4].map((n) => (
+            <g data-t={`chip-${n}`} {...pose(L.key, `chip-${n}`)}>
+              <circle class="cr-chip" r="5" />
+            </g>
+          ))}
+          {[1, 2].map((n) => (
+            <g data-t={`ret-${n}`} {...pose(L.key, `ret-${n}`)}>
+              <circle class="cr-ret" r="5" />
+            </g>
+          ))}
+          {(["a", "b"] as const).map((id) => (
+            <g data-t={`token-${id}`} {...pose(L.key, `token-${id}`)}>
+              <circle class="cr-token-glow" r="14" /><circle class="cr-token" r="6" />
+            </g>
+          ))}
+        </g>
+
+        {BEATS.map((b, i) => (
+          <text
+            class="cr-sub"
+            x={L.w / 2}
+            y={L.subtitleY}
+            text-anchor="middle"
+            data-t={`beat-${i + 1}`}
+            {...pose(L.key, `beat-${i + 1}`)}
+          >
+            {b.text}
+          </text>
+        ))}
+      </svg>
+    ))
+  }
+
+  <div class="cr-controls">
+    <div class="cr-progress" aria-hidden="true">
+      <span class="cr-progress-fill" data-crash-progress></span>
+    </div>
+    <Button variant="outline" shape="circle" size="sm" aria-label="Pause animation" data-crash-toggle>
+      <Icon name="ph:pause" class={`${buttonIconSize.sm} cr-icon-pause`} />
+      <Icon name="ph:play" class={`${buttonIconSize.sm} cr-icon-play`} />
+    </Button>
+    <Button variant="outline" shape="circle" size="sm" icon="ph:arrow-counter-clockwise" aria-label="Restart animation" data-crash-restart />
+  </div>
+
+  <ol class="sr-only" aria-label="The diagram, step by step">
+    {BEATS.map((b) => (
+      <li>{b.text}.</li>
+    ))}
+  </ol>
+</div>
+
+<script>
+  import "./crash-replay.client";
+</script>
+
+<style>
+  /*
+   * Colors are tokens on .cr. Surfaces, borders and text come from the page's
+   * tokens in both themes; the greens, lime and red are the diagram's own.
+   */
+  .cr {
+    /* Light */
+    --cr-bg: var(--nb-muted);
+    --cr-text-1: var(--nb-foreground);
+    --cr-text-2: oklch(0.4 0 0);
+    --cr-text-3: var(--nb-muted-foreground);
+    --cr-border: var(--nb-border);
+    --cr-border-strong: var(--nb-border-strong);
+    --cr-accent: #0b7a40;
+    --cr-accent-strong: #075d30;
+    --cr-accent-rgb: 11 122 64;
+    --cr-lime: #4a7010;
+    --cr-danger: #dc2626;
+    /* Tint for panel fills and button hovers: white in dark mode, black in light. */
+    --cr-tint: 0 0 0;
+
+    container-type: inline-size;
+    position: relative;
+    margin-top: 2rem;
+    padding: 20px 16px 16px;
+    border: 1px solid var(--cr-border);
+    border-radius: 12px;
+    background: var(--cr-bg);
+  }
+  :global([data-mode="dark"]) .cr {
+    --cr-bg: var(--nb-card);
+    --cr-text-1: var(--nb-foreground);
+    --cr-text-2: oklch(0.8 0 0);
+    --cr-text-3: var(--nb-muted-foreground);
+    --cr-border: var(--nb-border);
+    --cr-border-strong: var(--nb-border-strong);
+    --cr-accent: #3ee07f;
+    --cr-accent-strong: #22c55e;
+    --cr-accent-rgb: 62 224 127;
+    --cr-lime: #b4f05a;
+    --cr-danger: #f87171;
+    --cr-tint: 255 255 255;
+  }
+
+  /* Wide when the diagram column is 600px or more, stacked below. Each composition sets its own label size. */
+  .cr-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .cr-svg-wide {
+    display: none;
+  }
+  .cr-svg-narrow {
+    max-width: 440px;
+    margin-inline: auto;
+  }
+  @container (min-width: 600px) {
+    .cr-svg-wide {
+      display: block;
+    }
+    .cr-svg-narrow {
+      display: none;
+    }
+  }
+
+  /* Text: sans labels, mono only for Step names in rows. */
+  .cr-label,
+  .cr-sub {
+    font-family: var(--nb-font-sans);
+  }
+  .cr-text {
+    font-family: var(--nb-font-mono);
+  }
+  .cr-label {
+    font-size: var(--cr-label);
+    fill: var(--cr-text-3);
+  }
+  .cr-strong {
+    font-weight: 500;
+    fill: var(--cr-text-1);
+  }
+  .cr-text {
+    font-size: calc(var(--cr-label) * 0.95);
+    fill: var(--cr-text-1);
+  }
+  .cr-attempt {
+    font-family: var(--nb-font-sans);
+    fill: var(--cr-text-3);
+  }
+  .cr-sub {
+    font-size: var(--cr-sub);
+    fill: var(--cr-text-1);
+  }
+
+  /* Hairlines are 1px at any scale. */
+  .cr-frame,
+  .cr-dots,
+  .cr-cell,
+  .cr-row {
+    vector-effect: non-scaling-stroke;
+    stroke-width: 1;
+  }
+  .cr-frame {
+    fill: rgb(var(--cr-tint) / 0.015);
+    stroke: var(--cr-border-strong);
+  }
+  .cr-frame-server {
+    fill: rgb(var(--cr-accent-rgb) / 0.03);
+    stroke: rgb(var(--cr-accent-rgb) / 0.32);
+  }
+  .cr-dots {
+    fill: none;
+    stroke: var(--cr-border-strong);
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    stroke-width: 1.5;
+  }
+
+  /* Empty placeholders: soft filled slots. */
+  .cr-row,
+  .cr-cell {
+    fill: rgb(var(--cr-tint) / 0.025);
+    stroke: var(--cr-border);
+    transition: fill 200ms, stroke 200ms;
+  }
+
+  /* Saved row: the Step is recorded. Read row: the stored result is returned. */
+  .cr-row-text {
+    opacity: 0;
+    transition: opacity 200ms;
+  }
+  [data-state="saved"] .cr-row {
+    fill: var(--cr-accent);
+    fill-opacity: 0.06;
+    stroke: rgb(var(--cr-accent-rgb) / 0.32);
+  }
+  [data-state="saved"] .cr-row-saved,
+  [data-state="read"] .cr-row-read {
+    opacity: 1;
+  }
+  .cr-row-read {
+    fill: var(--cr-lime);
+  }
+  [data-state="read"] .cr-row {
+    fill: var(--cr-lime);
+    fill-opacity: 0.1;
+    stroke: var(--cr-lime);
+  }
+
+  /* Step cells: running pulses, saved is solid green, replayed is a hollow dashed lime outline, lost is danger. */
+  [data-state="running"] .cr-cell {
+    fill: var(--cr-accent);
+    fill-opacity: 0.08;
+    stroke: var(--cr-accent);
+    animation: cr-pulse 1100ms ease-in-out infinite;
+  }
+  [data-state="done"] .cr-cell {
+    fill: var(--cr-accent);
+    fill-opacity: 0.08;
+    stroke: var(--cr-accent);
+  }
+  [data-state="replay"] .cr-cell {
+    fill: none;
+    stroke: var(--cr-lime);
+    stroke-dasharray: 5 4;
+  }
+  [data-state="lost"] .cr-cell {
+    fill: var(--cr-danger);
+    fill-opacity: 0.16;
+    stroke: var(--cr-danger);
+  }
+
+  /* A lost Step is also marked by a cross, so the state does not rely on color. */
+  .cr-cross {
+    fill: none;
+    stroke: var(--cr-danger);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    opacity: 0;
+  }
+  [data-state="lost"] .cr-cross {
+    opacity: 1;
+  }
+
+  /* Checkpoint chips land in saved rows; stored results travel back out. */
+  .cr-chip {
+    fill: var(--cr-accent);
+  }
+  .cr-ret {
+    fill: var(--cr-lime);
+  }
+
+  /* The Run token: ink while queued, green while running, danger when lost, pulse when done. */
+  .cr-token {
+    fill: var(--cr-text-1);
+  }
+  .cr-token-glow {
+    fill: var(--cr-accent);
+    opacity: 0;
+    filter: blur(6px);
+    transition: opacity 200ms;
+  }
+  [data-state="active"] .cr-token-glow,
+  [data-state="done"] .cr-token-glow {
+    opacity: 0.45;
+  }
+  [data-state="lost"] .cr-token-glow {
+    fill: var(--cr-danger);
+    opacity: 0.4;
+  }
+  .cr-chip,
+  .cr-ret {
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+  .cr-chip {
+    color: var(--cr-accent);
+  }
+  .cr-ret {
+    color: var(--cr-lime);
+  }
+  [data-state="active"] .cr-token {
+    fill: var(--cr-accent);
+  }
+  [data-state="lost"] .cr-token {
+    fill: var(--cr-danger);
+  }
+  [data-state="done"] .cr-token {
+    fill: var(--cr-accent-strong);
+  }
+
+  /* A crashed worker flickers, then dims. */
+  [data-state="flicker"] .cr-box-body {
+    animation: cr-flicker 420ms linear;
+  }
+  /* A down worker dims its frame and Step cells; its text stays readable. */
+  [data-state="down"] .cr-frame,
+  [data-state="down"] .cr-cell {
+    opacity: 0.4;
+  }
+
+  @keyframes cr-pulse {
+    50% {
+      fill-opacity: 0.2;
+    }
+  }
+  @keyframes cr-flicker {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    20%,
+    60% {
+      opacity: 0.1;
+    }
+    40%,
+    80% {
+      opacity: 1;
+    }
+  }
+
+  /* Controls appear once the script has booted, so a page without JavaScript shows only the poster. */
+  .cr-controls {
+    display: none;
+    align-items: center;
+    gap: 16px;
+    margin-top: 14px;
+  }
+  .cr[data-crash-ready] .cr-controls {
+    display: flex;
+  }
+  /* Every CSS animation stops whenever the loop does: paused, out of view or hidden tab (WCAG 2.2.2). */
+  .cr[data-stopped] .cr-svg * {
+    animation-play-state: paused;
+  }
+  .cr-progress {
+    position: relative;
+    flex: 1;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--cr-border);
+  }
+  .cr-progress-fill {
+    position: absolute;
+    inset: 0;
+    background: var(--cr-accent);
+    transform-origin: left;
+    transform: scaleX(var(--p, 0));
+  }
+  .cr-icon-play,
+  [data-paused] .cr-icon-pause {
+    display: none;
+  }
+  [data-paused] .cr-icon-play {
+    display: block;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cr-svg * {
+      animation: none !important;
+      transition: none !important;
+    }
+    .cr-controls {
+      display: none !important;
+    }
+  }
+</style>
