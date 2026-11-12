@@ -57,15 +57,12 @@ func (q *Queries) ScheduleNow(ctx context.Context, db DBTX) (time.Time, error) {
 }
 
 const scheduleTakeDue = `-- name: ScheduleTakeDue :many
-SELECT s.id, s.task_id, s.cron, s.overlap_policy,
-       COALESCE(r.status IN ('queued', 'running'), false)::boolean AS last_run_active,
-       now()::timestamptz AS now
-FROM schedules s
-LEFT JOIN runs r ON r.id = s.last_run_id
-WHERE s.paused_at IS NULL AND s.next_tick_at <= now()
-ORDER BY s.next_tick_at
+SELECT id, task_id, cron, overlap_policy, last_run_id, now()::timestamptz AS now
+FROM schedules
+WHERE paused_at IS NULL AND next_tick_at <= now()
+ORDER BY next_tick_at
 LIMIT $1::integer
-FOR UPDATE OF s SKIP LOCKED
+FOR UPDATE SKIP LOCKED
 `
 
 type ScheduleTakeDueRow struct {
@@ -73,14 +70,16 @@ type ScheduleTakeDueRow struct {
 	TaskID        uuid.UUID
 	Cron          string
 	OverlapPolicy string
-	LastRunActive bool
+	LastRunID     *uuid.UUID
 	Now           time.Time
 }
 
 // At most @batch_size schedules whose tick has come, locked until COMMIT, so no two
-// servers fire the same tick. last_run_active reads the schedule's last Run for the
-// overlap policy. now is the clock the ticks are compared with: the next tick is computed
-// from it, so it is always after the tick taken.
+// servers fire the same tick. It reads no other table: when another server committed a
+// schedule after this statement's snapshot, PostgreSQL rechecks the newest version of the
+// locked row but keeps joined rows from the old snapshot. So last_run_id is current, and
+// RunListActive reads that Run in a later statement. now is the clock the ticks are
+// compared with: the next tick is computed from it, so it is always after the tick taken.
 func (q *Queries) ScheduleTakeDue(ctx context.Context, db DBTX, batchSize int32) ([]ScheduleTakeDueRow, error) {
 	rows, err := db.Query(ctx, scheduleTakeDue, batchSize)
 	if err != nil {
@@ -95,7 +94,7 @@ func (q *Queries) ScheduleTakeDue(ctx context.Context, db DBTX, batchSize int32)
 			&i.TaskID,
 			&i.Cron,
 			&i.OverlapPolicy,
-			&i.LastRunActive,
+			&i.LastRunID,
 			&i.Now,
 		); err != nil {
 			return nil, err

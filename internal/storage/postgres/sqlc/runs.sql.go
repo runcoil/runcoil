@@ -93,6 +93,33 @@ func (q *Queries) RunGetStatus(ctx context.Context, db DBTX, id uuid.UUID) (stri
 	return status, err
 }
 
+const runListActive = `-- name: RunListActive :many
+SELECT id FROM runs WHERE id = ANY ($1::uuid[]) AND status IN ('queued', 'running')
+`
+
+// The Runs among @ids that are queued or running. FireDueSchedules reads the last Runs of
+// the schedules it locked with it, in a statement of its own, so its snapshot sees every
+// Run committed before the lock.
+func (q *Queries) RunListActive(ctx context.Context, db DBTX, ids []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, runListActive, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const runListForAssign = `-- name: RunListForAssign :many
 SELECT r.id, t.name AS task_name, r.input, r.created_at
 FROM runs r
