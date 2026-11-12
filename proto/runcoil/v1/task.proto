@@ -33,7 +33,7 @@ message Schedule {
 
 // What a tick does while the schedule's last Run has not ended.
 enum OverlapPolicy {
-  // Treated as ALLOW.
+  // Treated as SKIP.
   OVERLAP_POLICY_UNSPECIFIED = 0;
   // Create the Run anyway.
   OVERLAP_POLICY_ALLOW = 1;

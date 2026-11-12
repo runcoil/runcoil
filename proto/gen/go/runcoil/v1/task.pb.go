@@ -27,7 +27,7 @@ const (
 type OverlapPolicy int32
 
 const (
-	// Treated as ALLOW.
+	// Treated as SKIP.
 	OverlapPolicy_OVERLAP_POLICY_UNSPECIFIED OverlapPolicy = 0
 	// Create the Run anyway.
 	OverlapPolicy_OVERLAP_POLICY_ALLOW OverlapPolicy = 1
