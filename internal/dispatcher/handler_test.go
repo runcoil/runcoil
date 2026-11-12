@@ -133,8 +133,10 @@ func TestStepResultToProto(t *testing.T) {
 
 func TestScheduleFromProto(t *testing.T) {
 	assert.Nil(t, scheduleFromProto(nil))
-	assert.Equal(t, &domain.Schedule{Cron: "0 * * * *", Overlap: domain.OverlapAllow},
-		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *"}), "unset overlap allows")
+	assert.Equal(t, &domain.Schedule{Cron: "0 * * * *", Overlap: domain.OverlapSkip},
+		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *"}), "unset overlap skips")
 	assert.Equal(t, &domain.Schedule{Cron: "0 * * * *", Overlap: domain.OverlapSkip},
 		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *", Overlap: runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP}))
+	assert.Equal(t, &domain.Schedule{Cron: "0 * * * *", Overlap: domain.OverlapAllow},
+		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *", Overlap: runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW}))
 }

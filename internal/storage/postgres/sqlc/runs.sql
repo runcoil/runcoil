@@ -30,6 +30,12 @@ RETURNING r.id;
 -- name: RunGetStatus :one
 SELECT status FROM runs WHERE id = @id::uuid;
 
+-- name: RunListActive :many
+-- The Runs among @ids that are queued or running. FireDueSchedules reads the last Runs of
+-- the schedules it locked with it, in a statement of its own, so its snapshot sees every
+-- Run committed before the lock.
+SELECT id FROM runs WHERE id = ANY (@ids::uuid[]) AND status IN ('queued', 'running');
+
 -- name: RunCreateScheduled :exec
 -- One queued Run per schedule tick, with no input. config keeps the Task's retry policy,
 -- and the queue row its start deadline, as they are now.

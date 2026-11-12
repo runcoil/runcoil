@@ -164,15 +164,15 @@ func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) 
 	return worker, nil
 }
 
-// scheduleFromProto returns nil for no schedule. An unset overlap policy allows overlaps.
+// scheduleFromProto returns nil for no schedule. An unset overlap policy skips overlaps.
 func scheduleFromProto(s *runcoilv1.Schedule) *domain.Schedule {
 	if s == nil {
 		return nil
 	}
 
-	overlap := domain.OverlapAllow
-	if s.GetOverlap() == runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP {
-		overlap = domain.OverlapSkip
+	overlap := domain.OverlapSkip
+	if s.GetOverlap() == runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW {
+		overlap = domain.OverlapAllow
 	}
 
 	return &domain.Schedule{Cron: s.GetCron(), Overlap: overlap}

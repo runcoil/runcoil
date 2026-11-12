@@ -249,9 +249,11 @@ func (s *RunStore) ExpireStartDeadlines(ctx context.Context, batchSize int) (int
 }
 
 // FireDueSchedules fires at most batchSize schedules whose tick has come, in one
-// transaction: each makes a queued Run, unless it skips overlaps and its last Run has not
-// ended, and moves to its first tick after the database clock. So a schedule that missed
-// ticks while the server was down fires once (catch-up latest).
+// transaction: each makes a queued Run, unless it skips overlaps and its last Run is
+// queued or running, and moves to its first tick after the database clock. So a schedule
+// that missed ticks while the server was down fires once (catch-up latest). The last Runs
+// are read after the schedules are locked, so a Run that another server made for the
+// previous tick counts.
 func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.ScheduleTicks, error) {
 	var ticks domain.ScheduleTicks
 	err := s.db.WithTx(ctx, func(tx DB) error {
@@ -265,6 +267,11 @@ func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.
 		}
 
 		now := rows[0].Now
+		active, err := s.activeLastRuns(ctx, tx, rows)
+		if err != nil {
+			return err
+		}
+
 		advance := sqlc.ScheduleAdvanceParams{}
 		runs := sqlc.RunCreateScheduledParams{}
 		for _, row := range rows {
@@ -277,7 +284,7 @@ func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.
 			}
 
 			runID := uuid.Nil()
-			if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunActive {
+			if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunID != nil && active[*row.LastRunID] {
 				ticks.Skipped++
 			} else {
 				runID = uuid.NewV7()
@@ -310,4 +317,31 @@ func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.
 	}
 
 	return ticks, nil
+}
+
+// activeLastRuns returns which last Runs of the skip schedules among rows are queued or
+// running. It reads them after ScheduleTakeDue holds the schedules' locks.
+func (s *RunStore) activeLastRuns(ctx context.Context, tx DB, rows []sqlc.ScheduleTakeDueRow) (map[uuid.UUID]bool, error) {
+	var lastIDs []uuid.UUID
+	for _, row := range rows {
+		if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunID != nil {
+			lastIDs = append(lastIDs, *row.LastRunID)
+		}
+	}
+
+	if len(lastIDs) == 0 {
+		return nil, nil
+	}
+
+	ids, err := s.queries.RunListActive(ctx, tx, lastIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list active last runs: %w", err)
+	}
+
+	active := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		active[id] = true
+	}
+
+	return active, nil
 }
