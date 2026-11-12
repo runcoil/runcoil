@@ -30,6 +30,7 @@ type Config struct {
 	RequeueDelayedRunsInterval time.Duration
 	StartDeadlineCheckInterval time.Duration
 	DeadWorkerCheckInterval    time.Duration
+	ScheduleCheckInterval      time.Duration
 	// MaxLostAttempts is how often a Run may lose its worker before it fails with
 	// attempt_lost.
 	MaxLostAttempts int
@@ -46,6 +47,8 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 		"How often queued Runs that did not start before their start deadline are failed.")
 	fs.DurationVar(&c.DeadWorkerCheckInterval, "scheduler.dead-worker-check-interval", 5*time.Second,
 		"How often worker sessions with no heartbeat for longer than dispatcher.worker-ttl are ended, and their Runs go back to the queue.")
+	fs.DurationVar(&c.ScheduleCheckInterval, "scheduler.schedule-check-interval", time.Second,
+		"How often schedules whose tick has come make their Runs. A cron with seconds fires no more often than this.")
 	fs.IntVar(&c.MaxLostAttempts, "run.max-lost-attempts", 5,
 		"How often a Run may lose its worker, which stopped while running it, before the Run fails with attempt_lost.")
 }
@@ -64,6 +67,10 @@ func (c *Config) Validate() error {
 		return errors.New("dead worker check interval must be greater than 0")
 	}
 
+	if c.ScheduleCheckInterval <= 0 {
+		return errors.New("schedule check interval must be greater than 0")
+	}
+
 	if c.MaxLostAttempts < 0 || c.MaxLostAttempts > maxLostAttemptsCap {
 		return fmt.Errorf("max lost attempts must be between 0 and %d", maxLostAttemptsCap)
 	}
@@ -71,10 +78,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// RunStore moves Runs on time.
+// RunStore moves Runs on time, and makes the Runs of schedules.
 type RunStore interface {
 	PromoteDueDelayed(ctx context.Context, batchSize int) (int, error)
 	ExpireStartDeadlines(ctx context.Context, batchSize int) (int, error)
+	FireDueSchedules(ctx context.Context, batchSize int) (domain.ScheduleTicks, error)
 }
 
 // WorkerStore ends the sessions of workers that stopped sending heartbeats.
@@ -83,8 +91,8 @@ type WorkerStore interface {
 }
 
 // Service does what is due at a time: it moves Runs whose wait in run_delayed is over to
-// the queue, fails queued Runs past their start deadline, and ends the sessions of dead
-// workers. Each batch locks its rows with SKIP LOCKED, so several servers can run one
+// the queue, fails queued Runs past their start deadline, ends the sessions of dead
+// workers, and makes the Runs of schedules whose tick has come. Each batch locks its rows with SKIP LOCKED, so several servers can run one
 // each.
 type Service struct {
 	cfg         Config
@@ -128,6 +136,9 @@ func (s *Service) Run(ctx context.Context) error {
 	deadWorkers := time.NewTicker(s.cfg.DeadWorkerCheckInterval)
 	defer deadWorkers.Stop()
 
+	schedules := time.NewTicker(s.cfg.ScheduleCheckInterval)
+	defer schedules.Stop()
+
 	for {
 		select {
 		case <-s.stopped:
@@ -140,6 +151,8 @@ func (s *Service) Run(ctx context.Context) error {
 			s.failRunsPastStartDeadline(ctx)
 		case <-deadWorkers.C:
 			s.endDeadWorkers(ctx)
+		case <-schedules.C:
+			s.fireDueSchedules(ctx)
 		}
 	}
 }
@@ -220,6 +233,30 @@ func (s *Service) endDeadWorkers(ctx context.Context) {
 			slog.Int("workers", dead.Ended),
 			slog.Int("runs_requeued", dead.Requeued),
 			slog.Int("runs_failed", dead.Failed),
+		)
+	}
+}
+
+// fireDueSchedules fires one batch of schedules whose tick has come. A failed batch is
+// tried again at the next tick; the ticks it missed fire once, as after downtime.
+func (s *Service) fireDueSchedules(ctx context.Context) {
+	ticks, err := s.runStore.FireDueSchedules(ctx, batchSize)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger.ErrorContext(ctx, "fire due schedules failed", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	if ticks.Broken > 0 {
+		s.logger.ErrorContext(ctx, "schedules with a cron that cannot be parsed", slog.Int("schedules", ticks.Broken))
+	}
+
+	if ticks.Fired > 0 || ticks.Skipped > 0 {
+		s.logger.DebugContext(ctx, "schedules fired",
+			slog.Int("runs", ticks.Fired),
+			slog.Int("skipped", ticks.Skipped),
 		)
 	}
 }

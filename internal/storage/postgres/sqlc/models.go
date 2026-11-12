@@ -82,6 +82,18 @@ type RunQueue struct {
 	StartDeadlineAt *time.Time
 }
 
+type Schedule struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	TaskID        uuid.UUID
+	Cron          string
+	OverlapPolicy string
+	PausedAt      *time.Time
+	NextTickAt    time.Time
+	LastRunID     *uuid.UUID
+	UpdatedAt     time.Time
+}
+
 type Step struct {
 	RunID        uuid.UUID
 	StepID       string

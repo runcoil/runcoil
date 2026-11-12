@@ -12,6 +12,32 @@ import (
 	"uuid"
 )
 
+const runCreateScheduled = `-- name: RunCreateScheduled :exec
+WITH created AS (
+    INSERT INTO runs (id, created_at, project_id, task_id, status, config)
+    SELECT v.id, now(), t.project_id, t.id, 'queued', jsonb_build_object('retry', t.retry_policy)
+    FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::uuid[]) AS task_id) AS v
+    JOIN tasks t ON t.id = v.task_id
+    RETURNING id, project_id, task_id
+)
+INSERT INTO run_queue (run_id, project_id, task_id, ready_at, start_deadline_at)
+SELECT c.id, c.project_id, c.task_id, now(), now() + t.start_deadline
+FROM created c
+JOIN tasks t ON t.id = c.task_id
+`
+
+type RunCreateScheduledParams struct {
+	Ids     []uuid.UUID
+	TaskIds []uuid.UUID
+}
+
+// One queued Run per schedule tick, with no input. config keeps the Task's retry policy,
+// and the queue row its start deadline, as they are now.
+func (q *Queries) RunCreateScheduled(ctx context.Context, db DBTX, arg RunCreateScheduledParams) error {
+	_, err := db.Exec(ctx, runCreateScheduled, arg.Ids, arg.TaskIds)
+	return err
+}
+
 const runFinish = `-- name: RunFinish :one
 WITH released AS (
     DELETE FROM run_leases

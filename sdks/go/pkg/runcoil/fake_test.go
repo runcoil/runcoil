@@ -57,6 +57,7 @@ type fakeServer struct {
 	stepAnswer func(*runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error)
 	runAnswer  func(context.Context) error
 	beatAnswer func() error
+	regAnswer  error
 
 	// hbInterval is the heartbeat interval Register returns.
 	hbInterval time.Duration
@@ -115,6 +116,10 @@ func (f *fakeServer) Register(ctx context.Context, req *runcoilv1.RegisterReques
 
 	f.registers = append(f.registers, bearer(ctx))
 	f.regReqs = append(f.regReqs, req)
+	if f.regAnswer != nil {
+		return nil, f.regAnswer
+	}
+
 	f.sessions++
 
 	return &runcoilv1.RegisterResponse{

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -103,6 +104,15 @@ type TaskOption func(*taskCfg)
 type taskCfg struct {
 	retry         *retry.Policy
 	startDeadline *time.Duration
+	schedule      *schedule
+	// crons counts the Cron options, so a second one is refused.
+	crons int
+}
+
+// schedule is what Cron sets.
+type schedule struct {
+	cron        string
+	skipOverlap bool
 }
 
 // validate checks the options against the server's limits. Its errors do not name the
@@ -116,6 +126,14 @@ func (c *taskCfg) validate() error {
 
 	if c.startDeadline != nil && *c.startDeadline <= 0 {
 		return fmt.Errorf("start deadline must be greater than 0, got %s", *c.startDeadline)
+	}
+
+	if c.crons > 1 {
+		return errors.New("a task has at most one schedule: declare another task on the same handler for another cron")
+	}
+
+	if c.schedule != nil && strings.TrimSpace(c.schedule.cron) == "" {
+		return errors.New("cron is empty")
 	}
 
 	return nil
@@ -134,6 +152,34 @@ func Retry(p retry.Policy) TaskOption {
 // takes.
 func StartDeadline(d time.Duration) TaskOption {
 	return func(c *taskCfg) { c.startDeadline = &d }
+}
+
+// CronOption configures the schedule that Cron sets.
+type CronOption func(*schedule)
+
+// Cron makes a Run of the Task at each tick of expr, read in UTC: five fields
+// ("0 9 * * *"), or six with seconds first ("*/10 * * * * *"). The server parses expr
+// at Register, so an expression it refuses makes Start fail. A scheduled Run has no
+// input: the handler gets the zero value of its input type.
+//
+// A Task has at most one schedule. A Task that needs two cadences is two Tasks on the
+// same handler. After the server was down, a schedule fires once for the ticks it missed.
+func Cron(expr string, opts ...CronOption) TaskOption {
+	return func(c *taskCfg) {
+		s := &schedule{cron: expr}
+		for _, opt := range opts {
+			opt(s)
+		}
+
+		c.schedule = s
+		c.crons++
+	}
+}
+
+// SkipOverlap makes a tick create no Run while the schedule's last Run has not ended.
+// Without it, a tick makes a Run even when the last one still runs.
+func SkipOverlap() CronOption {
+	return func(s *schedule) { s.skipOverlap = true }
 }
 
 // NewWorker returns a Worker for app. The client must come from NewClient. The Worker does
@@ -187,7 +233,7 @@ func Slots(n int) WorkerOption {
 // NewTask adds a Task with its handler to the worker. The name must be unique within the
 // worker. It fails when the name is empty or taken, when the handler is zero, when an
 // option is invalid, or when the worker has started. Call it before Start; Start
-// registers the Task with the server. Options such as Retry and StartDeadline set the
+// registers the Task with the server. Options such as Retry, StartDeadline and Cron set the
 // Task's settings.
 func (w *Worker) NewTask(name string, h Handler, opts ...TaskOption) error {
 	if name == "" {

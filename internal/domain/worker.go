@@ -55,6 +55,12 @@ func (r Registration) Validate() error {
 		if def.StartDeadline != nil && *def.StartDeadline <= 0 {
 			return &RegistrationError{Message: "start deadline must be greater than 0", TaskName: def.Name}
 		}
+
+		if def.Schedule != nil {
+			if err := def.Schedule.Validate(); err != nil {
+				return &RegistrationError{Message: "schedule: " + err.Error(), TaskName: def.Name}
+			}
+		}
 	}
 
 	return nil

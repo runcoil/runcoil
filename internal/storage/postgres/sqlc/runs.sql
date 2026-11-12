@@ -29,3 +29,18 @@ RETURNING r.id;
 
 -- name: RunGetStatus :one
 SELECT status FROM runs WHERE id = @id::uuid;
+
+-- name: RunCreateScheduled :exec
+-- One queued Run per schedule tick, with no input. config keeps the Task's retry policy,
+-- and the queue row its start deadline, as they are now.
+WITH created AS (
+    INSERT INTO runs (id, created_at, project_id, task_id, status, config)
+    SELECT v.id, now(), t.project_id, t.id, 'queued', jsonb_build_object('retry', t.retry_policy)
+    FROM (SELECT unnest(@ids::uuid[]) AS id, unnest(@task_ids::uuid[]) AS task_id) AS v
+    JOIN tasks t ON t.id = v.task_id
+    RETURNING id, project_id, task_id
+)
+INSERT INTO run_queue (run_id, project_id, task_id, ready_at, start_deadline_at)
+SELECT c.id, c.project_id, c.task_id, now(), now() + t.start_deadline
+FROM created c
+JOIN tasks t ON t.id = c.task_id;

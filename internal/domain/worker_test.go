@@ -74,6 +74,7 @@ func TestRegistrationValidatesTaskSettings(t *testing.T) {
 	}{
 		{name: "too many attempts", def: TaskDefinition{Name: "a", Retry: &RetryPolicy{MaxAttempts: 31}}, want: "retry policy: max attempts must be between 0 and 30"},
 		{name: "zero start deadline", def: TaskDefinition{Name: "a", StartDeadline: &zero}, want: "start deadline must be greater than 0"},
+		{name: "bad cron", def: TaskDefinition{Name: "a", Schedule: &Schedule{Cron: "0 0 30 2 *", Overlap: OverlapAllow}}, want: "schedule: cron never fires"},
 	}
 
 	for _, tt := range tests {
