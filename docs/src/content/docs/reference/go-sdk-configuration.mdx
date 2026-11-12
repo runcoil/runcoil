@@ -47,8 +47,17 @@ go get github.com/runcoil/runcoil/sdks/go
 | --- | --- | --- | --- |
 | `runcoil.Retry(policy)` | The server default | See [Retry policy](#retry-policy) | Retry policy of the Steps of the Task |
 | `runcoil.StartDeadline(d)` | No deadline | Greater than 0 | Fails a Run that has not started within `d` |
+| `runcoil.Cron(expr, opts...)` | No schedule | One per Task | Makes a Run at each tick of `expr`, in UTC. See [Schedules](/concepts/schedules/) |
 
-The server stores both options when the worker registers. They do not reach a Run yet. See [Tasks and Runs](/concepts/tasks-and-runs/#why-a-run-fails).
+The server stores these options when the worker registers. `Retry` and `StartDeadline` reach only scheduled Runs today. See [Tasks and Runs](/concepts/tasks-and-runs/#why-a-run-fails).
+
+### Schedule
+
+`runcoil.Cron(expr, opts...)` takes these options.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `runcoil.AllowOverlap()` | Skip the tick | Makes a Run at a tick even when the last Run of the schedule has not ended |
 
 ### Step
 

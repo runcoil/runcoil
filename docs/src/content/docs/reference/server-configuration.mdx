@@ -64,6 +64,7 @@ The server does not read a `.env` file. A duration is a Go duration, such as `10
 | --- | --- | --- | --- |
 | `--scheduler.requeue-delayed-runs-interval` | `SCHEDULER_REQUEUE_DELAYED_RUNS_INTERVAL` | `1s` | How often Runs whose wait is over, such as the delay before a retry, go back to the queue |
 | `--scheduler.start-deadline-check-interval` | `SCHEDULER_START_DEADLINE_CHECK_INTERVAL` | `1s` | How often the server fails queued Runs that did not start before their start deadline |
+| `--scheduler.schedule-check-interval` | `SCHEDULER_SCHEDULE_CHECK_INTERVAL` | `1s` | How often schedules whose tick has come make their Runs. A cron with seconds fires no more often than this |
 
 ## Example file
 
