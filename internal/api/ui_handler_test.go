@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDashboard(t *testing.T) {
+func TestUIHandler(t *testing.T) {
 	dist := fstest.MapFS{
 		"index.html":         {Data: []byte("<html>app</html>")},
 		"assets/app-1a2b.js": {Data: []byte("console.log(1)")},
@@ -36,7 +36,7 @@ func TestDashboard(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			dashboardHandler(dist).ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
+			uiHandler(dist).ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
 
 			assert.Equal(t, tt.wantCode, rec.Code)
 			if tt.wantBody != "" {
@@ -51,15 +51,15 @@ func TestDashboard(t *testing.T) {
 	}
 }
 
-func TestDashboardNotBuilt(t *testing.T) {
+func TestUIHandlerNotBuilt(t *testing.T) {
 	rec := httptest.NewRecorder()
-	dashboardHandler(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	uiHandler(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 	assert.Contains(t, rec.Body.String(), "task ui:build")
 }
 
-func TestAPIPathsAreNotTheDashboard(t *testing.T) {
+func TestAPIPathsAreNotTheUI(t *testing.T) {
 	h := newAPIServer(t, &fakeAccountService{user: testUser})
 
 	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/nothing"})

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -23,6 +22,7 @@ import (
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
+	"github.com/runcoil/runcoil/ui"
 )
 
 const (
@@ -72,7 +72,6 @@ type Service struct {
 	logger         *slog.Logger
 	checks         *healthutil.Checks
 	accountService AccountService
-	ui             fs.FS
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -81,9 +80,8 @@ type Service struct {
 	stopOnce sync.Once
 }
 
-// New creates the API service. Its /readyz runs checks, and it serves the built dashboard
-// in ui at every path outside /api.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService AccountService, ui fs.FS) (*Service, error) {
+// New creates the API service. Its /readyz runs checks.
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService AccountService) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -99,7 +97,6 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		logger:         logger,
 		checks:         checks,
 		accountService: accountService,
-		ui:             ui,
 		spec:           spec,
 		permissions:    permissions,
 		stopped:        make(chan struct{}),
@@ -155,10 +152,13 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.Handle("/api/", s.apiHandler())
-	mux.Handle("/", dashboardHandler(s.ui))
+	mux.Handle("/", uiHandler(ui.Dist()))
 
 	if s.cfg.Swagger {
 		swagger.Register(mux, openapi.Spec)
+	} else {
+		mux.Handle("/docs", http.NotFoundHandler())
+		mux.Handle("/docs/", http.NotFoundHandler())
 	}
 
 	return &http.Server{

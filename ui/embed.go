@@ -1,4 +1,3 @@
-// Package ui holds the built dashboard.
 package ui
 
 import (

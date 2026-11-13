@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func dashboardHandler(dist fs.FS) http.Handler {
+func uiHandler(dist fs.FS) http.Handler {
 	files := http.FileServerFS(dist)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

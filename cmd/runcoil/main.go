@@ -19,7 +19,6 @@ import (
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/pkg/service"
-	"github.com/runcoil/runcoil/ui"
 )
 
 func main() {
@@ -86,7 +85,7 @@ func run() error {
 	cfg.Account.BootstrapAdminPassword = cfg.Seed.AdminPassword
 	accountService := account.New(cfg.Account, userStore, sessionStore, projectStore)
 
-	apiService, err := api.New(cfg.API, logger, checks, accountService, ui.Dist())
+	apiService, err := api.New(cfg.API, logger, checks, accountService)
 	if err != nil {
 		return fmt.Errorf("new api service: %w", err)
 	}

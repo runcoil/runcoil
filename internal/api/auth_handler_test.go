@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 	"uuid"
 
@@ -93,7 +92,7 @@ func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler
 func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccountService) http.Handler {
 	t.Helper()
 
-	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService, fstest.MapFS{})
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler
