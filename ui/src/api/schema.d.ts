@@ -101,19 +101,7 @@ export interface components {
          * @enum {string}
          */
         Role: "admin" | "editor" | "viewer";
-        /**
-         * @description The body of every error response.
-         * @example {
-         *       "code": "invalid_request",
-         *       "message": "current password is wrong",
-         *       "params": [
-         *         {
-         *           "field": "currentPassword",
-         *           "message": "current password is wrong"
-         *         }
-         *       ]
-         *     }
-         */
+        /** @description The body of every error response. */
         ErrorResponse: {
             /**
              * @description What went wrong, in lower snake case, such as invalid_request, unauthenticated, permission_denied, not_found, payload_too_large or internal.
@@ -201,12 +189,73 @@ export interface components {
         };
     };
     responses: {
-        /** @description An error. The body's code says which. */
-        Error: {
+        /** @description invalid_request: the request is not valid. params lists the fields at fault. */
+        InvalidRequest: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "code": "invalid_request",
+                 *       "message": "request is not valid",
+                 *       "params": [
+                 *         {
+                 *           "field": "login",
+                 *           "message": "login is required"
+                 *         },
+                 *         {
+                 *           "field": "password",
+                 *           "message": "password is required"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description unauthenticated: no live session. */
+        Unauthenticated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "unauthenticated",
+                 *       "message": "not signed in"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description permission_denied: the caller lacks the permission. */
+        PermissionDenied: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "permission_denied",
+                 *       "message": "permission denied"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description payload_too_large: the body is larger than 1 MiB. */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "payload_too_large",
+                 *       "message": "request body is too large"
+                 *     }
+                 */
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
@@ -325,13 +374,13 @@ export interface operations {
                 };
             };
             /** @description invalid_request: the body is not valid */
-            400: components["responses"]["Error"];
+            400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: the login or the password is wrong, or the user is disabled */
-            401: components["responses"]["Error"];
+            401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the request comes from another origin */
-            403: components["responses"]["Error"];
+            403: components["responses"]["PermissionDenied"];
             /** @description payload_too_large: the body is larger than 1 MiB */
-            413: components["responses"]["Error"];
+            413: components["responses"]["PayloadTooLarge"];
         };
     };
     logout: {
@@ -353,7 +402,7 @@ export interface operations {
                 content?: never;
             };
             /** @description permission_denied: the request comes from another origin */
-            403: components["responses"]["Error"];
+            403: components["responses"]["PermissionDenied"];
         };
     };
     getMe: {
@@ -375,7 +424,7 @@ export interface operations {
                 };
             };
             /** @description unauthenticated: no live session */
-            401: components["responses"]["Error"];
+            401: components["responses"]["Unauthenticated"];
         };
     };
     changeMyPassword: {
@@ -400,13 +449,13 @@ export interface operations {
                 content?: never;
             };
             /** @description invalid_request: the body is not valid, the current password is wrong, or the new password is too weak */
-            400: components["responses"]["Error"];
+            400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
-            401: components["responses"]["Error"];
+            401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the request comes from another origin */
-            403: components["responses"]["Error"];
+            403: components["responses"]["PermissionDenied"];
             /** @description payload_too_large: the body is larger than 1 MiB */
-            413: components["responses"]["Error"];
+            413: components["responses"]["PayloadTooLarge"];
         };
     };
 }
