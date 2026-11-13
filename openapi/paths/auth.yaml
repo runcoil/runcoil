@@ -1,0 +1,65 @@
+login:
+  post:
+    operationId: login
+    summary: Sign in
+    description: >-
+      Checks a username or an email and its password, starts a session and sets its
+      cookie. A disabled user cannot sign in.
+    tags:
+      - Auth
+    security: []
+    requestBody:
+      description: The credentials.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth.yaml#/LoginRequest"
+    responses:
+      "200":
+        description: The session is started
+        headers:
+          Set-Cookie:
+            description: The session cookie.
+            required: true
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth.yaml#/LoginResponse"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: the body is not valid"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: the login or the password is wrong, or the user is disabled"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the request comes from another origin"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"
+
+logout:
+  post:
+    operationId: logout
+    summary: Sign out
+    description: >-
+      Ends the session, if it is still live, and clears its cookie. A request without a
+      live session also clears the cookie.
+    tags:
+      - Auth
+    security: []
+    responses:
+      "204":
+        description: The session is ended
+        headers:
+          Set-Cookie:
+            description: Clears the session cookie.
+            required: true
+            schema:
+              type: string
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the request comes from another origin"

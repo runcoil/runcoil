@@ -1,13 +1,15 @@
 package account
 
 import (
-	"encoding/base64"
+	"context"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/argon2"
+
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 func TestValidateUsername(t *testing.T) {
@@ -37,22 +39,14 @@ func TestValidateUsername(t *testing.T) {
 	}
 }
 
-func TestHashPassword(t *testing.T) {
-	hash := HashPassword("admin")
+func TestGetUser(t *testing.T) {
+	ana := domain.User{ID: uuid.NewV7(), Username: "ana"}
+	s := newService(&fakeStore{users: []domain.User{ana}})
 
-	parts := strings.Split(hash, "$")
-	require.Len(t, parts, 6)
-	assert.Equal(t, "argon2id", parts[1])
-	assert.Equal(t, "v=19", parts[2])
-	assert.Equal(t, "m=19456,t=2,p=1", parts[3])
-
-	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	user, err := s.GetUser(context.Background(), ana.ID)
 	require.NoError(t, err)
-	assert.Len(t, salt, 16)
+	assert.Equal(t, ana, user)
 
-	key, err := base64.RawStdEncoding.DecodeString(parts[5])
-	require.NoError(t, err)
-	assert.Equal(t, argon2.IDKey([]byte("admin"), salt, 2, 19456, 1, 32), key)
-	assert.NotEqual(t, argon2.IDKey([]byte("Admin"), salt, 2, 19456, 1, 32), key)
-	assert.NotEqual(t, hash, HashPassword("admin"))
+	_, err = s.GetUser(context.Background(), uuid.NewV7())
+	assert.ErrorIs(t, err, domain.ErrUserNotFound)
 }

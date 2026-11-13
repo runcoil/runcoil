@@ -33,6 +33,12 @@ type Project struct {
 	CreatedAt time.Time
 }
 
+type ProjectMember struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+}
+
 type Run struct {
 	ID           uuid.UUID
 	CreatedAt    time.Time
@@ -94,6 +100,14 @@ type Schedule struct {
 	UpdatedAt     time.Time
 }
 
+type Session struct {
+	TokenHash  []byte
+	UserID     uuid.UUID
+	CreatedAt  time.Time
+	LastSeenAt time.Time
+	ExpiresAt  time.Time
+}
+
 type Step struct {
 	RunID        uuid.UUID
 	StepID       string
@@ -124,6 +138,8 @@ type User struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	CreatedAt     time.Time
+	Email         *string
+	DisabledAt    *time.Time
 }
 
 type Worker struct {

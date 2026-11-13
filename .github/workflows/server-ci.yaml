@@ -71,7 +71,7 @@ jobs:
       - run: task vuln
 
   generated:
-    name: Code Gen Check (sqlc)
+    name: Code Gen Check (sqlc, OpenAPI)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -84,5 +84,6 @@ jobs:
           check-latest: true
       - uses: go-task/setup-task@v2
       - run: task sqlc-gen --force
+      - run: task oapi-gen-server --force
       - name: Fail when generated code is stale
         run: git diff --exit-code && test -z "$(git status --porcelain)"

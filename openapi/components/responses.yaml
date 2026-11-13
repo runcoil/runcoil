@@ -1,0 +1,44 @@
+InvalidRequest:
+  description: "invalid_request: the request is not valid. params lists the fields at fault."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: invalid_request
+        message: request is not valid
+        params:
+          - field: login
+            message: login is required
+          - field: password
+            message: password is required
+
+Unauthenticated:
+  description: "unauthenticated: no live session."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: unauthenticated
+        message: not signed in
+
+PermissionDenied:
+  description: "permission_denied: the caller lacks the permission."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: permission_denied
+        message: permission denied
+
+PayloadTooLarge:
+  description: "payload_too_large: the body is larger than 1 MiB."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+      example:
+        code: payload_too_large
+        message: request body is too large

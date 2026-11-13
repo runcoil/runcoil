@@ -15,6 +15,8 @@ postgres:
 
 api:
   port: 8080
+  secure_cookie: false
+  swagger: false
 
 dispatcher:
   port: 7070
@@ -39,3 +41,7 @@ run:
 bootstrap:
   admin_username: admin
   admin_password: admin
+
+session:
+  max_lifetime: 720h0m0s
+  max_inactive: 168h0m0s

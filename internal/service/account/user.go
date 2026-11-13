@@ -1,21 +1,13 @@
 package account
 
 import (
-	"crypto/rand"
-	"encoding/base64"
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
+	"uuid"
 
-	"golang.org/x/crypto/argon2"
-)
-
-const (
-	argonMemoryKiB = 19 * 1024
-	argonPasses    = 2
-	argonThreads   = 1
-	argonSaltLen   = 16
-	argonKeyLen    = 32
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
@@ -29,19 +21,12 @@ func ValidateUsername(name string) error {
 	return nil
 }
 
-// HashPassword hashes a password with argon2id into a PHC string.
-func HashPassword(password string) string {
-	salt := make([]byte, argonSaltLen)
-	_, _ = rand.Read(salt)
+// GetUser returns the user with id.
+func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	user, err := s.userStore.GetUserByID(ctx, id)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user: %w", err)
+	}
 
-	key := argon2.IDKey([]byte(password), salt, argonPasses, argonMemoryKiB, argonThreads, argonKeyLen)
-
-	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version,
-		argonMemoryKiB,
-		argonPasses,
-		argonThreads,
-		base64.RawStdEncoding.EncodeToString(salt),
-		base64.RawStdEncoding.EncodeToString(key),
-	)
+	return user, nil
 }

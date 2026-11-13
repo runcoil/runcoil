@@ -9,6 +9,7 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
+	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/internal/service/seed"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	Dispatcher  dispatcher.Config
 	Scheduler   scheduler.Config
 	Seed        seed.Config
+	Account     account.Config
 }
 
 // RegisterFlags registers the flags of every section.
@@ -33,6 +35,7 @@ func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	c.Dispatcher.RegisterFlags(fs)
 	c.Scheduler.RegisterFlags(fs)
 	c.Seed.RegisterFlags(fs)
+	c.Account.RegisterFlags(fs)
 }
 
 // Validate checks every section of the configuration.
@@ -59,6 +62,10 @@ func (c *Config) Validate() error {
 
 	if err := c.Seed.Validate(); err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
+	}
+
+	if err := c.Account.Validate(); err != nil {
+		return fmt.Errorf("account: %w", err)
 	}
 
 	return nil

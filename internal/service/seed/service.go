@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/spf13/pflag"
@@ -35,6 +36,10 @@ func (c *Config) Validate() error {
 		return errors.New("admin password must not be empty")
 	}
 
+	if utf8.RuneCountInString(c.AdminPassword) > account.MaxPasswordLen {
+		return fmt.Errorf("admin password must be at most %d characters", account.MaxPasswordLen)
+	}
+
 	return nil
 }
 
@@ -61,10 +66,15 @@ func New(cfg Config, logger *slog.Logger, userStore UserStore) *Service {
 
 // Seed creates the first server admin and the project default while no user exists.
 func (s *Service) Seed(ctx context.Context) error {
+	hash, err := account.HashPassword(ctx, s.cfg.AdminPassword)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+
 	admin := domain.User{
 		ID:           uuid.NewV7(),
 		Username:     s.cfg.AdminUsername,
-		PasswordHash: account.HashPassword(s.cfg.AdminPassword),
+		PasswordHash: hash,
 	}
 
 	created, err := s.userStore.CreateFirstServerAdmin(ctx, admin, uuid.NewV7())

@@ -1,0 +1,48 @@
+ErrorResponse:
+  type: object
+  description: The body of every error response.
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+      description: >-
+        What went wrong, in lower snake case, such as invalid_request, unauthenticated,
+        permission_denied, not_found, payload_too_large or internal.
+      example: invalid_request
+      x-order: 1
+    message:
+      type: string
+      description: For people. Clients never parse it.
+      example: current password is wrong
+      x-order: 2
+    params:
+      type: array
+      description: The request fields at fault, for invalid_request. Absent when no field is.
+      x-order: 3
+      example:
+        - field: currentPassword
+          message: current password is wrong
+      items:
+        $ref: "#/ErrorParam"
+  required:
+    - code
+    - message
+
+ErrorParam:
+  type: object
+  description: A request field at fault.
+  additionalProperties: false
+  properties:
+    field:
+      type: string
+      description: The field, as a dotted path in the body, or a parameter name.
+      example: currentPassword
+      x-order: 1
+    message:
+      type: string
+      description: What is wrong with the field, for people.
+      example: current password is wrong
+      x-order: 2
+  required:
+    - field
+    - message
