@@ -1,4 +1,3 @@
-// Package swagger serves the dashboard API's docs with Swagger UI.
 package swagger
 
 import (
