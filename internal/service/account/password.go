@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -40,7 +40,7 @@ var hashSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 var errMalformedHash = errors.New("malformed password hash")
 
-var errWrongCurrentPassword = apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+var errWrongCurrentPassword = apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
 
 // ChangePassword sets the password of the user of identity and ends the user's other
 // sessions.
@@ -64,7 +64,7 @@ func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, 
 	}
 
 	if err := ValidatePassword(newPassword); err != nil {
-		return apierr.Invalid(apierr.CodeInvalidRequest, "new password "+err.Error()).WithDetail("field", "newPassword")
+		return apperr.Invalid(apperr.CodeInvalidRequest, "new password "+err.Error()).WithDetail("field", "newPassword")
 	}
 
 	hash, err := HashPassword(ctx, newPassword)

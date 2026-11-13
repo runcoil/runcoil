@@ -47,7 +47,7 @@ func (s *RunStore) CompleteStep(
 			return fmt.Errorf("lock lease: %w", err)
 		}
 
-		stored, found, err := s.step(ctx, tx, lease.RunID, params.StepID)
+		stored, found, err := s.getStep(ctx, tx, lease.RunID, params.StepID)
 		if err != nil {
 			return fmt.Errorf("read step: %w", err)
 		}
@@ -169,7 +169,7 @@ func (s *RunStore) createStep(ctx context.Context, tx DB, params domain.Complete
 	}), nil
 }
 
-func (s *RunStore) step(ctx context.Context, tx DB, runID uuid.UUID, stepID string) (domain.StepRecord, bool, error) {
+func (s *RunStore) getStep(ctx context.Context, tx DB, runID uuid.UUID, stepID string) (domain.StepRecord, bool, error) {
 	row, err := s.queries.StepGet(ctx, tx, sqlc.StepGetParams{RunID: runID, StepID: stepID})
 	if isNoRowsError(err) {
 		return domain.StepRecord{}, false, nil
@@ -267,7 +267,7 @@ func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.
 		}
 
 		now := rows[0].Now
-		active, err := s.activeLastRuns(ctx, tx, rows)
+		active, err := s.listActiveLastRuns(ctx, tx, rows)
 		if err != nil {
 			return err
 		}
@@ -319,9 +319,9 @@ func (s *RunStore) FireDueSchedules(ctx context.Context, batchSize int) (domain.
 	return ticks, nil
 }
 
-// activeLastRuns returns which last Runs of the skip schedules among rows are queued or
-// running. It reads them after ScheduleTakeDue holds the schedules' locks.
-func (s *RunStore) activeLastRuns(ctx context.Context, tx DB, rows []sqlc.ScheduleTakeDueRow) (map[uuid.UUID]bool, error) {
+// listActiveLastRuns returns which last Runs of the skip schedules among rows are queued
+// or running. It reads them after ScheduleTakeDue holds the schedules' locks.
+func (s *RunStore) listActiveLastRuns(ctx context.Context, tx DB, rows []sqlc.ScheduleTakeDueRow) (map[uuid.UUID]bool, error) {
 	var lastIDs []uuid.UUID
 	for _, row := range rows {
 		if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunID != nil {

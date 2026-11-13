@@ -11,7 +11,7 @@ import (
 	mathrand "math/rand/v2"
 	"time"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -19,9 +19,9 @@ import (
 const sessionTokenBytes = 32
 
 var (
-	errInvalidAPIKey       = apierr.Unauthenticated(apierr.CodeUnauthenticated, "invalid api key")
-	errInvalidSessionToken = apierr.Unauthenticated(apierr.CodeUnauthenticated, "invalid session token")
-	errStaleLease          = apierr.FailedPrecondition(apierr.CodeStaleLease, "lease is no longer this attempt's")
+	errInvalidAPIKey       = apperr.Unauthenticated(apperr.CodeUnauthenticated, "invalid api key")
+	errInvalidSessionToken = apperr.Unauthenticated(apperr.CodeUnauthenticated, "invalid session token")
+	errStaleLease          = apperr.FailedPrecondition(apperr.CodeStaleLease, "lease is no longer this attempt's")
 )
 
 // HeartbeatInterval is how often a worker sends a heartbeat.
@@ -78,12 +78,12 @@ func (s *Service) Register(ctx context.Context, apiKey string, reg domain.Regist
 }
 
 func registrationError(regErr *domain.RegistrationError) error {
-	apiErr := apierr.Invalid(apierr.CodeInvalidRegistration, regErr.Message)
+	appErr := apperr.Invalid(apperr.CodeInvalidRegistration, regErr.Message)
 	if regErr.TaskName != "" {
-		apiErr = apiErr.WithDetail("task_name", regErr.TaskName)
+		appErr = appErr.WithDetail("task_name", regErr.TaskName)
 	}
 
-	return apiErr
+	return appErr
 }
 
 func newSessionToken() (string, []byte, error) {
@@ -101,7 +101,7 @@ func newSessionToken() (string, []byte, error) {
 // Authenticate returns the live session of the token.
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.Worker, error) {
 	hash := sha256.Sum256([]byte(token))
-	worker, err := s.workerStore.WorkerBySessionToken(ctx, hash[:])
+	worker, err := s.workerStore.GetWorkerBySessionToken(ctx, hash[:])
 	if errors.Is(err, domain.ErrSessionEnded) {
 		return domain.Worker{}, errInvalidSessionToken
 	}
@@ -151,7 +151,7 @@ func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason s
 // retry, the Run waits for its next try, and the worker's slot is free.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
 	if err := params.Retry.Validate(); err != nil {
-		return domain.StepResult{}, apierr.Invalid(apierr.CodeInvalidRequest, err.Error())
+		return domain.StepResult{}, apperr.Invalid(apperr.CodeInvalidRequest, err.Error())
 	}
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
