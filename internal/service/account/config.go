@@ -13,6 +13,12 @@ const minSessionMaxInactive = 5 * time.Minute
 type Config struct {
 	SessionMaxLifetime time.Duration
 	SessionMaxInactive time.Duration
+
+	// BootstrapAdminUsername and BootstrapAdminPassword are the seed's bootstrap admin,
+	// which main copies here: a login as that user with that password is asked to change
+	// it. They have no key of their own.
+	BootstrapAdminUsername string
+	BootstrapAdminPassword string
 }
 
 // RegisterFlags declares every key with its default and help text.
