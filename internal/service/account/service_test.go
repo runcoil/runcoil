@@ -107,12 +107,14 @@ func (f *fakeStore) ListProjects(context.Context) ([]domain.ProjectRole, error) 
 }
 
 var testConfig = Config{
-	SessionMaxLifetime: 30 * 24 * time.Hour,
-	SessionMaxInactive: 7 * 24 * time.Hour,
+	SessionMaxLifetime:     30 * 24 * time.Hour,
+	SessionMaxInactive:     7 * 24 * time.Hour,
+	BootstrapAdminUsername: "admin",
+	BootstrapAdminPassword: "admin",
 }
 
 func newService(store *fakeStore) *Service {
-	return New(testConfig, store, store, store, BootstrapAdmin{Username: "admin", Password: "admin"})
+	return New(testConfig, store, store, store)
 }
 
 func hashPassword(t *testing.T, password string) string {

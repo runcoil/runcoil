@@ -65,7 +65,7 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Account.Validate(); err != nil {
-		return fmt.Errorf("session: %w", err)
+		return fmt.Errorf("account: %w", err)
 	}
 
 	return nil
