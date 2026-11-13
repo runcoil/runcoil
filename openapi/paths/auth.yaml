@@ -29,16 +29,16 @@ login:
             schema:
               $ref: "../components/schemas/auth.yaml#/LoginResponse"
       "400":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/InvalidRequest"
         description: "invalid_request: the body is not valid"
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: the login or the password is wrong, or the user is disabled"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
         description: "permission_denied: the request comes from another origin"
       "413":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
         description: "payload_too_large: the body is larger than 1 MiB"
 
 logout:
@@ -61,5 +61,5 @@ logout:
             schema:
               type: string
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
         description: "permission_denied: the request comes from another origin"

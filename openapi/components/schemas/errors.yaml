@@ -1,12 +1,6 @@
 ErrorResponse:
   type: object
   description: The body of every error response.
-  example:
-    code: invalid_request
-    message: current password is wrong
-    params:
-      - field: currentPassword
-        message: current password is wrong
   additionalProperties: false
   properties:
     code:
