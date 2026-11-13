@@ -22,6 +22,7 @@ import (
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
+	"github.com/runcoil/runcoil/ui"
 )
 
 const (
@@ -151,9 +152,13 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.Handle("/api/", s.apiHandler())
+	mux.Handle("/", uiHandler(ui.Dist()))
 
 	if s.cfg.Swagger {
 		swagger.Register(mux, openapi.Spec)
+	} else {
+		mux.Handle("/docs", http.NotFoundHandler())
+		mux.Handle("/docs/", http.NotFoundHandler())
 	}
 
 	return &http.Server{
