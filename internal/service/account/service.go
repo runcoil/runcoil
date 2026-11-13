@@ -54,7 +54,7 @@ func (c *Config) Validate() error {
 type UserStore interface {
 	UserByUsername(ctx context.Context, username string) (domain.User, error)
 	UserByEmail(ctx context.Context, email string) (domain.User, error)
-	CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime, maxInactive time.Duration) error
+	CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime time.Duration) error
 	SessionByToken(ctx context.Context, tokenHash []byte, maxInactive time.Duration) (domain.Session, error)
 	TouchSession(ctx context.Context, tokenHash []byte) error
 	DeleteSession(ctx context.Context, tokenHash []byte) error
@@ -125,7 +125,7 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	}
 
 	token := newSessionToken()
-	if err := s.userStore.CreateSession(ctx, hashToken(token), user.ID, s.cfg.SessionMaxLifetime, s.cfg.SessionMaxInactive); err != nil {
+	if err := s.userStore.CreateSession(ctx, hashToken(token), user.ID, s.cfg.SessionMaxLifetime); err != nil {
 		return LoginResult{}, fmt.Errorf("create session: %w", err)
 	}
 

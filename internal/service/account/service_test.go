@@ -49,7 +49,7 @@ func (f *fakeUserStore) UserByEmail(_ context.Context, email string) (domain.Use
 	return domain.User{}, domain.ErrUserNotFound
 }
 
-func (f *fakeUserStore) CreateSession(_ context.Context, tokenHash []byte, userID uuid.UUID, _, _ time.Duration) error {
+func (f *fakeUserStore) CreateSession(_ context.Context, tokenHash []byte, userID uuid.UUID, _ time.Duration) error {
 	f.created = tokenHash
 	f.createdFor = userID
 

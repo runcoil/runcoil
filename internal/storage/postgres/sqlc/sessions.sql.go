@@ -38,22 +38,6 @@ func (q *Queries) SessionDelete(ctx context.Context, db DBTX, tokenHash []byte) 
 	return err
 }
 
-const sessionDeleteEnded = `-- name: SessionDeleteEnded :exec
-DELETE FROM sessions
-WHERE user_id = $1::uuid
-  AND (expires_at <= now() OR last_seen_at <= now() - $2::interval)
-`
-
-type SessionDeleteEndedParams struct {
-	UserID      uuid.UUID
-	MaxInactive pgtype.Interval
-}
-
-func (q *Queries) SessionDeleteEnded(ctx context.Context, db DBTX, arg SessionDeleteEndedParams) error {
-	_, err := db.Exec(ctx, sessionDeleteEnded, arg.UserID, arg.MaxInactive)
-	return err
-}
-
 const sessionDeleteOthers = `-- name: SessionDeleteOthers :exec
 DELETE FROM sessions
 WHERE user_id = $1::uuid

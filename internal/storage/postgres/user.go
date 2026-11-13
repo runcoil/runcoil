@@ -79,28 +79,18 @@ func (s *UserStore) UserByEmail(ctx context.Context, email string) (domain.User,
 	return domain.User(row), nil
 }
 
-// CreateSession creates a session for userID and deletes the user's ended sessions.
-func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime, maxInactive time.Duration) error {
-	return s.db.WithTx(ctx, func(tx DB) error {
-		err := s.queries.SessionDeleteEnded(ctx, tx, sqlc.SessionDeleteEndedParams{
-			UserID:      userID,
-			MaxInactive: interval(&maxInactive),
-		})
-		if err != nil {
-			return fmt.Errorf("delete ended sessions: %w", err)
-		}
-
-		err = s.queries.SessionCreate(ctx, tx, sqlc.SessionCreateParams{
-			TokenHash:   tokenHash,
-			UserID:      userID,
-			MaxLifetime: interval(&maxLifetime),
-		})
-		if err != nil {
-			return fmt.Errorf("create session: %w", err)
-		}
-
-		return nil
+// CreateSession creates a session for userID that lasts at most maxLifetime.
+func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime time.Duration) error {
+	err := s.queries.SessionCreate(ctx, s.db, sqlc.SessionCreateParams{
+		TokenHash:   tokenHash,
+		UserID:      userID,
+		MaxLifetime: interval(&maxLifetime),
 	})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+
+	return nil
 }
 
 // SessionByToken returns the live session of tokenHash, or domain.ErrSessionNotFound when

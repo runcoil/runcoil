@@ -26,7 +26,3 @@ DELETE FROM sessions
 WHERE user_id = @user_id::uuid
   AND token_hash <> @token_hash::bytea;
 
--- name: SessionDeleteEnded :exec
-DELETE FROM sessions
-WHERE user_id = @user_id::uuid
-  AND (expires_at <= now() OR last_seen_at <= now() - @max_inactive::interval);
