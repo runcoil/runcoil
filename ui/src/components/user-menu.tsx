@@ -10,7 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import type { components } from "@/api/schema";
 import { useLogout } from "@/features/auth/queries";
 
@@ -18,6 +23,8 @@ type User = components["schemas"]["User"];
 
 export function UserMenu({ user }: { user: User }) {
   const logout = useLogout();
+
+  const { isMobile } = useSidebar();
 
   return (
     <SidebarMenu>
@@ -39,7 +46,12 @@ export function UserMenu({ user }: { user: User }) {
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="min-w-56">
+          <DropdownMenuContent
+            align="end"
+            side={isMobile ? "bottom" : "right"}
+            sideOffset={4}
+            className="min-w-56 rounded-lg"
+          >
             <DropdownMenuLabel className="font-normal">{user.username}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

@@ -9,7 +9,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import type { components } from "@/api/schema";
 
 type ProjectAccess = components["schemas"]["ProjectAccess"];
@@ -20,6 +25,8 @@ type ProjectSwitcherProps = {
 };
 
 export function ProjectSwitcher({ projects, current }: ProjectSwitcherProps) {
+  const { isMobile } = useSidebar();
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -42,7 +49,12 @@ export function ProjectSwitcher({ projects, current }: ProjectSwitcherProps) {
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="bottom" className="min-w-56">
+          <DropdownMenuContent
+            align="start"
+            side={isMobile ? "bottom" : "right"}
+            sideOffset={4}
+            className="min-w-56 rounded-lg"
+          >
             <DropdownMenuLabel>Projects</DropdownMenuLabel>
             {projects.length === 0 && <DropdownMenuItem disabled>No projects</DropdownMenuItem>}
             {projects.map((project) => (

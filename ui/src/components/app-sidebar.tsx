@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { UserMenu } from "@/components/user-menu";
+import { Wordmark } from "@/components/wordmark";
 import { meQueryOptions } from "@/features/auth/queries";
 
 const projectNav = [
@@ -41,9 +42,18 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link to="/" className="px-2 py-1">
-          <img src="/runcoil-lockup-on-dark.svg" alt="Runcoil" className="h-6 w-auto" />
-        </Link>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link to="/">
+                <div className="flex aspect-square size-8 items-center justify-center">
+                  <img src="/runcoil-mark.svg" alt="" className="size-6" />
+                </div>
+                <Wordmark className="h-8! w-auto!" />
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <ProjectSwitcher projects={me.projects} current={current} />
       </SidebarHeader>
       <SidebarContent>
