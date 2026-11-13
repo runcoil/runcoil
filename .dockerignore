@@ -14,3 +14,7 @@ bin
 
 # The docs site has its own build and is not part of the server image
 docs
+
+# The dashboard is built in its own stage of the image
+**/node_modules
+ui/dist

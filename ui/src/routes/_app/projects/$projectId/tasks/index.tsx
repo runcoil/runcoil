@@ -1,0 +1,11 @@
+import { createFileRoute } from "@tanstack/react-router";
+
+import { PagePlaceholder } from "@/components/page-placeholder";
+
+export const Route = createFileRoute("/_app/projects/$projectId/tasks/")({
+  component: TasksPage,
+});
+
+function TasksPage() {
+  return <PagePlaceholder title="Tasks" />;
+}

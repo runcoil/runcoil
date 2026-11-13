@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 	"uuid"
 
@@ -77,7 +78,7 @@ func (f *fakeAccounts) Role(_ context.Context, _ domain.User, _ uuid.UUID) (doma
 func newAPIServer(t *testing.T, accounts *fakeAccounts) http.Handler {
 	t.Helper()
 
-	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), healthutil.New(), accounts)
+	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), healthutil.New(), accounts, fstest.MapFS{})
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler

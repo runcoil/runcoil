@@ -1,3 +1,14 @@
+FROM node:26-alpine AS ui
+
+WORKDIR /ui
+RUN npm install -g pnpm@12.18.0
+COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY ui/ ./
+RUN pnpm run build
+
+
 FROM golang:1.27 AS builder
 
 WORKDIR /app
@@ -7,6 +18,7 @@ COPY proto/go.mod proto/go.sum ./proto/
 RUN go mod download
 
 COPY . .
+COPY --from=ui /ui/dist ./ui/dist
 RUN GOWORK=off \
     CGO_ENABLED=0 \
     GOOS=linux \

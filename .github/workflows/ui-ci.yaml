@@ -1,0 +1,52 @@
+name: UI CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui/**'
+      - 'openapi/openapi.gen.yaml'
+      - '.github/workflows/ui-ci.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'ui/**'
+      - 'openapi/openapi.gen.yaml'
+      - '.github/workflows/ui-ci.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ui
+
+jobs:
+  check:
+    name: Check, Test, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ui/.nvmrc
+          check-latest: true
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run gen
+      - name: Fail when the generated API types are stale
+        run: git diff --exit-code && test -z "$(git status --porcelain)"
+      - run: pnpm run check
+      - run: pnpm run test
+      - run: pnpm run build

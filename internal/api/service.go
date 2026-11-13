@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -64,6 +65,7 @@ type Service struct {
 	logger   *slog.Logger
 	checks   *healthutil.Checks
 	accounts AccountService
+	ui       fs.FS
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -72,8 +74,9 @@ type Service struct {
 	stopOnce sync.Once
 }
 
-// New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accounts AccountService) (*Service, error) {
+// New creates the API service. Its /readyz runs checks, and it serves the built dashboard
+// in ui at every path outside /api.
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accounts AccountService, ui fs.FS) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -89,6 +92,7 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accounts Ac
 		logger:      logger,
 		checks:      checks,
 		accounts:    accounts,
+		ui:          ui,
 		spec:        spec,
 		permissions: permissions,
 		stopped:     make(chan struct{}),
@@ -144,6 +148,7 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.Handle("/api/", s.apiHandler())
+	mux.Handle("/", dashboardHandler(s.ui))
 
 	return &http.Server{
 		Handler:           mux,

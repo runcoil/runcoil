@@ -6,12 +6,14 @@ on:
     paths:
       - '**'
       - '!ui/**'
+      - 'ui/embed.go'
       - '!docs/**'
   push:
     branches: [main]
     paths:
       - '**'
       - '!ui/**'
+      - 'ui/embed.go'
       - '!docs/**'
 
 permissions:

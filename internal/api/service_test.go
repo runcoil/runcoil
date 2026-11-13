@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,7 @@ func newTestService(t *testing.T, db *fakePinger) *Service {
 	checks := healthutil.New()
 	checks.Add("postgres", db.Ping)
 
-	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), checks, nil)
+	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), checks, nil, fstest.MapFS{})
 	require.NoError(t, err)
 
 	return s
@@ -172,7 +173,7 @@ func TestStopBeforeRun(t *testing.T) {
 }
 
 func TestRunListenError(t *testing.T) {
-	s, err := New(Config{Port: 70000}, slog.New(slog.DiscardHandler), healthutil.New(), nil)
+	s, err := New(Config{Port: 70000}, slog.New(slog.DiscardHandler), healthutil.New(), nil, fstest.MapFS{})
 	require.NoError(t, err)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
