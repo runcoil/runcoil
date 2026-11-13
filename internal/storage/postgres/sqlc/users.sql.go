@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
@@ -30,4 +31,78 @@ func (q *Queries) UserCreateFirstServerAdmin(ctx context.Context, db DBTX, arg U
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const userGetByEmail = `-- name: UserGetByEmail :one
+SELECT id, username, email, password_hash, is_server_admin, disabled_at
+FROM users
+WHERE email = $1::text
+`
+
+type UserGetByEmailRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+}
+
+func (q *Queries) UserGetByEmail(ctx context.Context, db DBTX, email string) (UserGetByEmailRow, error) {
+	row := db.QueryRow(ctx, userGetByEmail, email)
+	var i UserGetByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.IsServerAdmin,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const userGetByUsername = `-- name: UserGetByUsername :one
+SELECT id, username, email, password_hash, is_server_admin, disabled_at
+FROM users
+WHERE username = $1::text
+`
+
+type UserGetByUsernameRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+}
+
+func (q *Queries) UserGetByUsername(ctx context.Context, db DBTX, username string) (UserGetByUsernameRow, error) {
+	row := db.QueryRow(ctx, userGetByUsername, username)
+	var i UserGetByUsernameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.IsServerAdmin,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const userUpdatePassword = `-- name: UserUpdatePassword :exec
+UPDATE users
+SET password_hash = $1::text
+WHERE id = $2::uuid
+`
+
+type UserUpdatePasswordParams struct {
+	PasswordHash string
+	ID           uuid.UUID
+}
+
+func (q *Queries) UserUpdatePassword(ctx context.Context, db DBTX, arg UserUpdatePasswordParams) error {
+	_, err := db.Exec(ctx, userUpdatePassword, arg.PasswordHash, arg.ID)
+	return err
 }

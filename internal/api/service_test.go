@@ -34,11 +34,16 @@ func (p *fakePinger) Ping(ctx context.Context) error {
 	return p.err
 }
 
-func newTestService(db *fakePinger) *Service {
+func newTestService(t *testing.T, db *fakePinger) *Service {
+	t.Helper()
+
 	checks := healthutil.New()
 	checks.Add("postgres", db.Ping)
 
-	return New(Config{Port: 8080}, slog.New(slog.DiscardHandler), checks)
+	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), checks, nil)
+	require.NoError(t, err)
+
+	return s
 }
 
 func get(s *Service, path string) *httptest.ResponseRecorder {
@@ -63,7 +68,7 @@ func TestConfig(t *testing.T) {
 func TestLivez(t *testing.T) {
 	db := &fakePinger{err: errors.New("down")}
 
-	rec := get(newTestService(db), "/livez")
+	rec := get(newTestService(t, db), "/livez")
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Zero(t, db.calls.Load())
@@ -83,7 +88,7 @@ func TestReadyz(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newTestService(&fakePinger{err: tt.err})
+			s := newTestService(t, &fakePinger{err: tt.err})
 			if tt.stopping {
 				s.Stop()
 			}
@@ -133,7 +138,7 @@ func fetch(url string) (int, error) {
 }
 
 func TestStopShutsTheServerDown(t *testing.T) {
-	s := newTestService(&fakePinger{})
+	s := newTestService(t, &fakePinger{})
 	base, done := start(t, context.Background(), s)
 
 	code, err := fetch(base + "/readyz")
@@ -150,7 +155,7 @@ func TestStopShutsTheServerDown(t *testing.T) {
 
 func TestContextEndShutsTheServerDown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	_, done := start(t, ctx, newTestService(&fakePinger{}))
+	_, done := start(t, ctx, newTestService(t, &fakePinger{}))
 
 	cancel()
 
@@ -158,7 +163,7 @@ func TestContextEndShutsTheServerDown(t *testing.T) {
 }
 
 func TestStopBeforeRun(t *testing.T) {
-	s := newTestService(&fakePinger{})
+	s := newTestService(t, &fakePinger{})
 	s.Stop()
 
 	_, done := start(t, context.Background(), s)
@@ -167,7 +172,8 @@ func TestStopBeforeRun(t *testing.T) {
 }
 
 func TestRunListenError(t *testing.T) {
-	s := New(Config{Port: 70000}, slog.New(slog.DiscardHandler), healthutil.New())
+	s, err := New(Config{Port: 70000}, slog.New(slog.DiscardHandler), healthutil.New(), nil)
+	require.NoError(t, err)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }

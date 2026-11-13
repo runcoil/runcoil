@@ -19,6 +19,8 @@ const (
 	CodeStaleLease           Code = "STALE_LEASE"
 	CodeRunNotFinished       Code = "RUN_NOT_FINISHED"
 	CodeStepNotFound         Code = "STEP_NOT_FOUND"
+	CodeInvalidField         Code = "INVALID_FIELD"
+	CodePermissionDenied     Code = "PERMISSION_DENIED"
 )
 
 // Codes lists every Code, so that a test can check each one against the schema.
@@ -35,4 +37,6 @@ var Codes = []Code{
 	CodeStaleLease,
 	CodeRunNotFinished,
 	CodeStepNotFound,
+	CodeInvalidField,
+	CodePermissionDenied,
 }

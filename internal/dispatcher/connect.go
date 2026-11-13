@@ -126,6 +126,8 @@ func connectCodeOf(kind apierr.Kind) connect.Code {
 		return connect.CodeInvalidArgument
 	case apierr.KindUnauthenticated:
 		return connect.CodeUnauthenticated
+	case apierr.KindPermissionDenied:
+		return connect.CodePermissionDenied
 	case apierr.KindNotFound:
 		return connect.CodeNotFound
 	case apierr.KindConflict:

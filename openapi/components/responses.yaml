@@ -1,0 +1,24 @@
+InvalidRequest:
+  description: "invalid_request, missing_field, invalid_field, payload_too_large: the request is not valid"
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+Unauthenticated:
+  description: "unauthenticated: no live session, or a wrong login or password"
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+PermissionDenied:
+  description: "permission_denied: the caller lacks the operation's permission"
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+Internal:
+  description: "internal: an unexpected failure"
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"

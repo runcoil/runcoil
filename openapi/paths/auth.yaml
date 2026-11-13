@@ -1,0 +1,55 @@
+login:
+  post:
+    operationId: login
+    summary: Sign in
+    description: >-
+      Checks a username or an email and its password, starts a session and sets its
+      cookie. A disabled user cannot sign in.
+    tags: [Auth]
+    security: []
+    requestBody:
+      description: The credentials.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth.yaml#/LoginRequest"
+    responses:
+      "200":
+        description: The session is started
+        headers:
+          Set-Cookie:
+            description: The session cookie.
+            required: true
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth.yaml#/LoginResponse"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+      "500":
+        $ref: "../components/responses.yaml#/Internal"
+logout:
+  post:
+    operationId: logout
+    summary: Sign out
+    description: Ends the session and clears its cookie.
+    tags: [Auth]
+    x-runcoil-permission: self
+    responses:
+      "204":
+        description: The session is ended
+        headers:
+          Set-Cookie:
+            description: Clears the session cookie.
+            required: true
+            schema:
+              type: string
+      "401":
+        $ref: "../components/responses.yaml#/Unauthenticated"
+      "500":
+        $ref: "../components/responses.yaml#/Internal"

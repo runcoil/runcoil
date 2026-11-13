@@ -1,0 +1,51 @@
+ErrorResponse:
+  type: object
+  description: The body of every error response.
+  example:
+    errors:
+      - code: unauthenticated
+        message: not signed in
+  required: [errors]
+  additionalProperties: false
+  properties:
+    errors:
+      type: array
+      description: The errors of the request, at least one.
+      example:
+        - code: invalid_field
+          message: current password is wrong
+          field: currentPassword
+      items:
+        $ref: "#/Error"
+Error:
+  type: object
+  description: One error of a request.
+  required: [code, message]
+  additionalProperties: false
+  properties:
+    code:
+      $ref: "#/ErrorCode"
+      x-order: 1
+    message:
+      type: string
+      description: For people. Clients never parse it.
+      example: current password is wrong
+      x-order: 2
+    field:
+      type: string
+      description: The request field at fault, for missing_field and invalid_field.
+      example: currentPassword
+      x-order: 3
+ErrorCode:
+  type: string
+  description: The code of an error.
+  example: invalid_field
+  enum:
+    - invalid_request
+    - missing_field
+    - invalid_field
+    - unauthenticated
+    - permission_denied
+    - not_found
+    - payload_too_large
+    - internal

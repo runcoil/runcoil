@@ -21,3 +21,34 @@ func (q *Queries) ProjectCreateDefault(ctx context.Context, db DBTX, id uuid.UUI
 	_, err := db.Exec(ctx, projectCreateDefault, id)
 	return err
 }
+
+const projectList = `-- name: ProjectList :many
+SELECT id, name
+FROM projects
+ORDER BY name
+`
+
+type ProjectListRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) ProjectList(ctx context.Context, db DBTX) ([]ProjectListRow, error) {
+	rows, err := db.Query(ctx, projectList)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectListRow{}
+	for rows.Next() {
+		var i ProjectListRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

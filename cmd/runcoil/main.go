@@ -12,6 +12,7 @@ import (
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
+	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/internal/service/seed"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
@@ -78,7 +79,13 @@ func run() error {
 	checks.Add("dispatcher", dispatcherService.Ready)
 	checks.Add("scheduler", schedulerService.Ready)
 
-	apiService := api.New(cfg.API, logger, checks)
+	cfg.Account.BootstrapAdminPassword = cfg.Seed.AdminPassword
+	accountService := account.New(cfg.Account, userStore)
+
+	apiService, err := api.New(cfg.API, logger, checks, accountService)
+	if err != nil {
+		return fmt.Errorf("new api service: %w", err)
+	}
 
 	// The scheduler and the dispatcher stop first, so /readyz fails while the API still
 	// answers it.

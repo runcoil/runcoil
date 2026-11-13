@@ -14,6 +14,8 @@ const (
 	KindInvalid
 	// KindUnauthenticated is a missing or wrong credential.
 	KindUnauthenticated
+	// KindPermissionDenied is a caller without the permission the request needs.
+	KindPermissionDenied
 	// KindNotFound is a missing resource.
 	KindNotFound
 	// KindConflict is a clash with existing state.
@@ -70,6 +72,11 @@ func Invalid(code Code, message string) *Error {
 // Unauthenticated is a missing or wrong credential.
 func Unauthenticated(code Code, message string) *Error {
 	return newError(KindUnauthenticated, code, message)
+}
+
+// PermissionDenied is a caller without the permission the request needs.
+func PermissionDenied(code Code, message string) *Error {
+	return newError(KindPermissionDenied, code, message)
 }
 
 // NotFound is a missing resource.

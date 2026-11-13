@@ -1,0 +1,162 @@
+LoginRequest:
+  type: object
+  description: A username or an email, and its password.
+  required: [login, password]
+  additionalProperties: false
+  properties:
+    login:
+      type: string
+      description: A username or an email.
+      minLength: 1
+      example: admin
+      x-order: 1
+    password:
+      type: string
+      minLength: 1
+      description: The user's password.
+      example: Secret-123
+      x-order: 2
+LoginResponse:
+  type: object
+  description: The signed-in user.
+  required: [user, passwordChangeSuggested]
+  additionalProperties: false
+  properties:
+    user:
+      $ref: "#/User"
+      x-order: 1
+      example:
+        id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
+        username: admin
+        isServerAdmin: true
+    passwordChangeSuggested:
+      type: boolean
+      description: True when the password is the first server admin's default, so the dashboard offers to change it.
+      example: false
+      x-order: 2
+ChangePasswordRequest:
+  type: object
+  description: The current password and the new one.
+  required: [currentPassword, newPassword]
+  additionalProperties: false
+  properties:
+    currentPassword:
+      type: string
+      minLength: 1
+      description: The password the user has now.
+      example: admin
+      x-order: 1
+    newPassword:
+      type: string
+      minLength: 1
+      description: The new password.
+      example: Secret-123
+      x-order: 2
+User:
+  type: object
+  description: A dashboard user.
+  required: [id, username, isServerAdmin]
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The user's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
+      x-order: 1
+    username:
+      type: string
+      description: The username, lowercase.
+      example: admin
+      x-order: 2
+    email:
+      type: string
+      description: The email, lowercase. Absent when the user has none.
+      example: admin@example.com
+      x-order: 3
+    isServerAdmin:
+      type: boolean
+      description: True for a server admin, who is admin in every project and manages users and projects.
+      example: true
+      x-order: 4
+Me:
+  type: object
+  description: The signed-in user and what they can open.
+  required: [user, permissions, projects]
+  additionalProperties: false
+  properties:
+    user:
+      $ref: "#/User"
+      x-order: 1
+      example:
+        id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
+        username: admin
+        isServerAdmin: true
+    permissions:
+      type: array
+      description: The server-wide permissions of the user.
+      x-order: 2
+      example: [projects:create, users:read, users:write]
+      items:
+        $ref: "#/Permission"
+    projects:
+      type: array
+      description: The projects the user can open, by name.
+      x-order: 3
+      example:
+        - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+          name: default
+          role: viewer
+          permissions: [runs:read, tasks:read, schedules:read, workers:read]
+      items:
+        $ref: "#/ProjectAccess"
+ProjectAccess:
+  type: object
+  description: A project the user can open.
+  required: [id, name, role, permissions]
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: The project's ID.
+      example: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+      x-order: 1
+    name:
+      type: string
+      description: The project's name.
+      example: default
+      x-order: 2
+    role:
+      $ref: "#/Role"
+      x-order: 3
+    permissions:
+      type: array
+      description: The user's permissions in the project.
+      x-order: 4
+      example: [runs:read, tasks:read, schedules:read, workers:read]
+      items:
+        $ref: "#/Permission"
+Role:
+  type: string
+  description: A role in a project. A server admin is admin in every project.
+  example: admin
+  enum: [admin, editor, viewer]
+Permission:
+  type: string
+  description: A permission, as resource:verb.
+  example: runs:read
+  enum:
+    - runs:read
+    - runs:cancel
+    - tasks:read
+    - schedules:read
+    - schedules:write
+    - workers:read
+    - members:read
+    - members:write
+    - api_keys:read
+    - api_keys:write
+    - projects:create
+    - users:read
+    - users:write

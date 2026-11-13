@@ -10,15 +10,23 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"uuid"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/pflag"
 
+	"github.com/runcoil/runcoil/internal/api/gen"
+	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
 
 const (
 	readyTimeout    = 2 * time.Second
 	shutdownTimeout = 10 * time.Second
+
+	apiPrefix = "/api/v1"
 )
 
 // Config is the configuration of the API server.
@@ -40,24 +48,51 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Service serves the API and the health checks of the process.
+// AccountService signs users in and out and checks their roles.
+type AccountService interface {
+	Login(ctx context.Context, login, password string) (account.LoginResult, error)
+	Authenticate(ctx context.Context, token string) (domain.User, error)
+	Logout(ctx context.Context, token string) error
+	ChangePassword(ctx context.Context, user domain.User, token, currentPassword, newPassword string) error
+	ProjectRoles(ctx context.Context, user domain.User) ([]domain.ProjectRole, error)
+	Role(ctx context.Context, user domain.User, projectID uuid.UUID) (domain.Role, bool, error)
+}
+
+// Service serves the dashboard API and the health checks of the process.
 type Service struct {
-	cfg    Config
-	logger *slog.Logger
-	checks *healthutil.Checks
+	cfg      Config
+	logger   *slog.Logger
+	checks   *healthutil.Checks
+	accounts AccountService
+
+	spec        *openapi3.T
+	permissions map[string]string
 
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks) *Service {
-	return &Service{
-		cfg:     cfg,
-		logger:  logger,
-		checks:  checks,
-		stopped: make(chan struct{}),
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accounts AccountService) (*Service, error) {
+	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
+	if err != nil {
+		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
+
+	permissions, err := operationPermissions(spec)
+	if err != nil {
+		return nil, fmt.Errorf("read permissions: %w", err)
+	}
+
+	return &Service{
+		cfg:         cfg,
+		logger:      logger,
+		checks:      checks,
+		accounts:    accounts,
+		spec:        spec,
+		permissions: permissions,
+		stopped:     make(chan struct{}),
+	}, nil
 }
 
 // Run serves until Stop is called or ctx ends, then shuts the HTTP server down.
@@ -108,11 +143,38 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
+	mux.Handle("/api/", s.apiHandler())
 
 	return &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+}
+
+func (s *Service) apiHandler() http.Handler {
+	strict := gen.NewStrictHandlerWithOptions(
+		&handler{authHandler: &authHandler{accounts: s.accounts}},
+		[]gen.StrictMiddlewareFunc{s.checkPermission},
+		gen.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  s.handleRequestError,
+			ResponseErrorHandlerFunc: s.handleError,
+		},
+	)
+
+	routes := gen.HandlerWithOptions(strict, gen.StdHTTPServerOptions{
+		BaseURL:          apiPrefix,
+		BaseRouter:       http.NewServeMux(),
+		ErrorHandlerFunc: s.handleRequestError,
+	})
+
+	return chain(routes,
+		s.recoverPanic,
+		s.logRequest,
+		limitBody,
+		s.loadSession,
+		checkOrigin,
+		s.validateRequest(s.spec),
+	)
 }
 
 func (s *Service) livez(w http.ResponseWriter, _ *http.Request) {
