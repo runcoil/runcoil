@@ -1,25 +1,29 @@
 LoginRequest:
   type: object
   description: A username or an email, and its password.
-  required: [login, password]
   additionalProperties: false
   properties:
     login:
       type: string
       description: A username or an email.
       minLength: 1
+      maxLength: 254
       example: admin
       x-order: 1
     password:
       type: string
-      minLength: 1
       description: The user's password.
+      minLength: 1
+      maxLength: 128
       example: Secret-123
       x-order: 2
+  required:
+    - login
+    - password
+
 LoginResponse:
   type: object
   description: The signed-in user.
-  required: [user, passwordChangeSuggested]
   additionalProperties: false
   properties:
     user:
@@ -28,34 +32,41 @@ LoginResponse:
       example:
         id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
         username: admin
-        isServerAdmin: true
     passwordChangeSuggested:
       type: boolean
       description: True when the password is the first server admin's default, so the dashboard offers to change it.
       example: false
       x-order: 2
+  required:
+    - user
+    - passwordChangeSuggested
+
 ChangePasswordRequest:
   type: object
   description: The current password and the new one.
-  required: [currentPassword, newPassword]
   additionalProperties: false
   properties:
     currentPassword:
       type: string
-      minLength: 1
       description: The password the user has now.
+      minLength: 1
+      maxLength: 128
       example: admin
       x-order: 1
     newPassword:
       type: string
-      minLength: 1
       description: The new password.
+      minLength: 1
+      maxLength: 128
       example: Secret-123
       x-order: 2
+  required:
+    - currentPassword
+    - newPassword
+
 User:
   type: object
   description: A dashboard user.
-  required: [id, username, isServerAdmin]
   additionalProperties: false
   properties:
     id:
@@ -74,15 +85,13 @@ User:
       description: The email, lowercase. Absent when the user has none.
       example: admin@example.com
       x-order: 3
-    isServerAdmin:
-      type: boolean
-      description: True for a server admin, who is admin in every project and manages users and projects.
-      example: true
-      x-order: 4
+  required:
+    - id
+    - username
+
 Me:
   type: object
-  description: The signed-in user and what they can open.
-  required: [user, permissions, projects]
+  description: The signed-in user and what they can do.
   additionalProperties: false
   properties:
     user:
@@ -91,29 +100,39 @@ Me:
       example:
         id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
         username: admin
-        isServerAdmin: true
     permissions:
       type: array
-      description: The server-wide permissions of the user.
+      description: The server-wide permissions of the user. Only a server admin has any.
       x-order: 2
-      example: [projects:create, users:read, users:write]
+      example:
+        - projects:create
+        - users:read
+        - users:write
       items:
         $ref: "#/Permission"
     projects:
       type: array
-      description: The projects the user can open, by name.
+      description: The projects the user can open, by name. A server admin is admin in every project.
       x-order: 3
       example:
         - id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
           name: default
           role: viewer
-          permissions: [runs:read, tasks:read, schedules:read, workers:read]
+          permissions:
+            - runs:read
+            - tasks:read
+            - schedules:read
+            - workers:read
       items:
         $ref: "#/ProjectAccess"
+  required:
+    - user
+    - permissions
+    - projects
+
 ProjectAccess:
   type: object
   description: A project the user can open.
-  required: [id, name, role, permissions]
   additionalProperties: false
   properties:
     id:
@@ -134,14 +153,28 @@ ProjectAccess:
       type: array
       description: The user's permissions in the project.
       x-order: 4
-      example: [runs:read, tasks:read, schedules:read, workers:read]
+      example:
+        - runs:read
+        - tasks:read
+        - schedules:read
+        - workers:read
       items:
         $ref: "#/Permission"
+  required:
+    - id
+    - name
+    - role
+    - permissions
+
 Role:
   type: string
-  description: A role in a project. A server admin is admin in every project.
+  description: A role in a project.
   example: admin
-  enum: [admin, editor, viewer]
+  enum:
+    - admin
+    - editor
+    - viewer
+
 Permission:
   type: string
   description: A permission, as resource:verb.

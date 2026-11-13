@@ -84,6 +84,6 @@ jobs:
           check-latest: true
       - uses: go-task/setup-task@v2
       - run: task sqlc-gen --force
-      - run: task api:gen --force
+      - run: task oapi-gen-server --force
       - name: Fail when generated code is stale
         run: git diff --exit-code && test -z "$(git status --porcelain)"

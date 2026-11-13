@@ -5,7 +5,8 @@ login:
     description: >-
       Checks a username or an email and its password, starts a session and sets its
       cookie. A disabled user cannot sign in.
-    tags: [Auth]
+    tags:
+      - Auth
     security: []
     requestBody:
       description: The credentials.
@@ -37,12 +38,14 @@ login:
         $ref: "../components/responses.yaml#/PayloadTooLarge"
       "500":
         $ref: "../components/responses.yaml#/Internal"
+
 logout:
   post:
     operationId: logout
     summary: Sign out
     description: Ends the session and clears its cookie.
-    tags: [Auth]
+    tags:
+      - Auth
     x-runcoil-permission: self
     responses:
       "204":

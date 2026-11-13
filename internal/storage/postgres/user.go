@@ -79,15 +79,21 @@ func (s *UserStore) UserByEmail(ctx context.Context, email string) (domain.User,
 	return domain.User(row), nil
 }
 
-// CreateSession creates a session for userID that lasts at most maxLifetime.
-func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime time.Duration) error {
-	err := s.queries.SessionCreate(ctx, s.db, sqlc.SessionCreateParams{
-		TokenHash:   tokenHash,
-		UserID:      userID,
-		MaxLifetime: interval(&maxLifetime),
+// CreateSession creates a session that lasts at most maxLifetime, while the user still
+// has passwordHash and is not disabled. It returns domain.ErrUserNotFound otherwise.
+func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, passwordHash string, maxLifetime time.Duration) error {
+	rows, err := s.queries.SessionCreate(ctx, s.db, sqlc.SessionCreateParams{
+		TokenHash:    tokenHash,
+		UserID:       userID,
+		PasswordHash: passwordHash,
+		MaxLifetime:  interval(&maxLifetime),
 	})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
+	}
+
+	if rows == 0 {
+		return domain.ErrUserNotFound
 	}
 
 	return nil
@@ -198,21 +204,4 @@ func (s *UserStore) Projects(ctx context.Context) ([]domain.ProjectRole, error) 
 	}
 
 	return roles, nil
-}
-
-// MemberRole returns the role of userID in projectID, or domain.ErrMemberNotFound.
-func (s *UserStore) MemberRole(ctx context.Context, projectID, userID uuid.UUID) (domain.Role, error) {
-	role, err := s.queries.ProjectMemberGetRole(ctx, s.db, sqlc.ProjectMemberGetRoleParams{
-		ProjectID: projectID,
-		UserID:    userID,
-	})
-	if isNoRowsError(err) {
-		return "", domain.ErrMemberNotFound
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("get member role: %w", err)
-	}
-
-	return domain.Role(role), nil
 }

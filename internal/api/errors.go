@@ -1,70 +1,56 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
+	"github.com/runcoil/runcoil/internal/api/httperr"
 	"github.com/runcoil/runcoil/internal/apierr"
 )
 
-const internalMessage = "internal error"
-
-var errorCodes = map[apierr.Code]gen.ErrorCode{
-	apierr.CodeInvalidRequest:   gen.ErrorCodeInvalidRequest,
-	apierr.CodeInvalidField:     gen.ErrorCodeInvalidField,
-	apierr.CodeUnauthenticated:  gen.ErrorCodeUnauthenticated,
-	apierr.CodePermissionDenied: gen.ErrorCodePermissionDenied,
+func (s *Service) handleRequestError(w http.ResponseWriter, _ *http.Request, err error) {
+	httperr.Write(w, http.StatusBadRequest, httperr.New(gen.ErrorCodeInvalidRequest, err.Error()))
 }
 
-func writeError(w http.ResponseWriter, status int, code gen.ErrorCode, message, field string) {
-	apiErr := gen.Error{Code: code, Message: message}
-	if field != "" {
-		apiErr.Field = &field
-	}
+func (s *Service) handleResponseError(w http.ResponseWriter, r *http.Request, err error) {
+	logger := s.logger.With(
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+	)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(gen.ErrorResponse{Errors: []gen.Error{apiErr}})
-}
-
-func (s *Service) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *apierr.Error
 	if !errors.As(err, &apiErr) {
-		s.logger.ErrorContext(r.Context(), "request failed",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.Any("error", err),
-		)
-		writeError(w, http.StatusInternalServerError, gen.ErrorCodeInternal, internalMessage, "")
+		logger.ErrorContext(r.Context(), "request failed", slog.Any("error", err))
+		httperr.Write(w, http.StatusInternalServerError, httperr.Internal)
 
 		return
 	}
 
-	code, ok := errorCodes[apiErr.Code]
-	if !ok {
-		s.logger.ErrorContext(r.Context(), "api error has no dashboard code",
+	code := gen.ErrorCode(strings.ToLower(string(apiErr.Code)))
+	if !code.Valid() {
+		logger.ErrorContext(r.Context(), "api error code is not in the spec",
 			slog.String("code", string(apiErr.Code)),
 			slog.Any("error", err),
 		)
-		writeError(w, http.StatusInternalServerError, gen.ErrorCodeInternal, internalMessage, "")
+		httperr.Write(w, http.StatusInternalServerError, httperr.Internal)
 
 		return
 	}
 
-	s.logger.WarnContext(r.Context(), "request refused",
-		slog.String("method", r.Method),
-		slog.String("path", r.URL.Path),
+	logger.WarnContext(r.Context(), "request refused",
 		slog.String("code", string(code)),
 		slog.String("message", apiErr.Message),
 	)
-	writeError(w, statusOf(apiErr.Kind), code, apiErr.Message, apiErr.Details["field"])
-}
 
-func (s *Service) handleRequestError(w http.ResponseWriter, _ *http.Request, err error) {
-	writeError(w, http.StatusBadRequest, gen.ErrorCodeInvalidRequest, err.Error(), "")
+	var params []gen.ErrorParam
+	if field := apiErr.Details["field"]; field != "" {
+		params = append(params, gen.ErrorParam{Field: field, Message: apiErr.Message})
+	}
+
+	httperr.Write(w, statusOf(apiErr.Kind), httperr.New(code, apiErr.Message, params...))
 }
 
 func statusOf(kind apierr.Kind) int {

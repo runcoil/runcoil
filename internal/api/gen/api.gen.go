@@ -19,9 +19,7 @@ import (
 // Defines values for ErrorCode.
 const (
 	ErrorCodeInternal         ErrorCode = "internal"
-	ErrorCodeInvalidField     ErrorCode = "invalid_field"
 	ErrorCodeInvalidRequest   ErrorCode = "invalid_request"
-	ErrorCodeMissingField     ErrorCode = "missing_field"
 	ErrorCodeNotFound         ErrorCode = "not_found"
 	ErrorCodePayloadTooLarge  ErrorCode = "payload_too_large"
 	ErrorCodePermissionDenied ErrorCode = "permission_denied"
@@ -33,11 +31,7 @@ func (e ErrorCode) Valid() bool {
 	switch e {
 	case ErrorCodeInternal:
 		return true
-	case ErrorCodeInvalidField:
-		return true
 	case ErrorCodeInvalidRequest:
-		return true
-	case ErrorCodeMissingField:
 		return true
 	case ErrorCodeNotFound:
 		return true
@@ -133,25 +127,28 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
-// Error One error of a request.
-type Error struct {
+// ErrorCode The code of an error.
+type ErrorCode string
+
+// ErrorParam A request field at fault.
+type ErrorParam struct {
+	// Field The field, as a dotted path in the body, or a parameter name.
+	Field string `json:"field"`
+
+	// Message What is wrong with the field, for people.
+	Message string `json:"message"`
+}
+
+// ErrorResponse The body of every error response.
+type ErrorResponse struct {
 	// Code The code of an error.
 	Code ErrorCode `json:"code"`
 
 	// Message For people. Clients never parse it.
 	Message string `json:"message"`
 
-	// Field The request field at fault, for missing_field and invalid_field.
-	Field *string `json:"field,omitempty"`
-}
-
-// ErrorCode The code of an error.
-type ErrorCode string
-
-// ErrorResponse The body of every error response.
-type ErrorResponse struct {
-	// Errors The errors of the request, at least one.
-	Errors []Error `json:"errors"`
+	// Params The request fields at fault, for invalid_request. Absent when no field is.
+	Params *[]ErrorParam `json:"params,omitempty"`
 }
 
 // LoginRequest A username or an email, and its password.
@@ -172,15 +169,15 @@ type LoginResponse struct {
 	PasswordChangeSuggested bool `json:"passwordChangeSuggested"`
 }
 
-// Me The signed-in user and what they can open.
+// Me The signed-in user and what they can do.
 type Me struct {
 	// User A dashboard user.
 	User User `json:"user"`
 
-	// Permissions The server-wide permissions of the user.
+	// Permissions The server-wide permissions of the user. Only a server admin has any.
 	Permissions []Permission `json:"permissions"`
 
-	// Projects The projects the user can open, by name.
+	// Projects The projects the user can open, by name. A server admin is admin in every project.
 	Projects []ProjectAccess `json:"projects"`
 }
 
@@ -195,14 +192,14 @@ type ProjectAccess struct {
 	// Name The project's name.
 	Name string `json:"name"`
 
-	// Role A role in a project. A server admin is admin in every project.
+	// Role A role in a project.
 	Role Role `json:"role"`
 
 	// Permissions The user's permissions in the project.
 	Permissions []Permission `json:"permissions"`
 }
 
-// Role A role in a project. A server admin is admin in every project.
+// Role A role in a project.
 type Role string
 
 // User A dashboard user.
@@ -215,9 +212,6 @@ type User struct {
 
 	// Email The email, lowercase. Absent when the user has none.
 	Email *string `json:"email,omitempty"`
-
-	// IsServerAdmin True for a server admin, who is admin in every project and manages users and projects.
-	IsServerAdmin bool `json:"isServerAdmin"`
 }
 
 // Internal The body of every error response.

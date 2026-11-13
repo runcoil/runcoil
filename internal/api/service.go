@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
+	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/openapi"
@@ -26,17 +26,20 @@ const (
 	readyTimeout    = 2 * time.Second
 	shutdownTimeout = 10 * time.Second
 
-	apiPrefix = "/api/v1"
+	sessionCookieName = "runcoil_session"
+	maxBodyBytes      = 1 << 20
 )
 
 // Config is the configuration of the API server.
 type Config struct {
-	Port int
+	Port         int
+	SecureCookie bool
 }
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&c.Port, "api.port", 8080, "Port of the API and the health checks.")
+	fs.BoolVar(&c.SecureCookie, "api.secure-cookie", false, "Send the session cookie over HTTPS only. Turn it on when the dashboard is served over HTTPS.")
 }
 
 // Validate checks the configuration.
@@ -48,22 +51,22 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// AccountService signs users in and out and checks their roles.
+// AccountService signs users in and out and decides what they may do.
 type AccountService interface {
 	Login(ctx context.Context, login, password string) (account.LoginResult, error)
 	Authenticate(ctx context.Context, token string) (domain.User, error)
 	Logout(ctx context.Context, token string) error
 	ChangePassword(ctx context.Context, user domain.User, token, currentPassword, newPassword string) error
-	ProjectRoles(ctx context.Context, user domain.User) ([]domain.ProjectRole, error)
-	Role(ctx context.Context, user domain.User, projectID uuid.UUID) (domain.Role, bool, error)
+	Access(ctx context.Context, user domain.User) (account.Access, error)
+	Authorize(user domain.User, permission domain.Permission) error
 }
 
 // Service serves the dashboard API and the health checks of the process.
 type Service struct {
-	cfg      Config
-	logger   *slog.Logger
-	checks   *healthutil.Checks
-	accounts AccountService
+	cfg            Config
+	logger         *slog.Logger
+	checks         *healthutil.Checks
+	accountService AccountService
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -73,25 +76,25 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accounts AccountService) (*Service, error) {
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService AccountService) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
 
-	permissions, err := operationPermissions(spec)
+	permissions, err := middleware.Permissions(spec)
 	if err != nil {
 		return nil, fmt.Errorf("read permissions: %w", err)
 	}
 
 	return &Service{
-		cfg:         cfg,
-		logger:      logger,
-		checks:      checks,
-		accounts:    accounts,
-		spec:        spec,
-		permissions: permissions,
-		stopped:     make(chan struct{}),
+		cfg:            cfg,
+		logger:         logger,
+		checks:         checks,
+		accountService: accountService,
+		spec:           spec,
+		permissions:    permissions,
+		stopped:        make(chan struct{}),
 	}, nil
 }
 
@@ -147,34 +150,50 @@ func (s *Service) newHTTPServer() *http.Server {
 
 	return &http.Server{
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 
 func (s *Service) apiHandler() http.Handler {
 	strict := gen.NewStrictHandlerWithOptions(
-		&handler{authHandler: &authHandler{accounts: s.accounts}},
-		[]gen.StrictMiddlewareFunc{s.checkPermission},
+		s.newHandler(),
+		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions, s.accountService)},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  s.handleRequestError,
-			ResponseErrorHandlerFunc: s.handleError,
+			ResponseErrorHandlerFunc: s.handleResponseError,
 		},
 	)
 
 	routes := gen.HandlerWithOptions(strict, gen.StdHTTPServerOptions{
-		BaseURL:          apiPrefix,
+		BaseURL:          "/api/v1",
 		BaseRouter:       http.NewServeMux(),
 		ErrorHandlerFunc: s.handleRequestError,
 	})
 
-	return chain(routes,
-		s.recoverPanic,
-		s.logRequest,
-		limitBody,
-		s.loadSession,
-		checkOrigin,
-		s.validateRequest(s.spec),
+	return middleware.Chain(routes,
+		middleware.Recover(s.logger),
+		middleware.LogRequest(s.logger),
+		middleware.LimitBody(maxBodyBytes),
+		middleware.LoadSession(sessionCookieName, s.accountService, s.handleResponseError),
+		middleware.CheckOrigin(),
+		middleware.ValidateRequest(s.spec, "/api/v1"),
 	)
+}
+
+var _ gen.StrictServerInterface = (*handler)(nil)
+
+type handler struct {
+	*authHandler
+}
+
+func (s *Service) newHandler() *handler {
+	return &handler{
+		authHandler: newAuthHandler(s.accountService, s.cfg.SecureCookie),
+	}
 }
 
 func (s *Service) livez(w http.ResponseWriter, _ *http.Request) {

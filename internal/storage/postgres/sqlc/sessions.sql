@@ -1,6 +1,11 @@
--- name: SessionCreate :exec
+-- name: SessionCreate :execrows
 INSERT INTO sessions (token_hash, user_id, expires_at)
-VALUES (@token_hash::bytea, @user_id::uuid, now() + @max_lifetime::interval);
+SELECT @token_hash::bytea, u.id, now() + @max_lifetime::interval
+FROM users u
+WHERE u.id = @user_id::uuid
+  AND u.password_hash = @password_hash::text
+  AND u.disabled_at IS NULL
+FOR SHARE;
 
 -- name: SessionGetUser :one
 SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin,
@@ -25,4 +30,3 @@ WHERE token_hash = @token_hash::bytea;
 DELETE FROM sessions
 WHERE user_id = @user_id::uuid
   AND token_hash <> @token_hash::bytea;
-

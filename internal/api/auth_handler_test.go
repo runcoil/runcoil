@@ -24,10 +24,9 @@ const testToken = "token-1"
 
 var testUser = domain.User{ID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50"), Username: "ana"}
 
-type fakeAccounts struct {
-	user  domain.User
-	roles []domain.ProjectRole
-	role  domain.Role
+type fakeAccountService struct {
+	user   domain.User
+	access account.Access
 
 	loginErr    error
 	changeErr   error
@@ -35,7 +34,7 @@ type fakeAccounts struct {
 	newPassword string
 }
 
-func (f *fakeAccounts) Login(_ context.Context, login, password string) (account.LoginResult, error) {
+func (f *fakeAccountService) Login(_ context.Context, login, password string) (account.LoginResult, error) {
 	if f.loginErr != nil {
 		return account.LoginResult{}, f.loginErr
 	}
@@ -48,7 +47,7 @@ func (f *fakeAccounts) Login(_ context.Context, login, password string) (account
 	}, nil
 }
 
-func (f *fakeAccounts) Authenticate(_ context.Context, token string) (domain.User, error) {
+func (f *fakeAccountService) Authenticate(_ context.Context, token string) (domain.User, error) {
 	if token != testToken {
 		return domain.User{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
 	}
@@ -56,28 +55,38 @@ func (f *fakeAccounts) Authenticate(_ context.Context, token string) (domain.Use
 	return f.user, nil
 }
 
-func (f *fakeAccounts) Logout(_ context.Context, token string) error {
+func (f *fakeAccountService) Logout(_ context.Context, token string) error {
 	f.loggedOut = token
 	return nil
 }
 
-func (f *fakeAccounts) ChangePassword(_ context.Context, _ domain.User, _, _, newPassword string) error {
+func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.User, _, _, newPassword string) error {
 	f.newPassword = newPassword
 	return f.changeErr
 }
 
-func (f *fakeAccounts) ProjectRoles(context.Context, domain.User) ([]domain.ProjectRole, error) {
-	return f.roles, nil
+func (f *fakeAccountService) Access(context.Context, domain.User) (account.Access, error) {
+	return f.access, nil
 }
 
-func (f *fakeAccounts) Role(_ context.Context, _ domain.User, _ uuid.UUID) (domain.Role, bool, error) {
-	return f.role, f.role != "", nil
+func (f *fakeAccountService) Authorize(user domain.User, _ domain.Permission) error {
+	if user.IsServerAdmin {
+		return nil
+	}
+
+	return apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
 }
 
-func newAPIServer(t *testing.T, accounts *fakeAccounts) http.Handler {
+func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler {
 	t.Helper()
 
-	s, err := New(Config{Port: 8080}, slog.New(slog.DiscardHandler), healthutil.New(), accounts)
+	return newAPIServerWithConfig(t, Config{Port: 8080}, accountService)
+}
+
+func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccountService) http.Handler {
+	t.Helper()
+
+	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService)
 	require.NoError(t, err)
 
 	return s.newHTTPServer().Handler
@@ -114,31 +123,36 @@ func do(t *testing.T, h http.Handler, c call) *httptest.ResponseRecorder {
 }
 
 type errorBody struct {
-	Errors []struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Params  []struct {
 		Field   string `json:"field"`
-	} `json:"errors"`
+		Message string `json:"message"`
+	} `json:"params"`
 }
 
-func decodeError(t *testing.T, rec *httptest.ResponseRecorder) (code, field string) {
+func decodeError(t *testing.T, rec *httptest.ResponseRecorder) (code string, fields []string) {
 	t.Helper()
 
 	var body errorBody
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), rec.Body.String())
-	require.Len(t, body.Errors, 1)
+	require.NotEmpty(t, body.Message, rec.Body.String())
 
-	return body.Errors[0].Code, body.Errors[0].Field
+	for _, param := range body.Params {
+		fields = append(fields, param.Field)
+	}
+
+	return body.Code, fields
 }
 
 func TestLogin(t *testing.T) {
-	accounts := &fakeAccounts{user: testUser}
-	h := newAPIServer(t, accounts)
+	accountService := &fakeAccountService{user: testUser}
+	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"login":"admin","password":"admin"}`})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.JSONEq(t, `{"user":{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","isServerAdmin":false},"passwordChangeSuggested":true}`, rec.Body.String())
+	assert.JSONEq(t, `{"user":{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana"},"passwordChangeSuggested":true}`, rec.Body.String())
 
 	cookies := rec.Result().Cookies()
 	require.Len(t, cookies, 1)
@@ -147,47 +161,62 @@ func TestLogin(t *testing.T) {
 	assert.True(t, cookies[0].HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
 	assert.Equal(t, "/", cookies[0].Path)
+	assert.False(t, cookies[0].Secure)
+}
+
+func TestLoginSetsASecureCookieWhenConfigured(t *testing.T) {
+	h := newAPIServerWithConfig(t, Config{Port: 8080, SecureCookie: true}, &fakeAccountService{user: testUser})
+
+	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"login":"admin","password":"admin"}`})
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	cookies := rec.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.True(t, cookies[0].Secure)
 }
 
 func TestLoginErrors(t *testing.T) {
 	tests := []struct {
-		name      string
-		body      string
-		loginErr  error
-		wantCode  int
-		wantError string
-		wantField string
+		name       string
+		body       string
+		loginErr   error
+		wantCode   int
+		wantError  string
+		wantFields []string
 	}{
 		{name: "wrong password", body: `{"login":"ana","password":"x"}`, loginErr: apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password"), wantCode: http.StatusUnauthorized, wantError: "unauthenticated"},
-		{name: "missing password", body: `{"login":"ana"}`, wantCode: http.StatusBadRequest, wantError: "missing_field", wantField: "password"},
-		{name: "empty login", body: `{"login":"","password":"x"}`, wantCode: http.StatusBadRequest, wantError: "invalid_field", wantField: "login"},
-		{name: "unknown field", body: `{"login":"ana","password":"x","extra":1}`, wantCode: http.StatusBadRequest, wantError: "invalid_field", wantField: "extra"},
+		{name: "missing password", body: `{"login":"ana"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"password"}},
+		{name: "missing both", body: `{}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login", "password"}},
+		{name: "empty login", body: `{"login":"","password":"x"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login"}},
+		{name: "password too long", body: `{"login":"ana","password":"` + strings.Repeat("a", 129) + `"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"password"}},
+		{name: "unknown field", body: `{"login":"ana","password":"x","extra":1}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"extra"}},
 		{name: "not JSON", body: `{`, wantCode: http.StatusBadRequest, wantError: "invalid_request"},
 		{name: "store failure", body: `{"login":"ana","password":"x"}`, loginErr: assert.AnError, wantCode: http.StatusInternalServerError, wantError: "internal"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newAPIServer(t, &fakeAccounts{loginErr: tt.loginErr})
+			h := newAPIServer(t, &fakeAccountService{loginErr: tt.loginErr})
 
 			rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/login", body: tt.body})
 
 			assert.Equal(t, tt.wantCode, rec.Code)
-			code, field := decodeError(t, rec)
+			code, fields := decodeError(t, rec)
 			assert.Equal(t, tt.wantError, code, rec.Body.String())
-			assert.Equal(t, tt.wantField, field, rec.Body.String())
+			assert.ElementsMatch(t, tt.wantFields, fields, rec.Body.String())
 		})
 	}
 }
 
 func TestLogout(t *testing.T) {
-	accounts := &fakeAccounts{user: testUser}
-	h := newAPIServer(t, accounts)
+	accountService := &fakeAccountService{user: testUser}
+	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: testToken})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, testToken, accounts.loggedOut)
+	assert.Equal(t, testToken, accountService.loggedOut)
 
 	cookies := rec.Result().Cookies()
 	require.Len(t, cookies, 1)
@@ -197,73 +226,62 @@ func TestLogout(t *testing.T) {
 
 func TestGetMe(t *testing.T) {
 	projectID := uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f51")
-
-	tests := []struct {
-		name string
-		user domain.User
-		want string
-	}{
-		{
-			name: "member",
-			user: testUser,
-			want: `{
-				"user": {"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", "username": "ana", "isServerAdmin": false},
-				"permissions": [],
-				"projects": [{"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f51", "name": "default", "role": "editor",
-					"permissions": ["runs:read", "tasks:read", "schedules:read", "workers:read", "runs:cancel", "schedules:write"]}]
-			}`,
-		},
-		{
-			name: "server admin",
-			user: domain.User{ID: testUser.ID, Username: "ana", IsServerAdmin: true},
-			want: `{
-				"user": {"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", "username": "ana", "isServerAdmin": true},
-				"permissions": ["projects:create", "users:read", "users:write"],
-				"projects": [{"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f51", "name": "default", "role": "editor",
-					"permissions": ["runs:read", "tasks:read", "schedules:read", "workers:read", "runs:cancel", "schedules:write"]}]
-			}`,
+	accountService := &fakeAccountService{
+		user: testUser,
+		access: account.Access{
+			Permissions: []domain.Permission{domain.PermissionProjectsCreate},
+			Projects: []account.ProjectAccess{{
+				ProjectRole: domain.ProjectRole{ProjectID: projectID, ProjectName: "default", Role: domain.RoleViewer},
+				Permissions: []domain.Permission{domain.PermissionRunsRead},
+			}},
 		},
 	}
+	h := newAPIServer(t, accountService)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			accounts := &fakeAccounts{
-				user:  tt.user,
-				roles: []domain.ProjectRole{{ProjectID: projectID, ProjectName: "default", Role: domain.RoleEditor}},
-			}
-			h := newAPIServer(t, accounts)
+	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/me", token: testToken})
 
-			rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/me", token: testToken})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{
+		"user": {"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", "username": "ana"},
+		"permissions": ["projects:create"],
+		"projects": [{"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f51", "name": "default", "role": "viewer", "permissions": ["runs:read"]}]
+	}`, rec.Body.String())
+}
 
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			assert.JSONEq(t, tt.want, rec.Body.String())
-		})
-	}
+func TestGetMeWithNoAccess(t *testing.T) {
+	h := newAPIServer(t, &fakeAccountService{user: testUser})
+
+	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/me", token: testToken})
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{"user": {"id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", "username": "ana"}, "permissions": [], "projects": []}`, rec.Body.String())
 }
 
 func TestChangeMyPassword(t *testing.T) {
-	accounts := &fakeAccounts{user: testUser}
-	h := newAPIServer(t, accounts)
+	accountService := &fakeAccountService{user: testUser}
+	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"admin","newPassword":"Secret-123"}`})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, "Secret-123", accounts.newPassword)
+	assert.Equal(t, "Secret-123", accountService.newPassword)
 }
 
 func TestChangeMyPasswordRefused(t *testing.T) {
-	accounts := &fakeAccounts{
+	accountService := &fakeAccountService{
 		user:      testUser,
-		changeErr: apierr.Invalid(apierr.CodeInvalidField, "current password is wrong").WithDetail("field", "currentPassword"),
+		changeErr: apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
 	}
-	h := newAPIServer(t, accounts)
+	h := newAPIServer(t, accountService)
 
 	rec := do(t, h, call{method: http.MethodPut, path: "/api/v1/me/password", token: testToken, body: `{"currentPassword":"x","newPassword":"Secret-123"}`})
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	code, field := decodeError(t, rec)
-	assert.Equal(t, "invalid_field", code)
-	assert.Equal(t, "currentPassword", field)
+	assert.JSONEq(t, `{
+		"code": "invalid_request",
+		"message": "current password is wrong",
+		"params": [{"field": "currentPassword", "message": "current password is wrong"}]
+	}`, rec.Body.String())
 }
 
 func TestRequestsRefusedBeforeTheHandler(t *testing.T) {
@@ -283,7 +301,7 @@ func TestRequestsRefusedBeforeTheHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newAPIServer(t, &fakeAccounts{user: testUser})
+			h := newAPIServer(t, &fakeAccountService{user: testUser})
 
 			rec := do(t, h, tt.call)
 

@@ -5,7 +5,8 @@ me:
     description: >-
       Returns the signed-in user, the projects they can open with their role and
       permissions in each, and their server-wide permissions.
-    tags: [Auth]
+    tags:
+      - Auth
     x-runcoil-permission: self
     responses:
       "200":
@@ -18,6 +19,7 @@ me:
         $ref: "../components/responses.yaml#/Unauthenticated"
       "500":
         $ref: "../components/responses.yaml#/Internal"
+
 mePassword:
   put:
     operationId: changeMyPassword
@@ -26,7 +28,8 @@ mePassword:
       Sets a new password for the signed-in user and ends their other sessions. The new
       password has at least 8 characters, with an upper-case letter, a lower-case letter,
       a digit and a special character.
-    tags: [Auth]
+    tags:
+      - Auth
     x-runcoil-permission: self
     requestBody:
       description: The current and the new password.

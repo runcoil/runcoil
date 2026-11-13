@@ -1,4 +1,5 @@
 openapi: 3.1.0
+
 info:
   title: Runcoil dashboard API
   version: 1.0.0
@@ -6,13 +7,17 @@ info:
   license:
     name: Apache-2.0
     identifier: Apache-2.0
+
 servers:
   - url: /api/v1
+
 security:
   - sessionCookie: []
+
 tags:
   - name: Auth
     description: Signing in and out, and the signed-in user.
+
 paths:
   /auth/login:
     $ref: "./paths/auth.yaml#/login"
@@ -22,6 +27,7 @@ paths:
     $ref: "./paths/me.yaml#/me"
   /me/password:
     $ref: "./paths/me.yaml#/mePassword"
+
 components:
   securitySchemes:
     sessionCookie:

@@ -49,7 +49,7 @@ tasks:
     cmds:
       - go tool -modfile=tools/go.mod sqlc generate -f internal/storage/postgres/sqlc/sqlc.yml
 
-  api:gen:
+  oapi-gen-server:
     desc: Lint and bundle the OpenAPI spec, and generate the dashboard API server
     sources:
       - openapi/**/*.yaml
