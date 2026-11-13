@@ -7,7 +7,8 @@ import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { apiErrors, formatErrorMessage, isUnauthenticatedError } from "@/lib/api-errors";
+import { isUnauthenticatedError } from "@/lib/api-errors";
+import { setServerErrors } from "@/lib/form-errors";
 import { DefaultPasswordPrompt } from "@/features/auth/components/default-password-prompt";
 import { useLogin } from "@/features/auth/queries";
 import { loginSchema, type LoginValues } from "@/features/auth/schemas";
@@ -47,13 +48,16 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
           void router.navigate({ href: redirectTo });
         },
         onError: (error) => {
-          const serverMessage = apiErrors(error)[0]?.message;
-          const message = isUnauthenticatedError(error)
-            ? "Wrong username or password"
-            : serverMessage
-              ? formatErrorMessage(serverMessage)
-              : "Sign in failed. Try again.";
-          form.setError("root", { message });
+          if (isUnauthenticatedError(error)) {
+            form.setError("root", { message: "Wrong username or password" });
+            return;
+          }
+          setServerErrors(
+            form.setError,
+            error,
+            ["login", "password"],
+            "Sign in failed. Try again.",
+          );
         },
       },
     );

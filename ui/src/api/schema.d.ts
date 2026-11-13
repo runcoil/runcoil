@@ -30,8 +30,7 @@ export interface components {
             /**
              * @example {
              *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50",
-             *       "username": "admin",
-             *       "isServerAdmin": true
+             *       "username": "admin"
              *     }
              */
             user: components["schemas"]["User"];
@@ -59,11 +58,6 @@ export interface components {
              * @example admin@example.com
              */
             email?: string;
-            /**
-             * @description True for a server admin, who is admin in every project and manages users and projects.
-             * @example true
-             */
-            isServerAdmin: boolean;
         };
         /**
          * @description A permission, as resource:verb.
@@ -97,7 +91,7 @@ export interface components {
             permissions: components["schemas"]["Permission"][];
         };
         /**
-         * @description A role in a project. A server admin is admin in every project.
+         * @description A role in a project.
          * @example admin
          * @enum {string}
          */
@@ -105,29 +99,17 @@ export interface components {
         /**
          * @description The body of every error response.
          * @example {
-         *       "errors": [
+         *       "code": "invalid_request",
+         *       "message": "current password is wrong",
+         *       "params": [
          *         {
-         *           "code": "unauthenticated",
-         *           "message": "not signed in"
+         *           "field": "currentPassword",
+         *           "message": "current password is wrong"
          *         }
          *       ]
          *     }
          */
         ErrorResponse: {
-            /**
-             * @description The errors of the request, at least one.
-             * @example [
-             *       {
-             *         "code": "invalid_field",
-             *         "message": "current password is wrong",
-             *         "field": "currentPassword"
-             *       }
-             *     ]
-             */
-            errors: components["schemas"]["Error"][];
-        };
-        /** @description One error of a request. */
-        Error: {
             code: components["schemas"]["ErrorCode"];
             /**
              * @description For people. Clients never parse it.
@@ -135,29 +117,46 @@ export interface components {
              */
             message: string;
             /**
-             * @description The request field at fault, for missing_field and invalid_field.
-             * @example currentPassword
+             * @description The request fields at fault, for invalid_request. Absent when no field is.
+             * @example [
+             *       {
+             *         "field": "currentPassword",
+             *         "message": "current password is wrong"
+             *       }
+             *     ]
              */
-            field?: string;
+            params?: components["schemas"]["ErrorParam"][];
         };
         /**
          * @description The code of an error.
-         * @example invalid_field
+         * @example invalid_request
          * @enum {string}
          */
-        ErrorCode: "invalid_request" | "missing_field" | "invalid_field" | "unauthenticated" | "permission_denied" | "not_found" | "payload_too_large" | "internal";
-        /** @description The signed-in user and what they can open. */
+        ErrorCode: "invalid_request" | "unauthenticated" | "permission_denied" | "not_found" | "payload_too_large" | "internal";
+        /** @description A request field at fault. */
+        ErrorParam: {
+            /**
+             * @description The field, as a dotted path in the body, or a parameter name.
+             * @example currentPassword
+             */
+            field: string;
+            /**
+             * @description What is wrong with the field, for people.
+             * @example current password is wrong
+             */
+            message: string;
+        };
+        /** @description The signed-in user and what they can do. */
         Me: {
             /**
              * @example {
              *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50",
-             *       "username": "admin",
-             *       "isServerAdmin": true
+             *       "username": "admin"
              *     }
              */
             user: components["schemas"]["User"];
             /**
-             * @description The server-wide permissions of the user.
+             * @description The server-wide permissions of the user. Only a server admin has any.
              * @example [
              *       "projects:create",
              *       "users:read",
@@ -166,7 +165,7 @@ export interface components {
              */
             permissions: components["schemas"]["Permission"][];
             /**
-             * @description The projects the user can open, by name.
+             * @description The projects the user can open, by name. A server admin is admin in every project.
              * @example [
              *       {
              *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f51",
@@ -198,7 +197,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description invalid_request, missing_field, invalid_field: the request is not valid */
+        /** @description invalid_request: the request is not valid; params names the fields at fault */
         InvalidRequest: {
             headers: {
                 [name: string]: unknown;

@@ -1,36 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, useForm, type UseFormSetError } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { apiErrors, formatErrorMessage } from "@/lib/api-errors";
+import { setServerErrors } from "@/lib/form-errors";
 import { useChangePassword } from "@/features/auth/queries";
 import { changePasswordSchema, type ChangePasswordValues } from "@/features/auth/schemas";
-
-const passwordFields = ["currentPassword", "newPassword"] as const;
-
-function isPasswordField(field: string | undefined): field is (typeof passwordFields)[number] {
-  return passwordFields.some((name) => name === field);
-}
-
-function applyServerErrors(setError: UseFormSetError<ChangePasswordValues>, error: unknown) {
-  const items = apiErrors(error);
-  if (items.length === 0) {
-    setError("root", { message: "Could not change the password. Try again." });
-    return;
-  }
-
-  for (const item of items) {
-    const message = formatErrorMessage(item.message);
-    if (isPasswordField(item.field)) {
-      setError(item.field, { message });
-    } else {
-      setError("root", { message });
-    }
-  }
-}
 
 export function ChangePasswordForm() {
   const changePassword = useChangePassword();
@@ -48,7 +25,13 @@ export function ChangePasswordForm() {
           toast.success("Password changed");
           form.reset();
         },
-        onError: (error) => applyServerErrors(form.setError, error),
+        onError: (error) =>
+          setServerErrors(
+            form.setError,
+            error,
+            ["currentPassword", "newPassword"],
+            "Could not change the password. Try again.",
+          ),
       },
     );
   }

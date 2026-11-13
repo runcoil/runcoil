@@ -2,88 +2,123 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   ApiError,
-  apiErrors,
+  errorResponse,
   formatErrorMessage,
   isRetryableError,
   isUnauthenticatedError,
+  parseErrorResponse,
   readApiError,
 } from "@/lib/api-errors";
 
-describe("apiErrors", () => {
-  it("keeps the well-formed items of an error body", () => {
+describe("parseErrorResponse", () => {
+  it("keeps an error body with its params", () => {
     const body = {
-      errors: [
-        { code: "invalid_field", message: "current password is wrong", field: "currentPassword" },
-        { code: "internal", message: "something broke" },
-        { code: 42, message: "not an item" },
-      ],
+      code: "invalid_request",
+      message: "current password is wrong",
+      params: [{ field: "currentPassword", message: "current password is wrong" }],
     };
 
-    expect(apiErrors(body)).toEqual([
-      { code: "invalid_field", message: "current password is wrong", field: "currentPassword" },
-      { code: "internal", message: "something broke" },
-    ]);
+    expect(parseErrorResponse(body)).toEqual(body);
+  });
+
+  it("keeps an error body without params", () => {
+    expect(parseErrorResponse({ code: "internal", message: "something broke" })).toEqual({
+      code: "internal",
+      message: "something broke",
+    });
   });
 
   it("returns nothing for values that are not an error body", () => {
-    expect(apiErrors(undefined)).toEqual([]);
-    expect(apiErrors("boom")).toEqual([]);
-    expect(apiErrors({ errors: "boom" })).toEqual([]);
+    expect(parseErrorResponse(undefined)).toBeUndefined();
+    expect(parseErrorResponse("boom")).toBeUndefined();
+    expect(parseErrorResponse({ message: "no code" })).toBeUndefined();
+    expect(parseErrorResponse({ code: "missing_field", message: "old code" })).toBeUndefined();
+    expect(
+      parseErrorResponse({ errors: [{ code: "internal", message: "old shape" }] }),
+    ).toBeUndefined();
+    expect(
+      parseErrorResponse({ code: "invalid_request", message: "bad", params: [{ field: 1 }] }),
+    ).toBeUndefined();
+  });
+});
+
+describe("errorResponse", () => {
+  it("reads the body of an ApiError", () => {
+    const body = { code: "not_found", message: "task not found" } as const;
+
+    expect(errorResponse(new ApiError(404, body))).toEqual(body);
+    expect(errorResponse(new ApiError(502))).toBeUndefined();
+  });
+
+  it("reads a raw error body", () => {
+    expect(errorResponse({ code: "permission_denied", message: "no" })).toEqual({
+      code: "permission_denied",
+      message: "no",
+    });
   });
 });
 
 describe("isUnauthenticatedError", () => {
-  it("is true for an unauthenticated error body", () => {
+  it("is true for an unauthenticated error", () => {
+    expect(isUnauthenticatedError({ code: "unauthenticated", message: "not signed in" })).toBe(
+      true,
+    );
     expect(
-      isUnauthenticatedError({ errors: [{ code: "unauthenticated", message: "not signed in" }] }),
+      isUnauthenticatedError(
+        new ApiError(401, { code: "unauthenticated", message: "not signed in" }),
+      ),
     ).toBe(true);
   });
 
   it("is false for other codes and for anything else", () => {
-    expect(isUnauthenticatedError({ errors: [{ code: "permission_denied", message: "no" }] })).toBe(
-      false,
-    );
+    expect(isUnauthenticatedError({ code: "permission_denied", message: "no" })).toBe(false);
+    expect(isUnauthenticatedError(new ApiError(401))).toBe(false);
     expect(isUnauthenticatedError(new Error("network down"))).toBe(false);
     expect(isUnauthenticatedError(null)).toBe(false);
   });
 });
 
 describe("readApiError", () => {
-  it("keeps the status and the error items of a JSON body", async () => {
-    const response = new Response(
-      JSON.stringify({ errors: [{ code: "not_found", message: "task not found" }] }),
-      { status: 404 },
-    );
+  it("keeps the status and the body of a JSON error", async () => {
+    const body = {
+      code: "invalid_request",
+      message: "login is required",
+      params: [
+        { field: "login", message: "login is required" },
+        { field: "password", message: "password is required" },
+      ],
+    };
+    const response = new Response(JSON.stringify(body), { status: 400 });
 
     const error = await readApiError(response);
 
-    expect(error.status).toBe(404);
-    expect(error.errors).toEqual([{ code: "not_found", message: "task not found" }]);
-    expect(apiErrors(error)).toEqual(error.errors);
-    expect(error.message).toBe("task not found");
+    expect(error.status).toBe(400);
+    expect(error.body).toEqual(body);
+    expect(error.message).toBe("login is required");
   });
 
-  it("has no items for a body that is not JSON", async () => {
+  it("has no body for a body that is not JSON", async () => {
     const error = await readApiError(new Response("Bad Gateway", { status: 502 }));
 
     expect(error.status).toBe(502);
-    expect(error.errors).toEqual([]);
+    expect(error.body).toBeUndefined();
+    expect(error.message).toBe("Request failed with status 502");
   });
 });
 
 describe("isRetryableError", () => {
   it("retries network errors and server errors", () => {
     expect(isRetryableError(new TypeError("Failed to fetch"))).toBe(true);
-    expect(isRetryableError(new ApiError(500, []))).toBe(true);
-    expect(isRetryableError(new ApiError(503, []))).toBe(true);
+    expect(isRetryableError(new ApiError(500))).toBe(true);
+    expect(isRetryableError(new ApiError(503))).toBe(true);
   });
 
   it("never retries client errors or anything else", () => {
-    expect(isRetryableError(new ApiError(400, []))).toBe(false);
-    expect(isRetryableError(new ApiError(401, []))).toBe(false);
-    expect(isRetryableError(new ApiError(404, []))).toBe(false);
+    expect(isRetryableError(new ApiError(400))).toBe(false);
+    expect(isRetryableError(new ApiError(401))).toBe(false);
+    expect(isRetryableError(new ApiError(404, { code: "not_found", message: "gone" }))).toBe(false);
     expect(isRetryableError(new Error("boom"))).toBe(false);
-    expect(isRetryableError({ errors: [] })).toBe(false);
+    expect(isRetryableError({ code: "internal", message: "boom" })).toBe(false);
   });
 });
 
