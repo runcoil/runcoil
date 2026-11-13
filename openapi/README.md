@@ -12,15 +12,18 @@ The OpenAPI 3.1 document of the dashboard API. The server code in `internal/api/
 ## Rules
 
 - Every operation has an `operationId` in lowerCamelCase, a summary, a description and a tag.
-- Every operation declares its permission in `x-runcoil-permission`, as `resource:verb`, or `self` for the caller's own account. Only `login` has `security: []` and no permission.
+- Every operation declares its permission in `x-runcoil-permission`, as `resource:verb`, or `self` when any signed-in user may call it on their own account. Only `login` has `security: []` and no permission.
+- Every error body is an `ErrorResponse`: a `code`, a `message`, and for `invalid_request` the `params` at fault.
 - Every operation lists all its responses. Shared errors come from `components/responses.yaml`.
-- Every object has `required` and `additionalProperties: false`. Every property has a description, an example and an `x-order`.
+- Every object has `additionalProperties: false` and lists `required` after `properties`. Every property has a description, an example and an `x-order`.
+- Lists are written as `-` items, never as `[...]`, except the empty `security: []`.
+- A blank line separates the top-level keys of a file: each schema, response and path.
 - A path key is a valid component name: letters, digits, `.`, `_` and `-`.
 
 ## Generate
 
 ```sh
-task api:gen
+task oapi-gen-server
 ```
 
 It bundles the spec, lints the bundle with vacuum, and generates the server with oapi-codegen.

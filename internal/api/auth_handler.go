@@ -2,43 +2,50 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
+	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
 type authHandler struct {
-	accounts AccountService
+	accountService AccountService
+	secureCookie   bool
 }
 
-func (h *authHandler) Login(ctx context.Context, request gen.LoginRequestObject) (gen.LoginResponseObject, error) {
-	result, err := h.accounts.Login(ctx, request.Body.Login, request.Body.Password)
+func newAuthHandler(accountService AccountService, secureCookie bool) *authHandler {
+	return &authHandler{accountService: accountService, secureCookie: secureCookie}
+}
+
+func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (gen.LoginResponseObject, error) {
+	res, err := h.accountService.Login(ctx, req.Body.Login, req.Body.Password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	return gen.Login200JSONResponse{
 		Body: gen.LoginResponse{
-			User:                    toUser(result.User),
-			PasswordChangeSuggested: result.PasswordChangeSuggested,
+			User:                    toUser(res.User),
+			PasswordChangeSuggested: res.PasswordChangeSuggested,
 		},
 		Headers: gen.Login200ResponseHeaders{
-			SetCookie: sessionCookie(result.Token, result.ExpiresAt).String(),
+			SetCookie: h.sessionCookie(res.Token, res.ExpiresAt).String(),
 		},
 	}, nil
 }
 
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	c, _ := callerFrom(ctx)
-	if err := h.accounts.Logout(ctx, c.token); err != nil {
-		return nil, err
+	c, _ := middleware.CallerFrom(ctx)
+	if err := h.accountService.Logout(ctx, c.Token); err != nil {
+		return nil, fmt.Errorf("logout: %w", err)
 	}
 
-	cleared := sessionCookie("", time.Time{}) //nolint:gosec // Secure is off so the dashboard works over plain HTTP.
+	cleared := h.sessionCookie("", time.Time{}) //nolint:gosec // Secure follows api.secure-cookie, off for a dashboard over plain HTTP.
 	cleared.MaxAge = -1
 
 	return gen.Logout204Response{
@@ -47,52 +54,48 @@ func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (ge
 }
 
 func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
-	c, _ := callerFrom(ctx)
+	c, _ := middleware.CallerFrom(ctx)
 
-	roles, err := h.accounts.ProjectRoles(ctx, c.user)
+	access, err := h.accountService.Access(ctx, c.User)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get access: %w", err)
 	}
 
-	projects := make([]gen.ProjectAccess, 0, len(roles))
-	for _, role := range roles {
+	projects := make([]gen.ProjectAccess, 0, len(access.Projects))
+	for _, project := range access.Projects {
 		projects = append(projects, gen.ProjectAccess{
-			Id:          openapi_types.UUID(role.ProjectID),
-			Name:        role.ProjectName,
-			Role:        gen.Role(role.Role),
-			Permissions: rolePermissions[role.Role],
+			Id:          openapi_types.UUID(project.ProjectID),
+			Name:        project.ProjectName,
+			Role:        gen.Role(project.Role),
+			Permissions: toPermissions(project.Permissions),
 		})
 	}
 
-	permissions := []gen.Permission{}
-	if c.user.IsServerAdmin {
-		permissions = serverAdminPermissions
-	}
-
 	return gen.GetMe200JSONResponse{
-		User:        toUser(c.user),
-		Permissions: permissions,
+		User:        toUser(c.User),
+		Permissions: toPermissions(access.Permissions),
 		Projects:    projects,
 	}, nil
 }
 
-func (h *authHandler) ChangeMyPassword(ctx context.Context, request gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
-	c, _ := callerFrom(ctx)
+func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
+	c, _ := middleware.CallerFrom(ctx)
 
-	err := h.accounts.ChangePassword(ctx, c.user, c.token, request.Body.CurrentPassword, request.Body.NewPassword)
+	err := h.accountService.ChangePassword(ctx, c.User, c.Token, req.Body.CurrentPassword, req.Body.NewPassword)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("change password: %w", err)
 	}
 
 	return gen.ChangeMyPassword204Response{}, nil
 }
 
-func sessionCookie(token string, expires time.Time) *http.Cookie {
-	return &http.Cookie{ //nolint:gosec // Secure is off so the dashboard works over plain HTTP.
+func (h *authHandler) sessionCookie(token string, expires time.Time) *http.Cookie {
+	return &http.Cookie{ //nolint:gosec // Secure follows api.secure-cookie, off for a dashboard over plain HTTP.
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expires,
+		Secure:   h.secureCookie,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
@@ -100,9 +103,17 @@ func sessionCookie(token string, expires time.Time) *http.Cookie {
 
 func toUser(user domain.User) gen.User {
 	return gen.User{
-		Id:            openapi_types.UUID(user.ID),
-		Username:      user.Username,
-		Email:         user.Email,
-		IsServerAdmin: user.IsServerAdmin,
+		Id:       openapi_types.UUID(user.ID),
+		Username: user.Username,
+		Email:    user.Email,
 	}
+}
+
+func toPermissions(permissions []domain.Permission) []gen.Permission {
+	out := make([]gen.Permission, 0, len(permissions))
+	for _, permission := range permissions {
+		out = append(out, gen.Permission(permission))
+	}
+
+	return out
 }

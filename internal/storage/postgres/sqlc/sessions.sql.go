@@ -12,20 +12,34 @@ import (
 	"uuid"
 )
 
-const sessionCreate = `-- name: SessionCreate :exec
+const sessionCreate = `-- name: SessionCreate :execrows
 INSERT INTO sessions (token_hash, user_id, expires_at)
-VALUES ($1::bytea, $2::uuid, now() + $3::interval)
+SELECT $1::bytea, u.id, now() + $2::interval
+FROM users u
+WHERE u.id = $3::uuid
+  AND u.password_hash = $4::text
+  AND u.disabled_at IS NULL
+FOR SHARE
 `
 
 type SessionCreateParams struct {
-	TokenHash   []byte
-	UserID      uuid.UUID
-	MaxLifetime pgtype.Interval
+	TokenHash    []byte
+	MaxLifetime  pgtype.Interval
+	UserID       uuid.UUID
+	PasswordHash string
 }
 
-func (q *Queries) SessionCreate(ctx context.Context, db DBTX, arg SessionCreateParams) error {
-	_, err := db.Exec(ctx, sessionCreate, arg.TokenHash, arg.UserID, arg.MaxLifetime)
-	return err
+func (q *Queries) SessionCreate(ctx context.Context, db DBTX, arg SessionCreateParams) (int64, error) {
+	result, err := db.Exec(ctx, sessionCreate,
+		arg.TokenHash,
+		arg.MaxLifetime,
+		arg.UserID,
+		arg.PasswordHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const sessionDelete = `-- name: SessionDelete :exec
@@ -35,22 +49,6 @@ WHERE token_hash = $1::bytea
 
 func (q *Queries) SessionDelete(ctx context.Context, db DBTX, tokenHash []byte) error {
 	_, err := db.Exec(ctx, sessionDelete, tokenHash)
-	return err
-}
-
-const sessionDeleteEnded = `-- name: SessionDeleteEnded :exec
-DELETE FROM sessions
-WHERE user_id = $1::uuid
-  AND (expires_at <= now() OR last_seen_at <= now() - $2::interval)
-`
-
-type SessionDeleteEndedParams struct {
-	UserID      uuid.UUID
-	MaxInactive pgtype.Interval
-}
-
-func (q *Queries) SessionDeleteEnded(ctx context.Context, db DBTX, arg SessionDeleteEndedParams) error {
-	_, err := db.Exec(ctx, sessionDeleteEnded, arg.UserID, arg.MaxInactive)
 	return err
 }
 

@@ -60,7 +60,7 @@ func TestDashboardNotBuilt(t *testing.T) {
 }
 
 func TestAPIPathsAreNotTheDashboard(t *testing.T) {
-	h := newAPIServer(t, &fakeAccounts{user: testUser})
+	h := newAPIServer(t, &fakeAccountService{user: testUser})
 
 	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/nothing"})
 

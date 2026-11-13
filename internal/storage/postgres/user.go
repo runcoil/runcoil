@@ -79,28 +79,24 @@ func (s *UserStore) UserByEmail(ctx context.Context, email string) (domain.User,
 	return domain.User(row), nil
 }
 
-// CreateSession creates a session for userID and deletes the user's ended sessions.
-func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, maxLifetime, maxInactive time.Duration) error {
-	return s.db.WithTx(ctx, func(tx DB) error {
-		err := s.queries.SessionDeleteEnded(ctx, tx, sqlc.SessionDeleteEndedParams{
-			UserID:      userID,
-			MaxInactive: interval(&maxInactive),
-		})
-		if err != nil {
-			return fmt.Errorf("delete ended sessions: %w", err)
-		}
-
-		err = s.queries.SessionCreate(ctx, tx, sqlc.SessionCreateParams{
-			TokenHash:   tokenHash,
-			UserID:      userID,
-			MaxLifetime: interval(&maxLifetime),
-		})
-		if err != nil {
-			return fmt.Errorf("create session: %w", err)
-		}
-
-		return nil
+// CreateSession creates a session that lasts at most maxLifetime, while the user still
+// has passwordHash and is not disabled. It returns domain.ErrUserNotFound otherwise.
+func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID uuid.UUID, passwordHash string, maxLifetime time.Duration) error {
+	rows, err := s.queries.SessionCreate(ctx, s.db, sqlc.SessionCreateParams{
+		TokenHash:    tokenHash,
+		UserID:       userID,
+		PasswordHash: passwordHash,
+		MaxLifetime:  interval(&maxLifetime),
 	})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+
+	if rows == 0 {
+		return domain.ErrUserNotFound
+	}
+
+	return nil
 }
 
 // SessionByToken returns the live session of tokenHash, or domain.ErrSessionNotFound when
@@ -208,21 +204,4 @@ func (s *UserStore) Projects(ctx context.Context) ([]domain.ProjectRole, error) 
 	}
 
 	return roles, nil
-}
-
-// MemberRole returns the role of userID in projectID, or domain.ErrMemberNotFound.
-func (s *UserStore) MemberRole(ctx context.Context, projectID, userID uuid.UUID) (domain.Role, error) {
-	role, err := s.queries.ProjectMemberGetRole(ctx, s.db, sqlc.ProjectMemberGetRoleParams{
-		ProjectID: projectID,
-		UserID:    userID,
-	})
-	if isNoRowsError(err) {
-		return "", domain.ErrMemberNotFound
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("get member role: %w", err)
-	}
-
-	return domain.Role(role), nil
 }

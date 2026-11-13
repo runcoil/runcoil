@@ -26,6 +26,7 @@ func TestValidate(t *testing.T) {
 		{name: "defaults", cfg: Config{AdminUsername: "admin", AdminPassword: "admin"}},
 		{name: "bad username", cfg: Config{AdminUsername: "Admin", AdminPassword: "admin"}, want: badUsername},
 		{name: "empty password", cfg: Config{AdminUsername: "admin"}, want: "admin password must not be empty"},
+		{name: "password too long", cfg: Config{AdminUsername: "admin", AdminPassword: strings.Repeat("a", 129)}, want: "admin password must be at most 128 characters"},
 	}
 
 	for _, tt := range tests {

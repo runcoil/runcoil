@@ -1,11 +1,10 @@
 package apierr
 
-// Code is the stable identifier of an API error. The transport maps each Code to the
-// schema's ErrorCode, which carries it to the client in the error detail.
+// Code is the stable identifier of an API error. The dashboard API sends it in lower case,
+// as an ErrorCode of its schema.
 type Code string
 
-// The codes of the API. A Code gets its ErrorCode in the schema in the phase that first
-// returns it.
+// The codes of the API. A Code the dashboard API returns is in its schema's ErrorCode.
 const (
 	CodeInvalidRequest       Code = "INVALID_REQUEST"
 	CodeUnauthenticated      Code = "UNAUTHENTICATED"
@@ -19,7 +18,6 @@ const (
 	CodeStaleLease           Code = "STALE_LEASE"
 	CodeRunNotFinished       Code = "RUN_NOT_FINISHED"
 	CodeStepNotFound         Code = "STEP_NOT_FOUND"
-	CodeInvalidField         Code = "INVALID_FIELD"
 	CodePermissionDenied     Code = "PERMISSION_DENIED"
 )
 
@@ -37,6 +35,5 @@ var Codes = []Code{
 	CodeStaleLease,
 	CodeRunNotFinished,
 	CodeStepNotFound,
-	CodeInvalidField,
 	CodePermissionDenied,
 }

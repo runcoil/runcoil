@@ -2,25 +2,11 @@ ErrorResponse:
   type: object
   description: The body of every error response.
   example:
-    errors:
-      - code: unauthenticated
-        message: not signed in
-  required: [errors]
-  additionalProperties: false
-  properties:
-    errors:
-      type: array
-      description: The errors of the request, at least one.
-      example:
-        - code: invalid_field
-          message: current password is wrong
-          field: currentPassword
-      items:
-        $ref: "#/Error"
-Error:
-  type: object
-  description: One error of a request.
-  required: [code, message]
+    code: invalid_request
+    message: current password is wrong
+    params:
+      - field: currentPassword
+        message: current password is wrong
   additionalProperties: false
   properties:
     code:
@@ -31,19 +17,44 @@ Error:
       description: For people. Clients never parse it.
       example: current password is wrong
       x-order: 2
+    params:
+      type: array
+      description: The request fields at fault, for invalid_request. Absent when no field is.
+      x-order: 3
+      example:
+        - field: currentPassword
+          message: current password is wrong
+      items:
+        $ref: "#/ErrorParam"
+  required:
+    - code
+    - message
+
+ErrorParam:
+  type: object
+  description: A request field at fault.
+  additionalProperties: false
+  properties:
     field:
       type: string
-      description: The request field at fault, for missing_field and invalid_field.
+      description: The field, as a dotted path in the body, or a parameter name.
       example: currentPassword
-      x-order: 3
+      x-order: 1
+    message:
+      type: string
+      description: What is wrong with the field, for people.
+      example: current password is wrong
+      x-order: 2
+  required:
+    - field
+    - message
+
 ErrorCode:
   type: string
   description: The code of an error.
-  example: invalid_field
+  example: invalid_request
   enum:
     - invalid_request
-    - missing_field
-    - invalid_field
     - unauthenticated
     - permission_denied
     - not_found

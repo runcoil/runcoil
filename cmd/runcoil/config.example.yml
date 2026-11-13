@@ -15,6 +15,7 @@ postgres:
 
 api:
   port: 8080
+  secure_cookie: false
 
 dispatcher:
   port: 7070

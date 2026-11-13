@@ -11,25 +11,6 @@ import (
 	"uuid"
 )
 
-const projectMemberGetRole = `-- name: ProjectMemberGetRole :one
-SELECT role
-FROM project_members
-WHERE project_id = $1::uuid
-  AND user_id = $2::uuid
-`
-
-type ProjectMemberGetRoleParams struct {
-	ProjectID uuid.UUID
-	UserID    uuid.UUID
-}
-
-func (q *Queries) ProjectMemberGetRole(ctx context.Context, db DBTX, arg ProjectMemberGetRoleParams) (string, error) {
-	row := db.QueryRow(ctx, projectMemberGetRole, arg.ProjectID, arg.UserID)
-	var role string
-	err := row.Scan(&role)
-	return role, err
-}
-
 const projectMemberListByUser = `-- name: ProjectMemberListByUser :many
 SELECT p.id, p.name, m.role
 FROM project_members m
