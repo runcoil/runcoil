@@ -7,20 +7,33 @@ WHERE u.id = @user_id::uuid
   AND u.disabled_at IS NULL
 FOR SHARE;
 
--- name: SessionGetUser :one
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin,
-       s.last_seen_at <= now() - interval '1 minute' AS touch_due
-FROM sessions s
-JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = @token_hash::bytea
-  AND s.expires_at > now()
-  AND s.last_seen_at > now() - @max_inactive::interval
-  AND u.disabled_at IS NULL;
+-- name: SessionGetUserAndTouch :one
+WITH live AS (
+    SELECT s.token_hash, s.user_id, s.last_seen_at
+    FROM sessions s
+    WHERE s.token_hash = @token_hash::bytea
+      AND s.expires_at > now()
+      AND s.last_seen_at > now() - @max_inactive::interval
+), touched AS (
+    UPDATE sessions
+    SET last_seen_at = now()
+    FROM live
+    WHERE sessions.token_hash = live.token_hash
+      AND live.last_seen_at <= now() - interval '1 minute'
+)
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at
+FROM live
+JOIN users u ON u.id = live.user_id
+WHERE u.disabled_at IS NULL;
 
--- name: SessionTouch :exec
-UPDATE sessions
-SET last_seen_at = now()
-WHERE token_hash = @token_hash::bytea;
+-- name: SessionExistsForUser :one
+SELECT EXISTS (
+    SELECT 1
+    FROM sessions
+    WHERE token_hash = @token_hash::bytea
+      AND user_id = @user_id::uuid
+      AND expires_at > now()
+);
 
 -- name: SessionDelete :exec
 DELETE FROM sessions

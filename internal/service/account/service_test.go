@@ -14,24 +14,24 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-type fakeUserStore struct {
+type fakeStore struct {
 	users    []domain.User
-	sessions map[string]domain.Session
+	sessions map[string]domain.User
 	roles    []domain.ProjectRole
 	projects []domain.ProjectRole
 
 	createErr error
+	updateErr error
 
 	created       []byte
 	createdFor    uuid.UUID
 	createdWith   string
-	touched       []byte
 	deleted       []byte
 	passwordHash  string
 	keptTokenHash []byte
 }
 
-func (f *fakeUserStore) UserByUsername(_ context.Context, username string) (domain.User, error) {
+func (f *fakeStore) GetUserByUsername(_ context.Context, username string) (domain.User, error) {
 	for _, u := range f.users {
 		if u.Username == username {
 			return u, nil
@@ -41,7 +41,7 @@ func (f *fakeUserStore) UserByUsername(_ context.Context, username string) (doma
 	return domain.User{}, domain.ErrUserNotFound
 }
 
-func (f *fakeUserStore) UserByEmail(_ context.Context, email string) (domain.User, error) {
+func (f *fakeStore) GetUserByEmail(_ context.Context, email string) (domain.User, error) {
 	for _, u := range f.users {
 		if u.Email != nil && *u.Email == email {
 			return u, nil
@@ -51,7 +51,7 @@ func (f *fakeUserStore) UserByEmail(_ context.Context, email string) (domain.Use
 	return domain.User{}, domain.ErrUserNotFound
 }
 
-func (f *fakeUserStore) CreateSession(_ context.Context, tokenHash []byte, userID uuid.UUID, passwordHash string, _ time.Duration) error {
+func (f *fakeStore) CreateSession(_ context.Context, tokenHash []byte, userID uuid.UUID, passwordHash string, _ time.Duration) error {
 	if f.createErr != nil {
 		return f.createErr
 	}
@@ -63,37 +63,36 @@ func (f *fakeUserStore) CreateSession(_ context.Context, tokenHash []byte, userI
 	return nil
 }
 
-func (f *fakeUserStore) SessionByToken(_ context.Context, tokenHash []byte, _ time.Duration) (domain.Session, error) {
-	session, ok := f.sessions[string(tokenHash)]
+func (f *fakeStore) GetSessionUserAndTouch(_ context.Context, tokenHash []byte, _ time.Duration) (domain.User, error) {
+	user, ok := f.sessions[string(tokenHash)]
 	if !ok {
-		return domain.Session{}, domain.ErrSessionNotFound
+		return domain.User{}, domain.ErrSessionNotFound
 	}
 
-	return session, nil
+	return user, nil
 }
 
-func (f *fakeUserStore) TouchSession(_ context.Context, tokenHash []byte) error {
-	f.touched = tokenHash
-	return nil
-}
-
-func (f *fakeUserStore) DeleteSession(_ context.Context, tokenHash []byte) error {
+func (f *fakeStore) DeleteSession(_ context.Context, tokenHash []byte) error {
 	f.deleted = tokenHash
 	return nil
 }
 
-func (f *fakeUserStore) ChangePassword(_ context.Context, _ uuid.UUID, passwordHash string, keepTokenHash []byte) error {
+func (f *fakeStore) UpdatePasswordAndDeleteOtherSessions(_ context.Context, _ uuid.UUID, passwordHash string, keepTokenHash []byte) error {
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+
 	f.passwordHash = passwordHash
 	f.keptTokenHash = keepTokenHash
 
 	return nil
 }
 
-func (f *fakeUserStore) ProjectRoles(context.Context, uuid.UUID) ([]domain.ProjectRole, error) {
+func (f *fakeStore) ListProjectsWithRoleByUser(context.Context, uuid.UUID) ([]domain.ProjectRole, error) {
 	return f.roles, nil
 }
 
-func (f *fakeUserStore) Projects(context.Context) ([]domain.ProjectRole, error) {
+func (f *fakeStore) ListProjects(context.Context) ([]domain.ProjectRole, error) {
 	return f.projects, nil
 }
 
@@ -102,8 +101,8 @@ var testConfig = Config{
 	SessionMaxInactive: 7 * 24 * time.Hour,
 }
 
-func newService(store UserStore) *Service {
-	return New(testConfig, store, "admin")
+func newService(store *fakeStore) *Service {
+	return New(testConfig, store, store, store, "admin")
 }
 
 func hashPassword(t *testing.T, password string) string {

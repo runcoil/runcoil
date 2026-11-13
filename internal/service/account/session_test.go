@@ -14,7 +14,7 @@ import (
 
 func TestLogin(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", Email: ptr("ana@example.com"), PasswordHash: hashPassword(t, "admin")}
-	store := &fakeUserStore{users: []domain.User{ana}}
+	store := &fakeStore{users: []domain.User{ana}}
 	s := newService(store)
 
 	for _, login := range []string{"ana", "Ana", "ANA@example.com"} {
@@ -31,7 +31,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestLoginSuggestsNoChangeForAnotherPassword(t *testing.T) {
-	store := &fakeUserStore{users: []domain.User{{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "Secret-1")}}}
+	store := &fakeStore{users: []domain.User{{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "Secret-1")}}}
 
 	result, err := newService(store).Login(context.Background(), "ana", "Secret-1")
 
@@ -40,7 +40,7 @@ func TestLoginSuggestsNoChangeForAnotherPassword(t *testing.T) {
 }
 
 func TestLoginRefused(t *testing.T) {
-	store := &fakeUserStore{users: []domain.User{
+	store := &fakeStore{users: []domain.User{
 		{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "Secret-1")},
 		{ID: uuid.NewV7(), Username: "bob", PasswordHash: hashPassword(t, "Secret-1"), DisabledAt: ptr(time.Now())},
 	}}
@@ -58,45 +58,24 @@ func TestLoginRefused(t *testing.T) {
 	assert.Nil(t, store.created)
 }
 
-func TestAuthenticate(t *testing.T) {
+func TestAuthenticateSession(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana"}
+	store := &fakeStore{sessions: map[string]domain.User{string(hashToken("token")): ana}}
 
-	tests := []struct {
-		name      string
-		wantTouch bool
-	}{
-		{name: "seen just now"},
-		{name: "seen a while ago", wantTouch: true},
-	}
+	user, err := newService(store).AuthenticateSession(context.Background(), "token")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store := &fakeUserStore{sessions: map[string]domain.Session{
-				string(hashToken("token")): {User: ana, TouchDue: tt.wantTouch},
-			}}
-
-			user, err := newService(store).Authenticate(context.Background(), "token")
-
-			require.NoError(t, err)
-			assert.Equal(t, ana, user)
-
-			if tt.wantTouch {
-				assert.Equal(t, hashToken("token"), store.touched)
-			} else {
-				assert.Nil(t, store.touched)
-			}
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, ana, user)
 }
 
-func TestAuthenticateWithoutSession(t *testing.T) {
-	_, err := newService(&fakeUserStore{}).Authenticate(context.Background(), "token")
+func TestAuthenticateSessionWithoutSession(t *testing.T) {
+	_, err := newService(&fakeStore{}).AuthenticateSession(context.Background(), "token")
 
 	assertUnauthenticated(t, err)
 }
 
 func TestLogout(t *testing.T) {
-	store := &fakeUserStore{}
+	store := &fakeStore{}
 
 	require.NoError(t, newService(store).Logout(context.Background(), "token"))
 
@@ -104,7 +83,7 @@ func TestLogout(t *testing.T) {
 }
 
 func TestLoginRefusedWhenThePasswordChangedMeanwhile(t *testing.T) {
-	store := &fakeUserStore{
+	store := &fakeStore{
 		users:     []domain.User{{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "Secret-1")}},
 		createErr: domain.ErrUserNotFound,
 	}

@@ -91,6 +91,20 @@ func (q *Queries) UserGetByUsername(ctx context.Context, db DBTX, username strin
 	return i, err
 }
 
+const userLockForUpdate = `-- name: UserLockForUpdate :one
+SELECT id
+FROM users
+WHERE id = $1::uuid
+FOR UPDATE
+`
+
+func (q *Queries) UserLockForUpdate(ctx context.Context, db DBTX, id uuid.UUID) (uuid.UUID, error) {
+	row := db.QueryRow(ctx, userLockForUpdate, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const userUpdatePassword = `-- name: UserUpdatePassword :exec
 UPDATE users
 SET password_hash = $1::text

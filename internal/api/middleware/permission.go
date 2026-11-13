@@ -57,7 +57,7 @@ func Permissions(spec *openapi3.T) (map[string]string, error) {
 
 // Authorizer decides whether a user has a permission.
 type Authorizer interface {
-	Authorize(user domain.User, permission domain.Permission) error
+	AuthorizePermission(user domain.User, permission domain.Permission) error
 }
 
 // CheckPermission lets an operation run only for a caller with its permission. It refuses
@@ -76,13 +76,13 @@ func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.S
 		}
 
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
-			c, ok := CallerFrom(ctx)
+			c, ok := CallerFromContext(ctx)
 			if !ok {
 				return nil, errNotSignedIn
 			}
 
 			if permission != permissionSelf {
-				if err := authorizer.Authorize(c.User, domain.Permission(permission)); err != nil {
+				if err := authorizer.AuthorizePermission(c.User, domain.Permission(permission)); err != nil {
 					return nil, fmt.Errorf("authorize: %w", err)
 				}
 			}

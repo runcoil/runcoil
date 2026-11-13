@@ -1,6 +1,7 @@
 package apierr
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,4 +71,21 @@ func TestWithDetailSiblingsAreIndependent(t *testing.T) {
 	require.Equal(t, map[string]string{"task_id": "task-1"}, original.Details)
 	require.Equal(t, map[string]string{"task_id": "task-2", "run_id": "run-1"}, first.Details)
 	require.Equal(t, map[string]string{"task_id": "task-1", "run_id": "run-2"}, second.Details)
+}
+
+func TestKindHTTPStatus(t *testing.T) {
+	for kind, want := range map[Kind]int{
+		KindInternal:           http.StatusInternalServerError,
+		KindInvalid:            http.StatusBadRequest,
+		KindUnauthenticated:    http.StatusUnauthorized,
+		KindPermissionDenied:   http.StatusForbidden,
+		KindNotFound:           http.StatusNotFound,
+		KindConflict:           http.StatusConflict,
+		KindFailedPrecondition: http.StatusConflict,
+		KindUnavailable:        http.StatusServiceUnavailable,
+		KindCanceled:           http.StatusInternalServerError,
+		KindDeadlineExceeded:   http.StatusGatewayTimeout,
+	} {
+		require.Equal(t, want, kind.HTTPStatus(), kind)
+	}
 }

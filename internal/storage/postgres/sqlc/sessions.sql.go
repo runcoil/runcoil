@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
@@ -68,52 +69,72 @@ func (q *Queries) SessionDeleteOthers(ctx context.Context, db DBTX, arg SessionD
 	return err
 }
 
-const sessionGetUser = `-- name: SessionGetUser :one
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin,
-       s.last_seen_at <= now() - interval '1 minute' AS touch_due
-FROM sessions s
-JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1::bytea
-  AND s.expires_at > now()
-  AND s.last_seen_at > now() - $2::interval
-  AND u.disabled_at IS NULL
+const sessionExistsForUser = `-- name: SessionExistsForUser :one
+SELECT EXISTS (
+    SELECT 1
+    FROM sessions
+    WHERE token_hash = $1::bytea
+      AND user_id = $2::uuid
+      AND expires_at > now()
+)
 `
 
-type SessionGetUserParams struct {
+type SessionExistsForUserParams struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+}
+
+func (q *Queries) SessionExistsForUser(ctx context.Context, db DBTX, arg SessionExistsForUserParams) (bool, error) {
+	row := db.QueryRow(ctx, sessionExistsForUser, arg.TokenHash, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const sessionGetUserAndTouch = `-- name: SessionGetUserAndTouch :one
+WITH live AS (
+    SELECT s.token_hash, s.user_id, s.last_seen_at
+    FROM sessions s
+    WHERE s.token_hash = $1::bytea
+      AND s.expires_at > now()
+      AND s.last_seen_at > now() - $2::interval
+), touched AS (
+    UPDATE sessions
+    SET last_seen_at = now()
+    FROM live
+    WHERE sessions.token_hash = live.token_hash
+      AND live.last_seen_at <= now() - interval '1 minute'
+)
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, u.disabled_at
+FROM live
+JOIN users u ON u.id = live.user_id
+WHERE u.disabled_at IS NULL
+`
+
+type SessionGetUserAndTouchParams struct {
 	TokenHash   []byte
 	MaxInactive pgtype.Interval
 }
 
-type SessionGetUserRow struct {
+type SessionGetUserAndTouchRow struct {
 	ID            uuid.UUID
 	Username      string
 	Email         *string
 	PasswordHash  string
 	IsServerAdmin bool
-	TouchDue      bool
+	DisabledAt    *time.Time
 }
 
-func (q *Queries) SessionGetUser(ctx context.Context, db DBTX, arg SessionGetUserParams) (SessionGetUserRow, error) {
-	row := db.QueryRow(ctx, sessionGetUser, arg.TokenHash, arg.MaxInactive)
-	var i SessionGetUserRow
+func (q *Queries) SessionGetUserAndTouch(ctx context.Context, db DBTX, arg SessionGetUserAndTouchParams) (SessionGetUserAndTouchRow, error) {
+	row := db.QueryRow(ctx, sessionGetUserAndTouch, arg.TokenHash, arg.MaxInactive)
+	var i SessionGetUserAndTouchRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
 		&i.IsServerAdmin,
-		&i.TouchDue,
+		&i.DisabledAt,
 	)
 	return i, err
-}
-
-const sessionTouch = `-- name: SessionTouch :exec
-UPDATE sessions
-SET last_seen_at = now()
-WHERE token_hash = $1::bytea
-`
-
-func (q *Queries) SessionTouch(ctx context.Context, db DBTX, tokenHash []byte) error {
-	_, err := db.Exec(ctx, sessionTouch, tokenHash)
-	return err
 }

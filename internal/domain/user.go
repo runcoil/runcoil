@@ -68,10 +68,3 @@ type ProjectRole struct {
 	ProjectName string
 	Role        Role
 }
-
-// Session is a signed-in user's session. TouchDue is true when its last activity was
-// recorded more than a minute ago.
-type Session struct {
-	User     User
-	TouchDue bool
-}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
 )
+
+var errNoCaller = errors.New("no caller in the context")
 
 type authHandler struct {
 	accountService AccountService
@@ -30,7 +33,7 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 
 	return gen.Login200JSONResponse{
 		Body: gen.LoginResponse{
-			User:                    toUser(res.User),
+			User:                    userToAPI(res.User),
 			PasswordChangeSuggested: res.PasswordChangeSuggested,
 		},
 		Headers: gen.Login200ResponseHeaders{
@@ -40,7 +43,11 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 }
 
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	c, _ := middleware.CallerFrom(ctx)
+	c, ok := middleware.CallerFromContext(ctx)
+	if !ok {
+		return nil, errNoCaller
+	}
+
 	if err := h.accountService.Logout(ctx, c.Token); err != nil {
 		return nil, fmt.Errorf("logout: %w", err)
 	}
@@ -54,9 +61,12 @@ func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (ge
 }
 
 func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
-	c, _ := middleware.CallerFrom(ctx)
+	c, ok := middleware.CallerFromContext(ctx)
+	if !ok {
+		return nil, errNoCaller
+	}
 
-	access, err := h.accountService.Access(ctx, c.User)
+	access, err := h.accountService.GetUserAccess(ctx, c.User)
 	if err != nil {
 		return nil, fmt.Errorf("get access: %w", err)
 	}
@@ -67,19 +77,22 @@ func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.
 			Id:          openapi_types.UUID(project.ProjectID),
 			Name:        project.ProjectName,
 			Role:        gen.Role(project.Role),
-			Permissions: toPermissions(project.Permissions),
+			Permissions: permissionsToAPI(project.Permissions),
 		})
 	}
 
 	return gen.GetMe200JSONResponse{
-		User:        toUser(c.User),
-		Permissions: toPermissions(access.Permissions),
+		User:        userToAPI(c.User),
+		Permissions: permissionsToAPI(access.Permissions),
 		Projects:    projects,
 	}, nil
 }
 
 func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
-	c, _ := middleware.CallerFrom(ctx)
+	c, ok := middleware.CallerFromContext(ctx)
+	if !ok {
+		return nil, errNoCaller
+	}
 
 	err := h.accountService.ChangePassword(ctx, c.User, c.Token, req.Body.CurrentPassword, req.Body.NewPassword)
 	if err != nil {
@@ -101,7 +114,7 @@ func (h *authHandler) sessionCookie(token string, expires time.Time) *http.Cooki
 	}
 }
 
-func toUser(user domain.User) gen.User {
+func userToAPI(user domain.User) gen.User {
 	return gen.User{
 		Id:       openapi_types.UUID(user.ID),
 		Username: user.Username,
@@ -109,7 +122,7 @@ func toUser(user domain.User) gen.User {
 	}
 }
 
-func toPermissions(permissions []domain.Permission) []gen.Permission {
+func permissionsToAPI(permissions []domain.Permission) []gen.Permission {
 	out := make([]gen.Permission, 0, len(permissions))
 	for _, permission := range permissions {
 		out = append(out, gen.Permission(permission))

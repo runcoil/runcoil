@@ -1,17 +1,20 @@
 package middleware
 
 import (
-	"log/slog"
+	"fmt"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/runcoil/runcoil/internal/api/httperr"
 )
 
-// Recover answers a panicking request with an internal error and logs the panic.
-func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
+// Recover answers a panicking request with an internal error, unless the response has
+// started, and puts the panic and its stack on the request's log line.
+func Recover() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+
 			defer func() {
 				v := recover()
 				if v == nil {
@@ -22,14 +25,14 @@ func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
 					panic(v)
 				}
 
-				logger.ErrorContext(r.Context(), "request panicked",
-					slog.Any("panic", v),
-					slog.String("stack", string(debug.Stack())),
-				)
-				httperr.Write(w, http.StatusInternalServerError, httperr.Internal)
+				recordPanic(r.Context(), fmt.Errorf("panic: %v", v), string(debug.Stack()))
+
+				if !rec.wroteHeader {
+					httperr.Write(rec, http.StatusInternalServerError, httperr.Internal)
+				}
 			}()
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(rec, r)
 		})
 	}
 }

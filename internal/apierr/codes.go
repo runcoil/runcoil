@@ -4,7 +4,7 @@ package apierr
 // as an ErrorCode of its schema.
 type Code string
 
-// The codes of the API. A Code the dashboard API returns is in its schema's ErrorCode.
+// The codes of the API.
 const (
 	CodeInvalidRequest       Code = "INVALID_REQUEST"
 	CodeUnauthenticated      Code = "UNAUTHENTICATED"
@@ -19,6 +19,9 @@ const (
 	CodeRunNotFinished       Code = "RUN_NOT_FINISHED"
 	CodeStepNotFound         Code = "STEP_NOT_FOUND"
 	CodePermissionDenied     Code = "PERMISSION_DENIED"
+	CodeNotFound             Code = "NOT_FOUND"
+	CodePayloadTooLarge      Code = "PAYLOAD_TOO_LARGE"
+	CodeInternal             Code = "INTERNAL"
 )
 
 // Codes lists every Code, so that a test can check each one against the schema.
@@ -36,4 +39,7 @@ var Codes = []Code{
 	CodeRunNotFinished,
 	CodeStepNotFound,
 	CodePermissionDenied,
+	CodeNotFound,
+	CodePayloadTooLarge,
+	CodeInternal,
 }

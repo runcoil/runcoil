@@ -10,7 +10,11 @@ ErrorResponse:
   additionalProperties: false
   properties:
     code:
-      $ref: "#/ErrorCode"
+      type: string
+      description: >-
+        What went wrong, in lower snake case, such as invalid_request, unauthenticated,
+        permission_denied, not_found, payload_too_large or internal.
+      example: invalid_request
       x-order: 1
     message:
       type: string
@@ -48,15 +52,3 @@ ErrorParam:
   required:
     - field
     - message
-
-ErrorCode:
-  type: string
-  description: The code of an error.
-  example: invalid_request
-  enum:
-    - invalid_request
-    - unauthenticated
-    - permission_denied
-    - not_found
-    - payload_too_large
-    - internal
