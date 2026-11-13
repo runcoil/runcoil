@@ -1,10 +1,12 @@
 package apierr
 
-import "maps"
+import (
+	"maps"
+	"net/http"
+)
 
-// Kind is a semantic failure category. It says what went wrong, not how the
-// transport reports it. The zero value is KindInternal, so an Error built
-// without a Kind is an internal failure.
+// Kind is a semantic failure category. The zero value is KindInternal, so an Error
+// built without a Kind is an internal failure.
 type Kind int
 
 const (
@@ -14,6 +16,8 @@ const (
 	KindInvalid
 	// KindUnauthenticated is a missing or wrong credential.
 	KindUnauthenticated
+	// KindPermissionDenied is a caller without the permission the request needs.
+	KindPermissionDenied
 	// KindNotFound is a missing resource.
 	KindNotFound
 	// KindConflict is a clash with existing state.
@@ -27,6 +31,29 @@ const (
 	// KindDeadlineExceeded is a call whose client deadline passed before it finished.
 	KindDeadlineExceeded
 )
+
+// HTTPStatus returns the HTTP status of k. A Kind the dashboard API never returns,
+// such as KindCanceled, is 500.
+func (k Kind) HTTPStatus() int {
+	switch k {
+	case KindInvalid:
+		return http.StatusBadRequest
+	case KindUnauthenticated:
+		return http.StatusUnauthorized
+	case KindPermissionDenied:
+		return http.StatusForbidden
+	case KindNotFound:
+		return http.StatusNotFound
+	case KindConflict, KindFailedPrecondition:
+		return http.StatusConflict
+	case KindUnavailable:
+		return http.StatusServiceUnavailable
+	case KindDeadlineExceeded:
+		return http.StatusGatewayTimeout
+	default:
+		return http.StatusInternalServerError
+	}
+}
 
 // Error is the structured error the core returns. Code identifies the failure
 // for the client; it is empty for failures that have no schema code. Message is
@@ -70,6 +97,11 @@ func Invalid(code Code, message string) *Error {
 // Unauthenticated is a missing or wrong credential.
 func Unauthenticated(code Code, message string) *Error {
 	return newError(KindUnauthenticated, code, message)
+}
+
+// PermissionDenied is a caller without the permission the request needs.
+func PermissionDenied(code Code, message string) *Error {
+	return newError(KindPermissionDenied, code, message)
 }
 
 // NotFound is a missing resource.

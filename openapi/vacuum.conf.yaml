@@ -1,0 +1,5 @@
+lint:
+  ruleset: ruleset.yaml
+  details: true
+  no-style: true
+  fail-severity: warn
