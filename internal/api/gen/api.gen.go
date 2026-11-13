@@ -181,17 +181,8 @@ type User struct {
 	Email *string `json:"email,omitempty"`
 }
 
-// InvalidRequest The body of every error response.
-type InvalidRequest = ErrorResponse
-
-// PayloadTooLarge The body of every error response.
-type PayloadTooLarge = ErrorResponse
-
-// PermissionDenied The body of every error response.
-type PermissionDenied = ErrorResponse
-
-// Unauthenticated The body of every error response.
-type Unauthenticated = ErrorResponse
+// Error The body of every error response.
+type Error = ErrorResponse
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -408,13 +399,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
-type InvalidRequestJSONResponse ErrorResponse
-
-type PayloadTooLargeJSONResponse ErrorResponse
-
-type PermissionDeniedJSONResponse ErrorResponse
-
-type UnauthenticatedJSONResponse ErrorResponse
+type ErrorJSONResponse ErrorResponse
 
 type LoginRequestObject struct {
 	Body *LoginJSONRequestBody
@@ -446,7 +431,7 @@ func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login400JSONResponse struct{ InvalidRequestJSONResponse }
+type Login400JSONResponse struct{ ErrorJSONResponse }
 
 func (response Login400JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -460,7 +445,7 @@ func (response Login400JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login401JSONResponse struct{ UnauthenticatedJSONResponse }
+type Login401JSONResponse ErrorResponse
 
 func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -474,7 +459,7 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login403JSONResponse struct{ PermissionDeniedJSONResponse }
+type Login403JSONResponse ErrorResponse
 
 func (response Login403JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -488,7 +473,7 @@ func (response Login403JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login413JSONResponse struct{ PayloadTooLargeJSONResponse }
+type Login413JSONResponse ErrorResponse
 
 func (response Login413JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -523,7 +508,7 @@ func (response Logout204Response) VisitLogoutResponse(w http.ResponseWriter) err
 	return nil
 }
 
-type Logout401JSONResponse struct{ UnauthenticatedJSONResponse }
+type Logout401JSONResponse struct{ ErrorJSONResponse }
 
 func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
 
@@ -537,7 +522,7 @@ func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter)
 	return err
 }
 
-type Logout403JSONResponse struct{ PermissionDeniedJSONResponse }
+type Logout403JSONResponse ErrorResponse
 
 func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
 
@@ -572,7 +557,7 @@ func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	return err
 }
 
-type GetMe401JSONResponse struct{ UnauthenticatedJSONResponse }
+type GetMe401JSONResponse struct{ ErrorJSONResponse }
 
 func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
 
@@ -602,7 +587,7 @@ func (response ChangeMyPassword204Response) VisitChangeMyPasswordResponse(w http
 	return nil
 }
 
-type ChangeMyPassword400JSONResponse struct{ InvalidRequestJSONResponse }
+type ChangeMyPassword400JSONResponse struct{ ErrorJSONResponse }
 
 func (response ChangeMyPassword400JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -616,7 +601,7 @@ func (response ChangeMyPassword400JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword401JSONResponse struct{ UnauthenticatedJSONResponse }
+type ChangeMyPassword401JSONResponse ErrorResponse
 
 func (response ChangeMyPassword401JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -630,7 +615,7 @@ func (response ChangeMyPassword401JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword403JSONResponse struct{ PermissionDeniedJSONResponse }
+type ChangeMyPassword403JSONResponse ErrorResponse
 
 func (response ChangeMyPassword403JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -644,7 +629,7 @@ func (response ChangeMyPassword403JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword413JSONResponse struct{ PayloadTooLargeJSONResponse }
+type ChangeMyPassword413JSONResponse ErrorResponse
 
 func (response ChangeMyPassword413JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
