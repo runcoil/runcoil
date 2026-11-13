@@ -111,7 +111,7 @@ func (c *Config) Validate() error {
 // WorkerStore keeps the worker sessions and claims queued Runs.
 type WorkerStore interface {
 	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
-	WorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
+	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
 	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
 	BeatDispatcher(ctx context.Context, id uuid.UUID) error

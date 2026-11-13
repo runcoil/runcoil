@@ -101,7 +101,7 @@ func newSessionToken() (string, []byte, error) {
 // Authenticate returns the live session of the token.
 func (s *Service) Authenticate(ctx context.Context, token string) (domain.Worker, error) {
 	hash := sha256.Sum256([]byte(token))
-	worker, err := s.workerStore.WorkerBySessionToken(ctx, hash[:])
+	worker, err := s.workerStore.GetWorkerBySessionToken(ctx, hash[:])
 	if errors.Is(err, domain.ErrSessionEnded) {
 		return domain.Worker{}, errInvalidSessionToken
 	}
