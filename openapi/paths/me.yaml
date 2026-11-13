@@ -16,7 +16,7 @@ me:
             schema:
               $ref: "../components/schemas/auth.yaml#/Me"
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
 
 mePassword:
   put:
@@ -40,10 +40,10 @@ mePassword:
       "204":
         description: The password is changed
       "400":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/InvalidRequest"
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
       "413":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PayloadTooLarge"

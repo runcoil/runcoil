@@ -1,5 +1,26 @@
-Error:
-  description: An error. The body's code says which.
+InvalidRequest:
+  description: "invalid_request: the request is not valid. params lists the fields at fault."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+
+Unauthenticated:
+  description: "unauthenticated: no live session, or a wrong login."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+
+PermissionDenied:
+  description: "permission_denied: the caller lacks the permission, or the request comes from another origin."
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas/errors.yaml#/ErrorResponse"
+
+PayloadTooLarge:
+  description: "payload_too_large: the body is larger than 1 MiB."
   content:
     application/json:
       schema:
