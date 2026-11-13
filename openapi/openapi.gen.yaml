@@ -12,7 +12,6 @@ security:
   - sessionCookie: []
 tags:
   - name: Auth
-    description: Signing in and out, and the signed-in user.
 paths:
   /auth/login:
     $ref: "#/components/pathItems/login"
