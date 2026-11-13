@@ -1,4 +1,3 @@
-// Package openapi holds the dashboard API's OpenAPI document.
 package openapi
 
 import _ "embed"
