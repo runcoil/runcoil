@@ -25,7 +25,7 @@ type ProjectSwitcherProps = {
 };
 
 export function ProjectSwitcher({ projects, current }: ProjectSwitcherProps) {
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   return (
     <SidebarMenu>
@@ -59,7 +59,11 @@ export function ProjectSwitcher({ projects, current }: ProjectSwitcherProps) {
             {projects.length === 0 && <DropdownMenuItem disabled>No projects</DropdownMenuItem>}
             {projects.map((project) => (
               <DropdownMenuItem key={project.id} asChild>
-                <Link to="/projects/$projectId/runs" params={{ projectId: project.id }}>
+                <Link
+                  to="/projects/$projectId/runs"
+                  params={{ projectId: project.id }}
+                  onClick={() => setOpenMobile(false)}
+                >
                   {project.name}
                 </Link>
               </DropdownMenuItem>

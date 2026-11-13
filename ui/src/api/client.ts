@@ -25,6 +25,7 @@ client.use({
       const redirect = unauthenticatedRedirect(
         new URL(request.url).pathname,
         router.latestLocation,
+        queryClient.getQueryData(api.queryOptions("get", "/me").queryKey) !== undefined,
       );
       if (redirect !== undefined) {
         queryClient.clear();

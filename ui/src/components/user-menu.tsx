@@ -24,7 +24,7 @@ type User = components["schemas"]["User"];
 export function UserMenu({ user }: { user: User }) {
   const logout = useLogout();
 
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   return (
     <SidebarMenu>
@@ -55,7 +55,7 @@ export function UserMenu({ user }: { user: User }) {
             <DropdownMenuLabel className="font-normal">{user.username}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/account">
+              <Link to="/account" onClick={() => setOpenMobile(false)}>
                 <UserRound />
                 Account
               </Link>

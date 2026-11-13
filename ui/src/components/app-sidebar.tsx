@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { UserMenu } from "@/components/user-menu";
@@ -34,6 +35,7 @@ export function AppSidebar() {
     select: (match) => match.params.projectId,
   });
   const matchRoute = useMatchRoute();
+  const { setOpenMobile } = useSidebar();
   const current =
     projectId === undefined
       ? me.projects[0]
@@ -45,7 +47,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link to="/">
+              <Link to="/" onClick={() => setOpenMobile(false)}>
                 <div className="flex aspect-square size-8 items-center justify-center">
                   <img src="/runcoil-mark.svg" alt="" className="size-6" />
                 </div>
@@ -70,7 +72,11 @@ export function AppSidebar() {
                       )}
                       tooltip={item.title}
                     >
-                      <Link to={item.to} params={{ projectId: current.id }}>
+                      <Link
+                        to={item.to}
+                        params={{ projectId: current.id }}
+                        onClick={() => setOpenMobile(false)}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
