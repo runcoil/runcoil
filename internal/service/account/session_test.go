@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -101,7 +101,7 @@ func TestAuthenticateRefusesAnUnknownCredentialType(t *testing.T) {
 	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Type: "other", Secret: "token"})
 
 	require.Error(t, err)
-	_, isAPIError := errors.AsType[*apierr.Error](err)
+	_, isAPIError := errors.AsType[*apperr.Error](err)
 	assert.False(t, isAPIError)
 }
 

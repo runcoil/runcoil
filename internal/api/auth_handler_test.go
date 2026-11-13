@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/pkg/healthutil"
@@ -55,7 +55,7 @@ func (f *fakeAccountService) Authenticate(_ context.Context, credential domain.C
 	f.authenticated++
 
 	if credential.Secret != testToken {
-		return domain.Identity{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
+		return domain.Identity{}, apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	}
 
 	permissions := []domain.Permission{}
@@ -192,7 +192,7 @@ func TestLoginErrors(t *testing.T) {
 		wantError  string
 		wantFields []string
 	}{
-		{name: "wrong password", body: `{"login":"ana","password":"x"}`, loginErr: apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password"), wantCode: http.StatusUnauthorized, wantError: "unauthenticated"},
+		{name: "wrong password", body: `{"login":"ana","password":"x"}`, loginErr: apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password"), wantCode: http.StatusUnauthorized, wantError: "unauthenticated"},
 		{name: "missing password", body: `{"login":"ana"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"password"}},
 		{name: "missing both", body: `{}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login", "password"}},
 		{name: "empty login", body: `{"login":"","password":"x"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login"}},
@@ -304,7 +304,7 @@ func TestChangeMyPassword(t *testing.T) {
 func TestChangeMyPasswordRefused(t *testing.T) {
 	accountService := &fakeAccountService{
 		user:      testUser,
-		changeErr: apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
 	}
 	h := newAPIServer(t, accountService)
 

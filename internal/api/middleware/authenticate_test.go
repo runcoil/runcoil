@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -41,7 +41,7 @@ func TestAuthenticate(t *testing.T) {
 		{name: "no cookie"},
 		{name: "empty cookie", cookie: ""},
 		{name: "live session", cookie: "token", authenticator: fakeAuthenticator{identity: ana}, wantIdentity: true},
-		{name: "ended session", cookie: "token", authenticator: fakeAuthenticator{err: apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")}},
+		{name: "ended session", cookie: "token", authenticator: fakeAuthenticator{err: apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")}},
 		{name: "store failure", cookie: "token", authenticator: fakeAuthenticator{err: assert.AnError}, wantHandled: true},
 	}
 

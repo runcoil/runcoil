@@ -8,7 +8,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -65,7 +65,7 @@ func (s *Service) Listen(
 	send func(streamMessage) error,
 ) error {
 	if s.isStopping() {
-		return apierr.Unavailable("", "server is shutting down")
+		return apperr.Unavailable("", "server is shutting down")
 	}
 
 	streamID := uuid.NewV7()
@@ -289,11 +289,11 @@ func (s *Service) endWorker(workerID uuid.UUID) {
 	}
 }
 
-var errStreamEnded = apierr.Unavailable("", "stream ended, reconnect")
+var errStreamEnded = apperr.Unavailable("", "stream ended, reconnect")
 
 func attachError(err error) error {
 	if errors.Is(err, domain.ErrSessionEnded) {
-		return apierr.Unauthenticated(apierr.CodeUnauthenticated, "worker session has ended, register again")
+		return apperr.Unauthenticated(apperr.CodeUnauthenticated, "worker session has ended, register again")
 	}
 
 	return fmt.Errorf("attach stream: %w", err)

@@ -1,4 +1,4 @@
-package apierr
+package apperr
 
 import (
 	"maps"

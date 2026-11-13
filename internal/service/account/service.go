@@ -8,14 +8,14 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // The errors the service returns to clients.
 var (
-	ErrWrongLogin  = apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password")
-	ErrNotSignedIn = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
+	ErrWrongLogin  = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
+	ErrNotSignedIn = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 )
 
 // UserStore keeps the users.

@@ -161,9 +161,9 @@ func taskUpsertParams(id, projectID uuid.UUID, app string, def domain.TaskDefini
 	return params, nil
 }
 
-// WorkerBySessionToken returns the live session whose token has tokenHash, or
+// GetWorkerBySessionToken returns the live session whose token has tokenHash, or
 // domain.ErrSessionEnded.
-func (s *WorkerStore) WorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error) {
+func (s *WorkerStore) GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error) {
 	row, err := s.queries.WorkerGetBySessionToken(ctx, s.db, tokenHash)
 	if isNoRowsError(err) {
 		return domain.Worker{}, domain.ErrSessionEnded
@@ -307,7 +307,7 @@ func (s *WorkerStore) ClaimRuns(ctx context.Context, params domain.ClaimRunsPara
 		return nil, nil
 	}
 
-	assigns, err := s.assigns(ctx, leases)
+	assigns, err := s.listAssigns(ctx, leases)
 	if err != nil {
 		return nil, fmt.Errorf("read assigns: %w", err)
 	}
@@ -324,8 +324,8 @@ func leaseRunIDs(leases []sqlc.LeaseClaimRow) []uuid.UUID {
 	return ids
 }
 
-// assigns reads the input and the journal of the claimed Runs, outside the claim.
-func (s *WorkerStore) assigns(ctx context.Context, leases []sqlc.LeaseClaimRow) ([]domain.Assign, error) {
+// listAssigns reads the input and the journal of the claimed Runs, outside the claim.
+func (s *WorkerStore) listAssigns(ctx context.Context, leases []sqlc.LeaseClaimRow) ([]domain.Assign, error) {
 	ids := leaseRunIDs(leases)
 
 	runs, err := s.queries.RunListForAssign(ctx, s.db, ids)

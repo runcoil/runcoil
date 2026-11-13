@@ -11,7 +11,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	errNotSignedIn      = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
-	errPermissionDenied = apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
+	errNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	errPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 )
 
 // Permissions reads the permission of every operation in spec, keyed by the operation's
