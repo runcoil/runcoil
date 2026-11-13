@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -38,7 +39,7 @@ func (r *responseRecorder) Unwrap() http.ResponseWriter {
 }
 
 // LogRequest logs one line per request: at info, or at error with the recorded error
-// when the status is 500 or more.
+// when the status is 500 or more or a panic ended the request.
 func LogRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,35 +48,46 @@ func LogRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 			rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 			ctx := withRequestInfo(r.Context(), info)
 
+			defer func() {
+				v := recover()
+				logRequest(ctx, logger, r, rec, info, time.Since(start))
+
+				if v != nil {
+					panic(v)
+				}
+			}()
+
 			next.ServeHTTP(rec, r.WithContext(ctx))
-
-			attrs := []slog.Attr{
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status", rec.status),
-				slog.Duration("duration", time.Since(start)),
-				slog.Int("bytes", rec.bytes),
-				slog.String("remote_addr", r.RemoteAddr),
-			}
-
-			if info.userID != "" {
-				attrs = append(attrs, slog.String("user_id", info.userID))
-			}
-
-			if info.err != nil {
-				attrs = append(attrs, slog.Any("error", info.err))
-			}
-
-			if info.stack != "" {
-				attrs = append(attrs, slog.String("stack", info.stack))
-			}
-
-			level := slog.LevelInfo
-			if rec.status >= http.StatusInternalServerError {
-				level = slog.LevelError
-			}
-
-			logger.LogAttrs(ctx, level, "request", attrs...)
 		})
 	}
+}
+
+func logRequest(ctx context.Context, logger *slog.Logger, r *http.Request, rec *responseRecorder, info *requestInfo, duration time.Duration) {
+	attrs := []slog.Attr{
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.Int("status", rec.status),
+		slog.Duration("duration", duration),
+		slog.Int("bytes", rec.bytes),
+		slog.String("remote_addr", r.RemoteAddr),
+	}
+
+	if info.userID != "" {
+		attrs = append(attrs, slog.String("user_id", info.userID))
+	}
+
+	if info.err != nil {
+		attrs = append(attrs, slog.Any("error", info.err))
+	}
+
+	if info.stack != "" {
+		attrs = append(attrs, slog.String("stack", info.stack))
+	}
+
+	level := slog.LevelInfo
+	if rec.status >= http.StatusInternalServerError || info.stack != "" {
+		level = slog.LevelError
+	}
+
+	logger.LogAttrs(ctx, level, "request", attrs...)
 }

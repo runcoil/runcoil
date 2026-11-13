@@ -27,18 +27,23 @@ func TestRecover(t *testing.T) {
 	assert.Contains(t, line["stack"], "recover_test.go")
 }
 
-func TestRecoverKeepsAStartedResponse(t *testing.T) {
-	h := Recover()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestRecoverAbortsAStartedResponse(t *testing.T) {
+	logger, buf := newTestLogger()
+	h := Chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte("partial"))
 		panic("boom")
-	}))
-	rec := httptest.NewRecorder()
+	}), LogRequest(logger), Recover())
 
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	})
 
-	assert.Equal(t, http.StatusAccepted, rec.Code)
-	assert.Equal(t, "partial", rec.Body.String())
+	line := decodeLogLine(t, buf)
+	assert.Equal(t, "ERROR", line["level"])
+	assert.InDelta(t, http.StatusAccepted, line["status"], 0)
+	assert.Equal(t, "panic: boom", line["error"])
+	assert.Contains(t, line["stack"], "recover_test.go")
 }
 
 func TestRecoverPassesAbortHandlerOn(t *testing.T) {
