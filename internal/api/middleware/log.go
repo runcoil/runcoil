@@ -1,39 +1,10 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"time"
 )
-
-type requestInfo struct {
-	err    error
-	stack  string
-	userID string
-}
-
-type requestInfoKey struct{}
-
-// RecordError puts err on the log line of the request ctx belongs to.
-func RecordError(ctx context.Context, err error) {
-	if info, ok := ctx.Value(requestInfoKey{}).(*requestInfo); ok {
-		info.err = err
-	}
-}
-
-func recordPanic(ctx context.Context, err error, stack string) {
-	if info, ok := ctx.Value(requestInfoKey{}).(*requestInfo); ok {
-		info.err = err
-		info.stack = stack
-	}
-}
-
-func recordUserID(ctx context.Context, userID string) {
-	if info, ok := ctx.Value(requestInfoKey{}).(*requestInfo); ok {
-		info.userID = userID
-	}
-}
 
 type responseRecorder struct {
 	http.ResponseWriter
@@ -74,7 +45,7 @@ func LogRequest(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			info := &requestInfo{}
 			rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
-			ctx := context.WithValue(r.Context(), requestInfoKey{}, info)
+			ctx := withRequestInfo(r.Context(), info)
 
 			next.ServeHTTP(rec, r.WithContext(ctx))
 

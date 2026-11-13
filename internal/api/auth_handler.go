@@ -14,8 +14,6 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-var errNoCaller = errors.New("no caller in the context")
-
 type authHandler struct {
 	accountService AccountService
 	secureCookie   bool
@@ -45,7 +43,7 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
 	c, ok := middleware.CallerFromContext(ctx)
 	if !ok {
-		return nil, errNoCaller
+		return nil, errors.New("no caller in the context")
 	}
 
 	if err := h.accountService.Logout(ctx, c.Token); err != nil {
@@ -63,7 +61,7 @@ func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (ge
 func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
 	c, ok := middleware.CallerFromContext(ctx)
 	if !ok {
-		return nil, errNoCaller
+		return nil, errors.New("no caller in the context")
 	}
 
 	access, err := h.accountService.GetUserAccess(ctx, c.User)
@@ -91,7 +89,7 @@ func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.
 func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
 	c, ok := middleware.CallerFromContext(ctx)
 	if !ok {
-		return nil, errNoCaller
+		return nil, errors.New("no caller in the context")
 	}
 
 	err := h.accountService.ChangePassword(ctx, c.User, c.Token, req.Body.CurrentPassword, req.Body.NewPassword)

@@ -45,20 +45,26 @@ type Service struct {
 	projectStore ProjectStore
 	now          func() time.Time
 
-	bootstrapAdminPassword string
-	dummyHash              func() string
+	bootstrapAdmin BootstrapAdmin
+	dummyHash      func() string
 }
 
-// New creates the account service. A login with bootstrapAdminPassword is asked to
-// change it.
-func New(cfg Config, userStore UserStore, sessionStore SessionStore, projectStore ProjectStore, bootstrapAdminPassword string) *Service {
+// BootstrapAdmin is the first server admin the server creates at boot. A login as that
+// user with that password is asked to change it.
+type BootstrapAdmin struct {
+	Username string
+	Password string
+}
+
+// New creates the account service.
+func New(cfg Config, userStore UserStore, sessionStore SessionStore, projectStore ProjectStore, bootstrapAdmin BootstrapAdmin) *Service {
 	return &Service{
-		cfg:                    cfg,
-		userStore:              userStore,
-		sessionStore:           sessionStore,
-		projectStore:           projectStore,
-		now:                    time.Now,
-		bootstrapAdminPassword: bootstrapAdminPassword,
+		cfg:            cfg,
+		userStore:      userStore,
+		sessionStore:   sessionStore,
+		projectStore:   projectStore,
+		now:            time.Now,
+		bootstrapAdmin: bootstrapAdmin,
 		dummyHash: sync.OnceValue(func() string {
 			hash, _ := HashPassword(context.Background(), "")
 			return hash

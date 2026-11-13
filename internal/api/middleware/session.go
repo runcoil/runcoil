@@ -9,25 +9,6 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Caller is the signed-in user of a request and the session token it came with.
-type Caller struct {
-	User  domain.User
-	Token string
-}
-
-type callerKey struct{}
-
-func withCaller(ctx context.Context, c Caller) context.Context {
-	return context.WithValue(ctx, callerKey{}, c)
-}
-
-// CallerFromContext returns the caller that LoadSession put in ctx. It reports false
-// when the request has no live session.
-func CallerFromContext(ctx context.Context) (Caller, bool) {
-	c, ok := ctx.Value(callerKey{}).(Caller)
-	return c, ok
-}
-
 // Authenticator returns the user of a session token.
 type Authenticator interface {
 	AuthenticateSession(ctx context.Context, token string) (domain.User, error)
@@ -59,7 +40,9 @@ func LoadSession(cookieName string, authenticator Authenticator, handleError fun
 			}
 
 			recordUserID(r.Context(), user.ID.String())
-			next.ServeHTTP(w, r.WithContext(withCaller(r.Context(), Caller{User: user, Token: cookie.Value})))
+
+			ctx := withCaller(r.Context(), Caller{User: user, Token: cookie.Value})
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

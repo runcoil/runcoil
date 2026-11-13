@@ -13,16 +13,16 @@ import (
 )
 
 func TestLogin(t *testing.T) {
-	ana := domain.User{ID: uuid.NewV7(), Username: "ana", Email: ptr("ana@example.com"), PasswordHash: hashPassword(t, "admin")}
+	ana := domain.User{ID: uuid.NewV7(), Username: "ana", Email: ptr("ana@example.com"), PasswordHash: hashPassword(t, "Secret-1")}
 	store := &fakeStore{users: []domain.User{ana}}
 	s := newService(store)
 
 	for _, login := range []string{"ana", "Ana", "ANA@example.com"} {
-		result, err := s.Login(context.Background(), login, "admin")
+		result, err := s.Login(context.Background(), login, "Secret-1")
 		require.NoError(t, err, login)
 
 		assert.Equal(t, ana, result.User)
-		assert.True(t, result.PasswordChangeSuggested)
+		assert.False(t, result.PasswordChangeSuggested)
 		assert.Equal(t, hashToken(result.Token), store.created)
 		assert.Equal(t, ana.ID, store.createdFor)
 		assert.Equal(t, ana.PasswordHash, store.createdWith)
@@ -30,11 +30,18 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-func TestLoginSuggestsNoChangeForAnotherPassword(t *testing.T) {
-	store := &fakeStore{users: []domain.User{{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "Secret-1")}}}
+func TestLoginSuggestsAChangeOfTheBootstrapPassword(t *testing.T) {
+	store := &fakeStore{users: []domain.User{
+		{ID: uuid.NewV7(), Username: "admin", PasswordHash: hashPassword(t, "admin")},
+		{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")},
+	}}
+	s := newService(store)
 
-	result, err := newService(store).Login(context.Background(), "ana", "Secret-1")
+	result, err := s.Login(context.Background(), "admin", "admin")
+	require.NoError(t, err)
+	assert.True(t, result.PasswordChangeSuggested)
 
+	result, err = s.Login(context.Background(), "ana", "admin")
 	require.NoError(t, err)
 	assert.False(t, result.PasswordChangeSuggested)
 }

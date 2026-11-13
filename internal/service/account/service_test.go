@@ -102,7 +102,7 @@ var testConfig = Config{
 }
 
 func newService(store *fakeStore) *Service {
-	return New(testConfig, store, store, store, "admin")
+	return New(testConfig, store, store, store, BootstrapAdmin{Username: "admin", Password: "admin"})
 }
 
 func hashPassword(t *testing.T, password string) string {

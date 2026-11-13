@@ -68,7 +68,7 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 		Token:                   token,
 		ExpiresAt:               s.now().Add(s.cfg.SessionMaxLifetime),
 		User:                    user,
-		PasswordChangeSuggested: password == s.bootstrapAdminPassword,
+		PasswordChangeSuggested: user.Username == s.bootstrapAdmin.Username && password == s.bootstrapAdmin.Password,
 	}, nil
 }
 
