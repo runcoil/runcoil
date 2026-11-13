@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -208,6 +209,12 @@ func describeViolation(violation *jsonschema.ValidationError) (gen.ErrorCode, st
 func (s *Service) checkPermission(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
 	permission, ok := s.permissions[operationID]
 	if !ok {
+		return func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
+			return nil, fmt.Errorf("operation %s has no permission in the spec", operationID)
+		}
+	}
+
+	if permission == permissionPublic {
 		return f
 	}
 

@@ -42,5 +42,9 @@ mePassword:
         $ref: "../components/responses.yaml#/InvalidRequest"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
+      "403":
+        $ref: "../components/responses.yaml#/PermissionDenied"
+      "413":
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
       "500":
         $ref: "../components/responses.yaml#/Internal"

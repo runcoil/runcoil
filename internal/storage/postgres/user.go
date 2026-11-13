@@ -103,15 +103,15 @@ func (s *UserStore) CreateSession(ctx context.Context, tokenHash []byte, userID 
 	})
 }
 
-// SessionByToken returns the live session of tokenHash, or domain.ErrNoSession when the
-// session has ended or its user is disabled.
+// SessionByToken returns the live session of tokenHash, or domain.ErrSessionNotFound when
+// the session has ended or its user is disabled.
 func (s *UserStore) SessionByToken(ctx context.Context, tokenHash []byte, maxInactive time.Duration) (domain.Session, error) {
 	row, err := s.queries.SessionGetUser(ctx, s.db, sqlc.SessionGetUserParams{
 		TokenHash:   tokenHash,
 		MaxInactive: interval(&maxInactive),
 	})
 	if isNoRowsError(err) {
-		return domain.Session{}, domain.ErrNoSession
+		return domain.Session{}, domain.ErrSessionNotFound
 	}
 
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *UserStore) SessionByToken(ctx context.Context, tokenHash []byte, maxIna
 			PasswordHash:  row.PasswordHash,
 			IsServerAdmin: row.IsServerAdmin,
 		},
-		LastSeenAt: row.LastSeenAt,
+		TouchDue: row.TouchDue,
 	}, nil
 }
 

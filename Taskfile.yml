@@ -59,7 +59,7 @@ tasks:
       - internal/api/gen/api.gen.go
     cmds:
       - cd openapi && go tool -modfile=../tools/go.mod vacuum bundle --composed openapi.yaml openapi.gen.yaml
-      - cd openapi && go tool -modfile=../tools/go.mod vacuum lint --no-style --details --fail-severity warn openapi.gen.yaml
+      - cd openapi && go tool -modfile=../tools/go.mod vacuum lint openapi.gen.yaml
       - cd internal/api/gen && go tool -modfile=../../../tools/go.mod oapi-codegen -config oapi-codegen.yaml ../../../openapi/openapi.gen.yaml
 
   migrate-up:

@@ -3,7 +3,8 @@ INSERT INTO sessions (token_hash, user_id, expires_at)
 VALUES (@token_hash::bytea, @user_id::uuid, now() + @max_lifetime::interval);
 
 -- name: SessionGetUser :one
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, s.last_seen_at
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin,
+       s.last_seen_at <= now() - interval '1 minute' AS touch_due
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = @token_hash::bytea

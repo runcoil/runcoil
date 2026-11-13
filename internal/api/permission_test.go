@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 	"uuid"
@@ -25,13 +27,24 @@ func TestEveryOperationHasAPermission(t *testing.T) {
 	operations := reflect.TypeFor[gen.StrictServerInterface]()
 	for i := range operations.NumMethod() {
 		name := operations.Method(i).Name
-		if name == "Login" {
-			assert.NotContains(t, permissions, name)
-			continue
-		}
-
 		assert.Contains(t, permissions, name)
 	}
+
+	assert.Equal(t, permissionPublic, permissions["Login"])
+}
+
+func TestCheckPermissionRefusesAnUnknownOperation(t *testing.T) {
+	s := &Service{permissions: map[string]string{}}
+	called := false
+	next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
+		called = true
+		return nil, nil
+	}
+
+	_, err := s.checkPermission(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+
+	assert.Error(t, err)
+	assert.False(t, called)
 }
 
 func TestOperationPermissionsRefusesAMissingOne(t *testing.T) {

@@ -35,12 +35,15 @@ func roleHas(role domain.Role, permission gen.Permission) bool {
 	return slices.Contains(rolePermissions[role], permission)
 }
 
+const permissionPublic = "public"
+
 func operationPermissions(spec *openapi3.T) (map[string]string, error) {
 	permissions := make(map[string]string)
 
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {
 			if op.Security != nil && len(*op.Security) == 0 {
+				permissions[goName(op.OperationID)] = permissionPublic
 				continue
 			}
 
@@ -58,7 +61,7 @@ func operationPermissions(spec *openapi3.T) (map[string]string, error) {
 	}
 
 	if len(permissions) == 0 {
-		return nil, errors.New("no operation has a permission")
+		return nil, errors.New("the spec has no operation")
 	}
 
 	return permissions, nil

@@ -7,7 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"uuid"
@@ -72,7 +71,8 @@ func (q *Queries) SessionDeleteOthers(ctx context.Context, db DBTX, arg SessionD
 }
 
 const sessionGetUser = `-- name: SessionGetUser :one
-SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin, s.last_seen_at
+SELECT u.id, u.username, u.email, u.password_hash, u.is_server_admin,
+       s.last_seen_at <= now() - interval '1 minute' AS touch_due
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1::bytea
@@ -92,7 +92,7 @@ type SessionGetUserRow struct {
 	Email         *string
 	PasswordHash  string
 	IsServerAdmin bool
-	LastSeenAt    time.Time
+	TouchDue      bool
 }
 
 func (q *Queries) SessionGetUser(ctx context.Context, db DBTX, arg SessionGetUserParams) (SessionGetUserRow, error) {
@@ -104,7 +104,7 @@ func (q *Queries) SessionGetUser(ctx context.Context, db DBTX, arg SessionGetUse
 		&i.Email,
 		&i.PasswordHash,
 		&i.IsServerAdmin,
-		&i.LastSeenAt,
+		&i.TouchDue,
 	)
 	return i, err
 }

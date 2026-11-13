@@ -18,10 +18,7 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-const (
-	sessionTokenLen   = 32
-	sessionTouchEvery = time.Minute
-)
+const sessionTokenLen = 32
 
 var (
 	errWrongLogin = apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password")
@@ -32,10 +29,6 @@ var (
 type Config struct {
 	SessionMaxLifetime time.Duration
 	SessionMaxInactive time.Duration
-
-	// BootstrapAdminPassword is the password of the first server admin. A login with it
-	// is asked to change it.
-	BootstrapAdminPassword string
 }
 
 // RegisterFlags declares every key with its default and help text.
@@ -77,16 +70,19 @@ type Service struct {
 	userStore UserStore
 	now       func() time.Time
 
-	dummyHash func() string
+	bootstrapAdminPassword string
+	dummyHash              func() string
 }
 
-// New creates the account service.
-func New(cfg Config, userStore UserStore) *Service {
+// New creates the account service. A login with bootstrapAdminPassword is asked to
+// change it.
+func New(cfg Config, userStore UserStore, bootstrapAdminPassword string) *Service {
 	return &Service{
-		cfg:       cfg,
-		userStore: userStore,
-		now:       time.Now,
-		dummyHash: sync.OnceValue(func() string { return HashPassword("") }),
+		cfg:                    cfg,
+		userStore:              userStore,
+		now:                    time.Now,
+		bootstrapAdminPassword: bootstrapAdminPassword,
+		dummyHash:              sync.OnceValue(func() string { return HashPassword("") }),
 	}
 }
 
@@ -137,7 +133,7 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 		Token:                   token,
 		ExpiresAt:               s.now().Add(s.cfg.SessionMaxLifetime),
 		User:                    user,
-		PasswordChangeSuggested: password == s.cfg.BootstrapAdminPassword,
+		PasswordChangeSuggested: password == s.bootstrapAdminPassword,
 	}, nil
 }
 
@@ -146,7 +142,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (domain.User, 
 	tokenHash := hashToken(token)
 
 	session, err := s.userStore.SessionByToken(ctx, tokenHash, s.cfg.SessionMaxInactive)
-	if errors.Is(err, domain.ErrNoSession) {
+	if errors.Is(err, domain.ErrSessionNotFound) {
 		return domain.User{}, errNoSession
 	}
 
@@ -154,7 +150,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (domain.User, 
 		return domain.User{}, fmt.Errorf("get session: %w", err)
 	}
 
-	if s.now().Sub(session.LastSeenAt) >= sessionTouchEvery {
+	if session.TouchDue {
 		if err := s.userStore.TouchSession(ctx, tokenHash); err != nil {
 			return domain.User{}, fmt.Errorf("touch session: %w", err)
 		}

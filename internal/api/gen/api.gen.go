@@ -226,6 +226,12 @@ type Internal = ErrorResponse
 // InvalidRequest The body of every error response.
 type InvalidRequest = ErrorResponse
 
+// PayloadTooLarge The body of every error response.
+type PayloadTooLarge = ErrorResponse
+
+// PermissionDenied The body of every error response.
+type PermissionDenied = ErrorResponse
+
 // Unauthenticated The body of every error response.
 type Unauthenticated = ErrorResponse
 
@@ -448,6 +454,10 @@ type InternalJSONResponse ErrorResponse
 
 type InvalidRequestJSONResponse ErrorResponse
 
+type PayloadTooLargeJSONResponse ErrorResponse
+
+type PermissionDeniedJSONResponse ErrorResponse
+
 type UnauthenticatedJSONResponse ErrorResponse
 
 type LoginRequestObject struct {
@@ -508,6 +518,34 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
+type Login403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response Login403JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Login413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response Login413JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type Login500JSONResponse struct{ InternalJSONResponse }
 
 func (response Login500JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
@@ -553,6 +591,20 @@ func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Logout403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -660,6 +712,34 @@ func (response ChangeMyPassword401JSONResponse) VisitChangeMyPasswordResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangeMyPassword403JSONResponse struct{ PermissionDeniedJSONResponse }
+
+func (response ChangeMyPassword403JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangeMyPassword413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response ChangeMyPassword413JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }

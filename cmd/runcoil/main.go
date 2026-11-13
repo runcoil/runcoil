@@ -79,8 +79,7 @@ func run() error {
 	checks.Add("dispatcher", dispatcherService.Ready)
 	checks.Add("scheduler", schedulerService.Ready)
 
-	cfg.Account.BootstrapAdminPassword = cfg.Seed.AdminPassword
-	accountService := account.New(cfg.Account, userStore)
+	accountService := account.New(cfg.Account, userStore, cfg.Seed.AdminPassword)
 
 	apiService, err := api.New(cfg.API, logger, checks, accountService)
 	if err != nil {

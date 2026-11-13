@@ -59,7 +59,7 @@ func (f *fakeUserStore) CreateSession(_ context.Context, tokenHash []byte, userI
 func (f *fakeUserStore) SessionByToken(_ context.Context, tokenHash []byte, _ time.Duration) (domain.Session, error) {
 	session, ok := f.sessions[string(tokenHash)]
 	if !ok {
-		return domain.Session{}, domain.ErrNoSession
+		return domain.Session{}, domain.ErrSessionNotFound
 	}
 
 	return session, nil
@@ -100,9 +100,12 @@ func (f *fakeUserStore) MemberRole(_ context.Context, projectID, _ uuid.UUID) (d
 }
 
 var testConfig = Config{
-	SessionMaxLifetime:     30 * 24 * time.Hour,
-	SessionMaxInactive:     7 * 24 * time.Hour,
-	BootstrapAdminPassword: "admin",
+	SessionMaxLifetime: 30 * 24 * time.Hour,
+	SessionMaxInactive: 7 * 24 * time.Hour,
+}
+
+func newService(store UserStore) *Service {
+	return New(testConfig, store, "admin")
 }
 
 func ptr[T any](v T) *T {
@@ -121,7 +124,7 @@ func assertUnauthenticated(t *testing.T, err error) {
 func TestLogin(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", Email: ptr("ana@example.com"), PasswordHash: HashPassword("admin")}
 	store := &fakeUserStore{users: []domain.User{ana}}
-	s := New(testConfig, store)
+	s := newService(store)
 
 	for _, login := range []string{"ana", "Ana", "ANA@example.com"} {
 		result, err := s.Login(context.Background(), login, "admin")
@@ -138,7 +141,7 @@ func TestLogin(t *testing.T) {
 func TestLoginSuggestsNoChangeForAnotherPassword(t *testing.T) {
 	store := &fakeUserStore{users: []domain.User{{ID: uuid.NewV7(), Username: "ana", PasswordHash: HashPassword("Secret-1")}}}
 
-	result, err := New(testConfig, store).Login(context.Background(), "ana", "Secret-1")
+	result, err := newService(store).Login(context.Background(), "ana", "Secret-1")
 
 	require.NoError(t, err)
 	assert.False(t, result.PasswordChangeSuggested)
@@ -149,7 +152,7 @@ func TestLoginRefused(t *testing.T) {
 		{ID: uuid.NewV7(), Username: "ana", PasswordHash: HashPassword("Secret-1")},
 		{ID: uuid.NewV7(), Username: "bob", PasswordHash: HashPassword("Secret-1"), DisabledAt: ptr(time.Now())},
 	}}
-	s := New(testConfig, store)
+	s := newService(store)
 
 	for _, tt := range []struct{ login, password string }{
 		{"ana", "secret-1"},
@@ -168,20 +171,19 @@ func TestAuthenticate(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		lastSeen  time.Duration
 		wantTouch bool
 	}{
-		{name: "seen just now", lastSeen: 10 * time.Second},
-		{name: "seen a while ago", lastSeen: 2 * time.Minute, wantTouch: true},
+		{name: "seen just now"},
+		{name: "seen a while ago", wantTouch: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeUserStore{sessions: map[string]domain.Session{
-				string(hashToken("token")): {User: ana, LastSeenAt: time.Now().Add(-tt.lastSeen)},
+				string(hashToken("token")): {User: ana, TouchDue: tt.wantTouch},
 			}}
 
-			user, err := New(testConfig, store).Authenticate(context.Background(), "token")
+			user, err := newService(store).Authenticate(context.Background(), "token")
 
 			require.NoError(t, err)
 			assert.Equal(t, ana, user)
@@ -196,7 +198,7 @@ func TestAuthenticate(t *testing.T) {
 }
 
 func TestAuthenticateWithoutSession(t *testing.T) {
-	_, err := New(testConfig, &fakeUserStore{}).Authenticate(context.Background(), "token")
+	_, err := newService(&fakeUserStore{}).Authenticate(context.Background(), "token")
 
 	assertUnauthenticated(t, err)
 }
@@ -204,7 +206,7 @@ func TestAuthenticateWithoutSession(t *testing.T) {
 func TestLogout(t *testing.T) {
 	store := &fakeUserStore{}
 
-	require.NoError(t, New(testConfig, store).Logout(context.Background(), "token"))
+	require.NoError(t, newService(store).Logout(context.Background(), "token"))
 
 	assert.Equal(t, hashToken("token"), store.deleted)
 }
@@ -213,7 +215,7 @@ func TestChangePassword(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: HashPassword("admin")}
 	store := &fakeUserStore{}
 
-	err := New(testConfig, store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
+	err := newService(store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, hashToken("token"), store.keptTokenHash)
@@ -240,7 +242,7 @@ func TestChangePasswordRefused(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeUserStore{}
 
-			err := New(testConfig, store).ChangePassword(context.Background(), ana, "token", tt.current, tt.new)
+			err := newService(store).ChangePassword(context.Background(), ana, "token", tt.current, tt.new)
 
 			apiErr, ok := errors.AsType[*apierr.Error](err)
 			require.True(t, ok, err)
@@ -255,7 +257,7 @@ func TestChangePasswordRefused(t *testing.T) {
 func TestProjectRoles(t *testing.T) {
 	member := []domain.ProjectRole{{ProjectID: uuid.NewV7(), ProjectName: "a", Role: domain.RoleViewer}}
 	every := []domain.ProjectRole{{ProjectID: uuid.NewV7(), ProjectName: "b", Role: domain.RoleAdmin}}
-	s := New(testConfig, &fakeUserStore{roles: member, projects: every})
+	s := newService(&fakeUserStore{roles: member, projects: every})
 
 	roles, err := s.ProjectRoles(context.Background(), domain.User{})
 	require.NoError(t, err)
@@ -268,7 +270,7 @@ func TestProjectRoles(t *testing.T) {
 
 func TestRole(t *testing.T) {
 	projectID := uuid.NewV7()
-	s := New(testConfig, &fakeUserStore{memberOf: map[uuid.UUID]domain.Role{projectID: domain.RoleEditor}})
+	s := newService(&fakeUserStore{memberOf: map[uuid.UUID]domain.Role{projectID: domain.RoleEditor}})
 
 	role, ok, err := s.Role(context.Background(), domain.User{}, projectID)
 	require.NoError(t, err)
