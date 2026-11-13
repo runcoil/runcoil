@@ -3,18 +3,10 @@ import { z } from "zod";
 import type { components } from "@/api/schema";
 
 export type ErrorResponse = components["schemas"]["ErrorResponse"];
-export type ErrorCode = components["schemas"]["ErrorCode"];
 export type ErrorParam = components["schemas"]["ErrorParam"];
 
 const errorResponseSchema = z.object({
-  code: z.enum([
-    "invalid_request",
-    "unauthenticated",
-    "permission_denied",
-    "not_found",
-    "payload_too_large",
-    "internal",
-  ] satisfies ErrorCode[]),
+  code: z.string(),
   message: z.string(),
   params: z.array(z.object({ field: z.string(), message: z.string() })).optional(),
 }) satisfies z.ZodType<ErrorResponse>;

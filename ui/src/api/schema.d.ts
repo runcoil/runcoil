@@ -110,7 +110,11 @@ export interface components {
          *     }
          */
         ErrorResponse: {
-            code: components["schemas"]["ErrorCode"];
+            /**
+             * @description What went wrong, in lower snake case, such as invalid_request, unauthenticated, permission_denied, not_found, payload_too_large or internal.
+             * @example invalid_request
+             */
+            code: string;
             /**
              * @description For people. Clients never parse it.
              * @example current password is wrong
@@ -127,12 +131,6 @@ export interface components {
              */
             params?: components["schemas"]["ErrorParam"][];
         };
-        /**
-         * @description The code of an error.
-         * @example invalid_request
-         * @enum {string}
-         */
-        ErrorCode: "invalid_request" | "unauthenticated" | "permission_denied" | "not_found" | "payload_too_large" | "internal";
         /** @description A request field at fault. */
         ErrorParam: {
             /**
@@ -197,44 +195,8 @@ export interface components {
         };
     };
     responses: {
-        /** @description invalid_request: the request is not valid; params names the fields at fault */
-        InvalidRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description unauthenticated: no live session, or a wrong login or password */
-        Unauthenticated: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description permission_denied: the caller lacks the operation's permission, or a write came from another origin */
-        PermissionDenied: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description payload_too_large: the request body is larger than 1 MiB */
-        PayloadTooLarge: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description internal: an unexpected failure */
-        Internal: {
+        /** @description An error. The body's code says which. */
+        Error: {
             headers: {
                 [name: string]: unknown;
             };
@@ -356,11 +318,10 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
-            413: components["responses"]["PayloadTooLarge"];
-            500: components["responses"]["Internal"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            413: components["responses"]["Error"];
         };
     };
     logout: {
@@ -381,9 +342,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
-            500: components["responses"]["Internal"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
     getMe: {
@@ -404,8 +364,7 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
-            500: components["responses"]["Internal"];
+            401: components["responses"]["Error"];
         };
     };
     changeMyPassword: {
@@ -429,11 +388,10 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
-            413: components["responses"]["PayloadTooLarge"];
-            500: components["responses"]["Internal"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            413: components["responses"]["Error"];
         };
     };
 }

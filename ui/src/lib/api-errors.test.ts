@@ -28,11 +28,17 @@ describe("parseErrorResponse", () => {
     });
   });
 
+  it("keeps an error body with a code it does not know", () => {
+    expect(parseErrorResponse({ code: "missing_field", message: "new code" })).toEqual({
+      code: "missing_field",
+      message: "new code",
+    });
+  });
+
   it("returns nothing for values that are not an error body", () => {
     expect(parseErrorResponse(undefined)).toBeUndefined();
     expect(parseErrorResponse("boom")).toBeUndefined();
     expect(parseErrorResponse({ message: "no code" })).toBeUndefined();
-    expect(parseErrorResponse({ code: "missing_field", message: "old code" })).toBeUndefined();
     expect(
       parseErrorResponse({ errors: [{ code: "internal", message: "old shape" }] }),
     ).toBeUndefined();
