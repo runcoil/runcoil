@@ -39,12 +39,3 @@ func TestRolePermissions(t *testing.T) {
 		"members:read", "members:write", "api_keys:read", "api_keys:write",
 	}, rolePermissions[domain.RoleAdmin])
 }
-
-func TestAuthorizePermission(t *testing.T) {
-	s := newService(&fakeStore{})
-
-	assert.NoError(t, s.AuthorizePermission(domain.User{IsServerAdmin: true}, domain.PermissionUsersWrite))
-	assert.NoError(t, s.AuthorizePermission(domain.User{IsServerAdmin: true}, domain.PermissionRunsRead))
-	assert.ErrorIs(t, s.AuthorizePermission(domain.User{}, domain.PermissionUsersRead), ErrPermissionDenied)
-	assert.ErrorIs(t, s.AuthorizePermission(domain.User{}, domain.PermissionRunsRead), ErrPermissionDenied)
-}

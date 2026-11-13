@@ -62,6 +62,35 @@ func (q *Queries) UserGetByEmail(ctx context.Context, db DBTX, email string) (Us
 	return i, err
 }
 
+const userGetByID = `-- name: UserGetByID :one
+SELECT id, username, email, password_hash, is_server_admin, disabled_at
+FROM users
+WHERE id = $1::uuid
+`
+
+type UserGetByIDRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+}
+
+func (q *Queries) UserGetByID(ctx context.Context, db DBTX, id uuid.UUID) (UserGetByIDRow, error) {
+	row := db.QueryRow(ctx, userGetByID, id)
+	var i UserGetByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.IsServerAdmin,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const userGetByUsername = `-- name: UserGetByUsername :one
 SELECT id, username, email, password_hash, is_server_admin, disabled_at
 FROM users

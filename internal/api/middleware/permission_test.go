@@ -84,19 +84,6 @@ paths:
 	}
 }
 
-type fakeAuthorizer struct {
-	asked domain.Permission
-}
-
-func (f *fakeAuthorizer) AuthorizePermission(user domain.User, permission domain.Permission) error {
-	f.asked = permission
-	if user.IsServerAdmin {
-		return nil
-	}
-
-	return apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
-}
-
 func TestCheckPermission(t *testing.T) {
 	permissions := map[string]string{
 		"Login":       permissionPublic,
@@ -104,8 +91,8 @@ func TestCheckPermission(t *testing.T) {
 		"CreateUser":  string(domain.PermissionUsersWrite),
 		"ListMembers": string(domain.PermissionMembersRead),
 	}
-	signedIn := context.WithValue(context.Background(), callerKey{}, Caller{User: domain.User{Username: "ana"}})
-	admin := context.WithValue(context.Background(), callerKey{}, Caller{User: domain.User{IsServerAdmin: true}})
+	signedIn := withIdentity(context.Background(), domain.Identity{Permissions: []domain.Permission{}})
+	admin := withIdentity(context.Background(), domain.Identity{Permissions: domain.Permissions})
 
 	tests := []struct {
 		name      string
@@ -113,28 +100,24 @@ func TestCheckPermission(t *testing.T) {
 		ctx       context.Context
 		allowed   bool
 		wantKind  apierr.Kind
-		wantAsked domain.Permission
 	}{
-		{name: "public without a caller", operation: "Login", ctx: context.Background(), allowed: true},
-		{name: "self without a caller", operation: "GetMe", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
+		{name: "public without an identity", operation: "Login", ctx: context.Background(), allowed: true},
+		{name: "self without an identity", operation: "GetMe", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
 		{name: "self signed in", operation: "GetMe", ctx: signedIn, allowed: true},
-		{name: "permission without a caller", operation: "CreateUser", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
-		{name: "permission refused", operation: "ListMembers", ctx: signedIn, wantKind: apierr.KindPermissionDenied, wantAsked: domain.PermissionMembersRead},
-		{name: "permission granted", operation: "CreateUser", ctx: admin, allowed: true, wantAsked: domain.PermissionUsersWrite},
+		{name: "permission without an identity", operation: "CreateUser", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
+		{name: "permission refused", operation: "ListMembers", ctx: signedIn, wantKind: apierr.KindPermissionDenied},
+		{name: "permission granted", operation: "CreateUser", ctx: admin, allowed: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			authorizer := &fakeAuthorizer{}
 			called := false
 			next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
 				called = true
 				return nil, nil
 			}
 
-			_, err := CheckPermission(permissions, authorizer)(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
-
-			assert.Equal(t, tt.wantAsked, authorizer.asked)
+			_, err := CheckPermission(permissions)(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
 
 			if tt.allowed {
 				require.NoError(t, err)
@@ -158,7 +141,7 @@ func TestCheckPermissionRefusesAnUnknownOperation(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := CheckPermission(map[string]string{}, &fakeAuthorizer{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+	_, err := CheckPermission(map[string]string{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
 
 	assert.EqualError(t, err, "operation Unknown has no permission in the spec")
 	assert.False(t, called)

@@ -80,12 +80,12 @@ func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (Access, 
 	return access, nil
 }
 
-// AuthorizePermission checks that user has permission. A server admin has every
-// permission.
-func (s *Service) AuthorizePermission(user domain.User, _ domain.Permission) error {
+// userPermissions returns what user may do anywhere on the server. A server admin has
+// every permission, in every project too.
+func userPermissions(user domain.User) []domain.Permission {
 	if user.IsServerAdmin {
-		return nil
+		return domain.Permissions
 	}
 
-	return ErrPermissionDenied
+	return []domain.Permission{}
 }

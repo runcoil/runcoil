@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCallerFromContextWithoutACaller(t *testing.T) {
-	_, ok := CallerFromContext(context.Background())
+func TestIdentityFromContextWithoutAnIdentity(t *testing.T) {
+	_, ok := IdentityFromContext(context.Background())
 
 	assert.False(t, ok)
 }

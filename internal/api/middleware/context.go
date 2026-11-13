@@ -6,23 +6,17 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// Caller is the signed-in user of a request and the session token it came with.
-type Caller struct {
-	User  domain.User
-	Token string
+type identityKey struct{}
+
+func withIdentity(ctx context.Context, identity domain.Identity) context.Context {
+	return context.WithValue(ctx, identityKey{}, identity)
 }
 
-type callerKey struct{}
-
-func withCaller(ctx context.Context, c Caller) context.Context {
-	return context.WithValue(ctx, callerKey{}, c)
-}
-
-// CallerFromContext returns the caller that LoadSession put in ctx. It reports false
-// when the request has no live session.
-func CallerFromContext(ctx context.Context) (Caller, bool) {
-	c, ok := ctx.Value(callerKey{}).(Caller)
-	return c, ok
+// IdentityFromContext returns the identity that Authenticate put in ctx. It reports false
+// when the request has no valid credential.
+func IdentityFromContext(ctx context.Context) (domain.Identity, bool) {
+	identity, ok := ctx.Value(identityKey{}).(domain.Identity)
+	return identity, ok
 }
 
 type requestInfo struct {

@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 	"uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/runcoil/runcoil/internal/apierr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -65,26 +67,48 @@ func TestLoginRefused(t *testing.T) {
 	assert.Nil(t, store.created)
 }
 
-func TestAuthenticateSession(t *testing.T) {
+func TestAuthenticate(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana"}
-	store := &fakeStore{sessions: map[string]domain.User{string(hashToken("token")): ana}}
+	root := domain.User{ID: uuid.NewV7(), Username: "root", IsServerAdmin: true}
+	store := &fakeStore{sessions: map[string]domain.User{
+		string(hashToken("ana-token")):  ana,
+		string(hashToken("root-token")): root,
+	}}
+	s := newService(store)
 
-	user, err := newService(store).AuthenticateSession(context.Background(), "token")
-
+	identity, err := s.Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "ana-token"})
 	require.NoError(t, err)
-	assert.Equal(t, ana, user)
+	assert.Equal(t, domain.Identity{
+		Type:        domain.IdentityUser,
+		UserID:      ana.ID,
+		SessionID:   hashToken("ana-token"),
+		Permissions: []domain.Permission{},
+	}, identity)
+
+	identity, err = s.Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "root-token"})
+	require.NoError(t, err)
+	assert.Equal(t, root.ID, identity.UserID)
+	assert.Equal(t, domain.Permissions, identity.Permissions)
 }
 
-func TestAuthenticateSessionWithoutSession(t *testing.T) {
-	_, err := newService(&fakeStore{}).AuthenticateSession(context.Background(), "token")
+func TestAuthenticateWithoutSession(t *testing.T) {
+	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "token"})
 
 	assertUnauthenticated(t, err)
+}
+
+func TestAuthenticateRefusesAnUnknownCredentialKind(t *testing.T) {
+	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Kind: "other", Secret: "token"})
+
+	require.Error(t, err)
+	_, isAPIError := errors.AsType[*apierr.Error](err)
+	assert.False(t, isAPIError)
 }
 
 func TestLogout(t *testing.T) {
 	store := &fakeStore{}
 
-	require.NoError(t, newService(store).Logout(context.Background(), "token"))
+	require.NoError(t, newService(store).Logout(context.Background(), domain.Identity{SessionID: hashToken("token")}))
 
 	assert.Equal(t, hashToken("token"), store.deleted)
 }

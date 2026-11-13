@@ -50,6 +50,20 @@ func (s *UserStore) CreateFirstServerAdmin(ctx context.Context, admin domain.Use
 	return created, err
 }
 
+// GetUserByID returns the user with id, or domain.ErrUserNotFound.
+func (s *UserStore) GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	row, err := s.queries.UserGetByID(ctx, s.db, id)
+	if isNoRowsError(err) {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user by id: %w", err)
+	}
+
+	return domain.User(row), nil
+}
+
 // GetUserByUsername returns the user with username, or domain.ErrUserNotFound.
 func (s *UserStore) GetUserByUsername(ctx context.Context, username string) (domain.User, error) {
 	row, err := s.queries.UserGetByUsername(ctx, s.db, username)

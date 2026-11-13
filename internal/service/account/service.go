@@ -12,13 +12,13 @@ import (
 
 // The errors the service returns to clients.
 var (
-	ErrWrongLogin       = apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password")
-	ErrNotSignedIn      = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
-	ErrPermissionDenied = apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
+	ErrWrongLogin  = apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password")
+	ErrNotSignedIn = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
 )
 
 // UserStore keeps the users.
 type UserStore interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, passwordHash string, keepTokenHash []byte) error

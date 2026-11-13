@@ -18,9 +18,9 @@ import (
 
 func TestChangePassword(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
-	store := &fakeStore{}
+	store := &fakeStore{users: []domain.User{ana}}
 
-	err := newService(store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
+	err := newService(store).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, hashToken("token"), store.keptTokenHash)
@@ -45,9 +45,9 @@ func TestChangePasswordRefused(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := &fakeStore{}
+			store := &fakeStore{users: []domain.User{ana}}
 
-			err := newService(store).ChangePassword(context.Background(), ana, "token", tt.current, tt.new)
+			err := newService(store).ChangePassword(context.Background(), identityOf(ana), tt.current, tt.new)
 
 			apiErr, ok := errors.AsType[*apierr.Error](err)
 			require.True(t, ok, err)
@@ -61,9 +61,9 @@ func TestChangePasswordRefused(t *testing.T) {
 
 func TestChangePasswordWhenTheSessionEnded(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
-	store := &fakeStore{updateErr: domain.ErrSessionNotFound}
+	store := &fakeStore{users: []domain.User{ana}, updateErr: domain.ErrSessionNotFound}
 
-	err := newService(store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
+	err := newService(store).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
 
 	assert.ErrorIs(t, err, ErrNotSignedIn)
 }
