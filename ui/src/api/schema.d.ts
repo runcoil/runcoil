@@ -195,35 +195,8 @@ export interface components {
         };
     };
     responses: {
-        /** @description invalid_request: the request is not valid. params lists the fields at fault. */
-        InvalidRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description unauthenticated: no live session, or a wrong login. */
-        Unauthenticated: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description permission_denied: the caller lacks the permission, or the request comes from another origin. */
-        PermissionDenied: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description payload_too_large: the body is larger than 1 MiB. */
-        PayloadTooLarge: {
+        /** @description An error. The body's code says which. */
+        Error: {
             headers: {
                 [name: string]: unknown;
             };
@@ -345,10 +318,14 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
-            400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
-            413: components["responses"]["PayloadTooLarge"];
+            /** @description invalid_request: the body is not valid */
+            400: components["responses"]["Error"];
+            /** @description unauthenticated: the login or the password is wrong, or the user is disabled */
+            401: components["responses"]["Error"];
+            /** @description permission_denied: the request comes from another origin */
+            403: components["responses"]["Error"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["Error"];
         };
     };
     logout: {
@@ -369,8 +346,10 @@ export interface operations {
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Error"];
+            /** @description permission_denied: the request comes from another origin */
+            403: components["responses"]["Error"];
         };
     };
     getMe: {
@@ -391,7 +370,8 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Error"];
         };
     };
     changeMyPassword: {
@@ -415,10 +395,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: components["responses"]["InvalidRequest"];
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["PermissionDenied"];
-            413: components["responses"]["PayloadTooLarge"];
+            /** @description invalid_request: the body is not valid, the current password is wrong, or the new password is too weak */
+            400: components["responses"]["Error"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Error"];
+            /** @description permission_denied: the request comes from another origin */
+            403: components["responses"]["Error"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["Error"];
         };
     };
 }
