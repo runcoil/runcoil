@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -15,8 +16,15 @@ func (s *Service) handleRequestError(w http.ResponseWriter, r *http.Request, err
 	httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, err.Error()))
 }
 
+const statusClientClosedRequest = 499
+
 func (s *Service) handleResponseError(w http.ResponseWriter, r *http.Request, err error) {
 	middleware.RecordError(r.Context(), err)
+
+	if errors.Is(err, context.Canceled) {
+		w.WriteHeader(statusClientClosedRequest)
+		return
+	}
 
 	var apiErr *apierr.Error
 	if !errors.As(err, &apiErr) {

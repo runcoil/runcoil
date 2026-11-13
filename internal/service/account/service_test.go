@@ -28,6 +28,7 @@ type fakeStore struct {
 	createdWith   string
 	deleted       []byte
 	passwordHash  string
+	replacedHash  string
 	keptTokenHash []byte
 }
 
@@ -87,12 +88,13 @@ func (f *fakeStore) DeleteSession(_ context.Context, tokenHash []byte) error {
 	return nil
 }
 
-func (f *fakeStore) UpdatePasswordAndDeleteOtherSessions(_ context.Context, _ uuid.UUID, passwordHash string, keepTokenHash []byte) error {
+func (f *fakeStore) UpdatePasswordAndDeleteOtherSessions(_ context.Context, _ uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error {
 	if f.updateErr != nil {
 		return f.updateErr
 	}
 
-	f.passwordHash = passwordHash
+	f.replacedHash = currentHash
+	f.passwordHash = newHash
 	f.keptTokenHash = keepTokenHash
 
 	return nil

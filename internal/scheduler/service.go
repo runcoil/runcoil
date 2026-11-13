@@ -34,9 +34,7 @@ type Config struct {
 	// MaxLostAttempts is how often a Run may lose its worker before it fails with
 	// attempt_lost.
 	MaxLostAttempts int
-	// WorkerTTL is the dispatcher's dispatcher.worker-ttl, which main copies here: a
-	// session with no heartbeat for longer has ended. It has no key of its own.
-	WorkerTTL time.Duration
+	WorkerTTL       time.Duration
 }
 
 // RegisterFlags declares every key with its default and help text.

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,16 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apierr"
 )
+
+func TestHandleResponseErrorOfACanceledRequest(t *testing.T) {
+	s := &Service{logger: slog.New(slog.DiscardHandler)}
+	rec := httptest.NewRecorder()
+
+	s.handleResponseError(rec, httptest.NewRequest(http.MethodGet, "/api/v1/me", nil), fmt.Errorf("get session user: %w", context.Canceled))
+
+	assert.Equal(t, statusClientClosedRequest, rec.Code)
+	assert.Empty(t, rec.Body.String())
+}
 
 func TestHandleResponseError(t *testing.T) {
 	tests := []struct {

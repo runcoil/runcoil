@@ -29,6 +29,8 @@ type fakeAccountService struct {
 	user   domain.User
 	access account.Access
 
+	authenticated int
+
 	loginErr    error
 	changeErr   error
 	loggedOut   []byte
@@ -49,6 +51,8 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (a
 }
 
 func (f *fakeAccountService) Authenticate(_ context.Context, credential domain.Credential) (domain.Identity, error) {
+	f.authenticated++
+
 	if credential.Secret != testToken {
 		return domain.Identity{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
 	}
@@ -226,6 +230,33 @@ func TestLogout(t *testing.T) {
 	assert.Equal(t, -1, cookies[0].MaxAge)
 }
 
+func TestCrossOriginWriteIsRefusedBeforeTheSessionLookup(t *testing.T) {
+	accountService := &fakeAccountService{user: testUser}
+	h := newAPIServer(t, accountService)
+
+	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: testToken, origin: "https://evil.example"})
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Zero(t, accountService.authenticated)
+	assert.Nil(t, accountService.loggedOut)
+}
+
+func TestLogoutWithoutALiveSession(t *testing.T) {
+	for _, token := range []string{"", "ended"} {
+		accountService := &fakeAccountService{user: testUser}
+		h := newAPIServer(t, accountService)
+
+		rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: token})
+
+		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+		assert.Nil(t, accountService.loggedOut)
+
+		cookies := rec.Result().Cookies()
+		require.Len(t, cookies, 1)
+		assert.Equal(t, -1, cookies[0].MaxAge)
+	}
+}
+
 func TestGetMe(t *testing.T) {
 	projectID := uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f51")
 	accountService := &fakeAccountService{
@@ -318,10 +349,7 @@ func TestHandlersRefuseAContextWithoutAnIdentity(t *testing.T) {
 	h := newAuthHandler(&fakeAccountService{user: testUser}, false)
 	ctx := context.Background()
 
-	_, err := h.Logout(ctx, gen.LogoutRequestObject{})
-	assert.Error(t, err)
-
-	_, err = h.GetMe(ctx, gen.GetMeRequestObject{})
+	_, err := h.GetMe(ctx, gen.GetMeRequestObject{})
 	assert.Error(t, err)
 
 	_, err = h.ChangeMyPassword(ctx, gen.ChangeMyPasswordRequestObject{Body: &gen.ChangeMyPasswordJSONRequestBody{}})

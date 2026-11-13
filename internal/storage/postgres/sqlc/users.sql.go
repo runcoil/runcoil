@@ -134,18 +134,23 @@ func (q *Queries) UserLockForUpdate(ctx context.Context, db DBTX, id uuid.UUID) 
 	return id_2, err
 }
 
-const userUpdatePassword = `-- name: UserUpdatePassword :exec
+const userUpdatePassword = `-- name: UserUpdatePassword :execrows
 UPDATE users
 SET password_hash = $1::text
 WHERE id = $2::uuid
+  AND password_hash = $3::text
 `
 
 type UserUpdatePasswordParams struct {
-	PasswordHash string
-	ID           uuid.UUID
+	NewPasswordHash     string
+	ID                  uuid.UUID
+	CurrentPasswordHash string
 }
 
-func (q *Queries) UserUpdatePassword(ctx context.Context, db DBTX, arg UserUpdatePasswordParams) error {
-	_, err := db.Exec(ctx, userUpdatePassword, arg.PasswordHash, arg.ID)
-	return err
+func (q *Queries) UserUpdatePassword(ctx context.Context, db DBTX, arg UserUpdatePasswordParams) (int64, error) {
+	result, err := db.Exec(ctx, userUpdatePassword, arg.NewPasswordHash, arg.ID, arg.CurrentPasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
