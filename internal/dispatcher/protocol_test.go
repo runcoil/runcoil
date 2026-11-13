@@ -11,18 +11,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
 func TestRegistrationError(t *testing.T) {
 	err := registrationError(&domain.RegistrationError{Message: "task is declared twice", TaskName: "a"})
 
-	var apiErr *apierr.Error
-	require.True(t, errors.As(err, &apiErr))
-	assert.Equal(t, apierr.CodeInvalidRegistration, apiErr.Code)
-	assert.Equal(t, "task is declared twice", apiErr.Message)
-	assert.Equal(t, "a", apiErr.Details["task_name"])
+	var appErr *apperr.Error
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, apperr.CodeInvalidRegistration, appErr.Code)
+	assert.Equal(t, "task is declared twice", appErr.Message)
+	assert.Equal(t, "a", appErr.Details["task_name"])
 }
 
 func TestNewSessionTokenHashesTheToken(t *testing.T) {
@@ -141,9 +141,9 @@ func TestCompleteStepRefusesAnInvalidRetry(t *testing.T) {
 		Retry: domain.StepRetry{Policy: &domain.RetryPolicy{MaxAttempts: 31}},
 	})
 
-	var apiErr *apierr.Error
-	require.ErrorAs(t, err, &apiErr)
-	assert.Equal(t, apierr.CodeInvalidRequest, apiErr.Code)
+	var appErr *apperr.Error
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeInvalidRequest, appErr.Code)
 	assert.Nil(t, store.decide, "nothing reaches the store")
 }
 
@@ -257,7 +257,7 @@ func TestDeregisterOfAnEndedSession(t *testing.T) {
 
 	err := s.Deregister(context.Background(), domain.Worker{ID: uuid.New()}, "shutdown")
 
-	var apiErr *apierr.Error
-	require.ErrorAs(t, err, &apiErr)
-	assert.Equal(t, apierr.CodeUnauthenticated, apiErr.Code)
+	var appErr *apperr.Error
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
 }

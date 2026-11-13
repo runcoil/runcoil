@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/pkg/healthutil"
@@ -50,7 +50,7 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (a
 
 func (f *fakeAccountService) AuthenticateSession(_ context.Context, token string) (domain.User, error) {
 	if token != testToken {
-		return domain.User{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
+		return domain.User{}, apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	}
 
 	return f.user, nil
@@ -75,7 +75,7 @@ func (f *fakeAccountService) AuthorizePermission(user domain.User, _ domain.Perm
 		return nil
 	}
 
-	return apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
+	return apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 }
 
 func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler {
@@ -186,7 +186,7 @@ func TestLoginErrors(t *testing.T) {
 		wantError  string
 		wantFields []string
 	}{
-		{name: "wrong password", body: `{"login":"ana","password":"x"}`, loginErr: apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password"), wantCode: http.StatusUnauthorized, wantError: "unauthenticated"},
+		{name: "wrong password", body: `{"login":"ana","password":"x"}`, loginErr: apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password"), wantCode: http.StatusUnauthorized, wantError: "unauthenticated"},
 		{name: "missing password", body: `{"login":"ana"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"password"}},
 		{name: "missing both", body: `{}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login", "password"}},
 		{name: "empty login", body: `{"login":"","password":"x"}`, wantCode: http.StatusBadRequest, wantError: "invalid_request", wantFields: []string{"login"}},
@@ -271,7 +271,7 @@ func TestChangeMyPassword(t *testing.T) {
 func TestChangeMyPasswordRefused(t *testing.T) {
 	accountService := &fakeAccountService{
 		user:      testUser,
-		changeErr: apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+		changeErr: apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
 	}
 	h := newAPIServer(t, accountService)
 

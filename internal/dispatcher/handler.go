@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
@@ -261,7 +261,7 @@ func stepResultToProto(r domain.StepResult) *runcoilv1.CompleteStepResponse {
 func leaseFromProto(l *runcoilv1.Lease) (domain.Lease, error) {
 	runID, err := uuid.Parse(l.GetRunId())
 	if err != nil {
-		return domain.Lease{}, apierr.Invalid(apierr.CodeInvalidRequest, "lease run_id must be a UUID")
+		return domain.Lease{}, apperr.Invalid(apperr.CodeInvalidRequest, "lease run_id must be a UUID")
 	}
 
 	return domain.Lease{RunID: runID, Epoch: l.GetEpoch()}, nil

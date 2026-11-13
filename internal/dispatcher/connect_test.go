@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -12,13 +13,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
 )
 
 func TestErrorCodesMatchTheSchema(t *testing.T) {
-	for _, code := range apierr.Codes {
-		want, inSchema := runcoilv1.ErrorCode_value["ERROR_CODE_"+string(code)]
+	for _, code := range apperr.Codes {
+		want, inSchema := runcoilv1.ErrorCode_value["ERROR_CODE_"+strings.ToUpper(string(code))]
 		got, mapped := errorCodes[code]
 
 		assert.Equal(t, inSchema, mapped, code)
@@ -42,7 +43,7 @@ func TestTranslate(t *testing.T) {
 		assert.Equal(t, internalMessage, connectErr.Message())
 	})
 
-	t.Run("an api error keeps its code through a wrap", func(t *testing.T) {
+	t.Run("an app error keeps its code through a wrap", func(t *testing.T) {
 		err := i.translate(context.Background(), spec, fmt.Errorf("complete run: %w", errStaleLease))
 
 		var connectErr *connect.Error
@@ -59,7 +60,7 @@ func TestTranslate(t *testing.T) {
 }
 
 func TestToConnectError(t *testing.T) {
-	converted, err := toConnectError(apierr.Invalid(apierr.CodeInvalidRegistration, "task is declared twice").WithDetail("task_name", "a"))
+	converted, err := toConnectError(apperr.Invalid(apperr.CodeInvalidRegistration, "task is declared twice").WithDetail("task_name", "a"))
 	require.NoError(t, err)
 
 	assert.Equal(t, connect.CodeInvalidArgument, converted.Code())

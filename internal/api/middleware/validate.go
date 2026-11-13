@@ -18,7 +18,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/httperr"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 )
 
 const invalidRequestMessage = "request is not valid"
@@ -41,17 +41,17 @@ func handleValidationError(_ context.Context, err error, w http.ResponseWriter, 
 
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
-		httperr.Write(w, http.StatusRequestEntityTooLarge, httperr.New(apierr.CodePayloadTooLarge, "request body is too large"))
+		httperr.Write(w, http.StatusRequestEntityTooLarge, httperr.New(apperr.CodePayloadTooLarge, "request body is too large"))
 		return
 	}
 
 	if errors.Is(err, routers.ErrPathNotFound) {
-		httperr.Write(w, http.StatusNotFound, httperr.New(apierr.CodeNotFound, "no such operation"))
+		httperr.Write(w, http.StatusNotFound, httperr.New(apperr.CodeNotFound, "no such operation"))
 		return
 	}
 
 	if errors.Is(err, routers.ErrMethodNotAllowed) {
-		httperr.Write(w, http.StatusMethodNotAllowed, httperr.New(apierr.CodeInvalidRequest, "method not allowed"))
+		httperr.Write(w, http.StatusMethodNotAllowed, httperr.New(apperr.CodeInvalidRequest, "method not allowed"))
 		return
 	}
 
@@ -70,11 +70,11 @@ func handleValidationError(_ context.Context, err error, w http.ResponseWriter, 
 	}
 
 	if errors.As(err, &requestErr) && requestErrorText(requestErr) != "" {
-		httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, requestErrorText(requestErr)))
+		httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, requestErrorText(requestErr)))
 		return
 	}
 
-	httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, invalidRequestMessage))
+	httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, invalidRequestMessage))
 }
 
 func requestErrorText(requestErr *openapi3filter.RequestError) string {
@@ -91,7 +91,7 @@ func invalidRequest(params []gen.ErrorParam) gen.ErrorResponse {
 		text = params[0].Message
 	}
 
-	return httperr.New(apierr.CodeInvalidRequest, text, params...)
+	return httperr.New(apperr.CodeInvalidRequest, text, params...)
 }
 
 func violationParams(violation *jsonschema.ValidationError) []gen.ErrorParam {

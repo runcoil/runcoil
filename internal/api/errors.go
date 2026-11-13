@@ -7,27 +7,27 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/httperr"
 	"github.com/runcoil/runcoil/internal/api/middleware"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 )
 
 func (s *Service) handleRequestError(w http.ResponseWriter, r *http.Request, err error) {
 	middleware.RecordError(r.Context(), err)
-	httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, err.Error()))
+	httperr.Write(w, http.StatusBadRequest, httperr.New(apperr.CodeInvalidRequest, err.Error()))
 }
 
 func (s *Service) handleResponseError(w http.ResponseWriter, r *http.Request, err error) {
 	middleware.RecordError(r.Context(), err)
 
-	var apiErr *apierr.Error
-	if !errors.As(err, &apiErr) {
+	var appErr *apperr.Error
+	if !errors.As(err, &appErr) {
 		httperr.Write(w, http.StatusInternalServerError, httperr.Internal)
 		return
 	}
 
 	var params []gen.ErrorParam
-	if field := apiErr.Details["field"]; field != "" {
-		params = append(params, gen.ErrorParam{Field: field, Message: apiErr.Message})
+	if field := appErr.Details["field"]; field != "" {
+		params = append(params, gen.ErrorParam{Field: field, Message: appErr.Message})
 	}
 
-	httperr.Write(w, apiErr.Kind.HTTPStatus(), httperr.New(apiErr.Code, apiErr.Message, params...))
+	httperr.Write(w, appErr.Kind.HTTPStatus(), httperr.New(appErr.Code, appErr.Message, params...))
 }

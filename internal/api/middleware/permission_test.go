@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/openapi"
 )
@@ -94,7 +94,7 @@ func (f *fakeAuthorizer) AuthorizePermission(user domain.User, permission domain
 		return nil
 	}
 
-	return apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
+	return apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 }
 
 func TestCheckPermission(t *testing.T) {
@@ -112,14 +112,14 @@ func TestCheckPermission(t *testing.T) {
 		operation string
 		ctx       context.Context
 		allowed   bool
-		wantKind  apierr.Kind
+		wantKind  apperr.Kind
 		wantAsked domain.Permission
 	}{
 		{name: "public without a caller", operation: "Login", ctx: context.Background(), allowed: true},
-		{name: "self without a caller", operation: "GetMe", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
+		{name: "self without a caller", operation: "GetMe", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
 		{name: "self signed in", operation: "GetMe", ctx: signedIn, allowed: true},
-		{name: "permission without a caller", operation: "CreateUser", ctx: context.Background(), wantKind: apierr.KindUnauthenticated},
-		{name: "permission refused", operation: "ListMembers", ctx: signedIn, wantKind: apierr.KindPermissionDenied, wantAsked: domain.PermissionMembersRead},
+		{name: "permission without a caller", operation: "CreateUser", ctx: context.Background(), wantKind: apperr.KindUnauthenticated},
+		{name: "permission refused", operation: "ListMembers", ctx: signedIn, wantKind: apperr.KindPermissionDenied, wantAsked: domain.PermissionMembersRead},
 		{name: "permission granted", operation: "CreateUser", ctx: admin, allowed: true, wantAsked: domain.PermissionUsersWrite},
 	}
 
@@ -143,9 +143,9 @@ func TestCheckPermission(t *testing.T) {
 				return
 			}
 
-			apiErr, ok := errors.AsType[*apierr.Error](err)
+			appErr, ok := errors.AsType[*apperr.Error](err)
 			require.True(t, ok, err)
-			assert.Equal(t, tt.wantKind, apiErr.Kind)
+			assert.Equal(t, tt.wantKind, appErr.Kind)
 			assert.False(t, called)
 		})
 	}

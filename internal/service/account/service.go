@@ -6,15 +6,15 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
 // The errors the service returns to clients.
 var (
-	ErrWrongLogin       = apierr.Unauthenticated(apierr.CodeUnauthenticated, "wrong login or password")
-	ErrNotSignedIn      = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
-	ErrPermissionDenied = apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
+	ErrWrongLogin       = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
+	ErrNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	ErrPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 )
 
 // UserStore keeps the users.

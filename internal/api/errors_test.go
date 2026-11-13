@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 )
 
 func TestHandleResponseError(t *testing.T) {
@@ -20,13 +20,13 @@ func TestHandleResponseError(t *testing.T) {
 	}{
 		{
 			name:       "api error",
-			err:        apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in"),
+			err:        apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in"),
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"code": "unauthenticated", "message": "not signed in"}`,
 		},
 		{
 			name:       "api error with a field",
-			err:        apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+			err:        apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"code": "invalid_request", "message": "current password is wrong", "params": [{"field": "currentPassword", "message": "current password is wrong"}]}`,
 		},

@@ -11,7 +11,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/runcoil/runcoil/internal/api/gen"
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -21,7 +21,7 @@ const (
 	permissionPublic    = "public"
 )
 
-var errNotSignedIn = apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
+var errNotSignedIn = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 
 // Permissions reads the permission of every operation in spec, keyed by the operation's
 // Go name. An operation with `security: []` is public.

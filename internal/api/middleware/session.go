@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -47,8 +47,8 @@ func LoadSession(cookieName string, authenticator Authenticator, handleError fun
 
 			user, err := authenticator.AuthenticateSession(r.Context(), cookie.Value)
 
-			var apiErr *apierr.Error
-			if errors.As(err, &apiErr) && apiErr.Kind == apierr.KindUnauthenticated {
+			var appErr *apperr.Error
+			if errors.As(err, &appErr) && appErr.Kind == apperr.KindUnauthenticated {
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -121,8 +121,8 @@ func ptr[T any](v T) *T {
 func assertUnauthenticated(t *testing.T, err error) {
 	t.Helper()
 
-	apiErr, ok := errors.AsType[*apierr.Error](err)
+	appErr, ok := errors.AsType[*apperr.Error](err)
 	require.True(t, ok, err)
-	assert.Equal(t, apierr.KindUnauthenticated, apiErr.Kind)
-	assert.Equal(t, apierr.CodeUnauthenticated, apiErr.Code)
+	assert.Equal(t, apperr.KindUnauthenticated, appErr.Kind)
+	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
 }

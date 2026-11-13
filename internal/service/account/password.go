@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -49,11 +49,11 @@ func (s *Service) ChangePassword(ctx context.Context, user domain.User, token, c
 	}
 
 	if !ok {
-		return apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+		return apperr.Invalid(apperr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
 	}
 
 	if err := ValidatePassword(newPassword); err != nil {
-		return apierr.Invalid(apierr.CodeInvalidRequest, "new password "+err.Error()).WithDetail("field", "newPassword")
+		return apperr.Invalid(apperr.CodeInvalidRequest, "new password "+err.Error()).WithDetail("field", "newPassword")
 	}
 
 	hash, err := HashPassword(ctx, newPassword)

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/argon2"
 
-	"github.com/runcoil/runcoil/internal/apierr"
+	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
@@ -49,11 +49,11 @@ func TestChangePasswordRefused(t *testing.T) {
 
 			err := newService(store).ChangePassword(context.Background(), ana, "token", tt.current, tt.new)
 
-			apiErr, ok := errors.AsType[*apierr.Error](err)
+			appErr, ok := errors.AsType[*apperr.Error](err)
 			require.True(t, ok, err)
-			assert.Equal(t, apierr.KindInvalid, apiErr.Kind)
-			assert.Equal(t, apierr.CodeInvalidRequest, apiErr.Code)
-			assert.Equal(t, tt.wantField, apiErr.Details["field"])
+			assert.Equal(t, apperr.KindInvalid, appErr.Kind)
+			assert.Equal(t, apperr.CodeInvalidRequest, appErr.Code)
+			assert.Equal(t, tt.wantField, appErr.Details["field"])
 			assert.Empty(t, store.passwordHash)
 		})
 	}
