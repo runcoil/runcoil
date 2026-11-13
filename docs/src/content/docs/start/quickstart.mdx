@@ -30,13 +30,13 @@ The server listens on two ports. Port `8080` has the health checks, and port `70
 
 ## Create an API key
 
-A worker sends an API key when it registers. Runcoil has no command that creates keys yet, so add one to the Compose database by hand. The server stores only the SHA-256 hash of a key:
+A worker sends an API key when it registers. Runcoil has no command that creates keys yet, so add one by hand to the project `default`, which the server creates at its first start. The server stores only the SHA-256 hash of a key:
 
 ```sh
 docker compose exec -T postgres psql -U postgres <<'SQL'
-INSERT INTO projects (id, name) VALUES ('01900000-0000-7000-8000-000000000001', 'default');
 INSERT INTO api_keys (id, project_id, name, key_hash)
-VALUES ('01900000-0000-7000-8000-000000000002', '01900000-0000-7000-8000-000000000001', 'local', sha256('rc_api_local_dev'));
+SELECT '01900000-0000-7000-8000-000000000002', id, 'local', sha256('rc_api_local_dev')
+FROM projects WHERE name = 'default';
 SQL
 ```
 
