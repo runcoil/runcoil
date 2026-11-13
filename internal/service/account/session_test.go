@@ -76,7 +76,7 @@ func TestAuthenticate(t *testing.T) {
 	}}
 	s := newService(store)
 
-	identity, err := s.Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "ana-token"})
+	identity, err := s.Authenticate(context.Background(), domain.Credential{Type: domain.CredentialSession, Secret: "ana-token"})
 	require.NoError(t, err)
 	assert.Equal(t, domain.Identity{
 		Type:        domain.IdentityUser,
@@ -85,20 +85,20 @@ func TestAuthenticate(t *testing.T) {
 		Permissions: []domain.Permission{},
 	}, identity)
 
-	identity, err = s.Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "root-token"})
+	identity, err = s.Authenticate(context.Background(), domain.Credential{Type: domain.CredentialSession, Secret: "root-token"})
 	require.NoError(t, err)
 	assert.Equal(t, root.ID, identity.UserID)
 	assert.Equal(t, domain.Permissions, identity.Permissions)
 }
 
 func TestAuthenticateWithoutSession(t *testing.T) {
-	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Kind: domain.CredentialSession, Secret: "token"})
+	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Type: domain.CredentialSession, Secret: "token"})
 
 	assertUnauthenticated(t, err)
 }
 
-func TestAuthenticateRefusesAnUnknownCredentialKind(t *testing.T) {
-	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Kind: "other", Secret: "token"})
+func TestAuthenticateRefusesAnUnknownCredentialType(t *testing.T) {
+	_, err := newService(&fakeStore{}).Authenticate(context.Background(), domain.Credential{Type: "other", Secret: "token"})
 
 	require.Error(t, err)
 	_, isAPIError := errors.AsType[*apierr.Error](err)

@@ -75,8 +75,8 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 // Authenticate returns the identity a credential proves, and records the activity of its
 // session.
 func (s *Service) Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error) {
-	if credential.Kind != domain.CredentialSession {
-		return domain.Identity{}, fmt.Errorf("unknown credential kind %q", credential.Kind)
+	if credential.Type != domain.CredentialSession {
+		return domain.Identity{}, fmt.Errorf("unknown credential type %q", credential.Type)
 	}
 
 	sessionID := hashToken(credential.Secret)

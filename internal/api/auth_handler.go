@@ -31,7 +31,7 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 
 	return gen.Login200JSONResponse{
 		Body: gen.LoginResponse{
-			User:                    userToAPI(res.User),
+			User:                    userToResponse(res.User),
 			PasswordChangeSuggested: res.PasswordChangeSuggested,
 		},
 		Headers: gen.Login200ResponseHeaders{
@@ -80,13 +80,13 @@ func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.
 			Id:          openapi_types.UUID(project.ProjectID),
 			Name:        project.ProjectName,
 			Role:        gen.Role(project.Role),
-			Permissions: permissionsToAPI(project.Permissions),
+			Permissions: permissionsToResponse(project.Permissions),
 		})
 	}
 
 	return gen.GetMe200JSONResponse{
-		User:        userToAPI(user),
-		Permissions: permissionsToAPI(access.Permissions),
+		User:        userToResponse(user),
+		Permissions: permissionsToResponse(access.Permissions),
 		Projects:    projects,
 	}, nil
 }
@@ -117,7 +117,7 @@ func (h *authHandler) sessionCookie(token string, expires time.Time) *http.Cooki
 	}
 }
 
-func userToAPI(user domain.User) gen.User {
+func userToResponse(user domain.User) gen.User {
 	return gen.User{
 		Id:       openapi_types.UUID(user.ID),
 		Username: user.Username,
@@ -125,7 +125,7 @@ func userToAPI(user domain.User) gen.User {
 	}
 }
 
-func permissionsToAPI(permissions []domain.Permission) []gen.Permission {
+func permissionsToResponse(permissions []domain.Permission) []gen.Permission {
 	out := make([]gen.Permission, 0, len(permissions))
 	for _, permission := range permissions {
 		out = append(out, gen.Permission(permission))

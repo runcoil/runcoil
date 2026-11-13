@@ -2,17 +2,17 @@ package domain
 
 import "uuid"
 
-// CredentialKind says how a client proves who it is.
-type CredentialKind string
+// CredentialType says how a client proves who it is.
+type CredentialType string
 
-// The kinds of a credential.
+// The types of a credential.
 const (
-	CredentialSession CredentialKind = "session"
+	CredentialSession CredentialType = "session"
 )
 
 // Credential is what a client sends to prove who it is.
 type Credential struct {
-	Kind   CredentialKind
+	Type   CredentialType
 	Secret string
 }
 
