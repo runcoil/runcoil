@@ -28,6 +28,7 @@ export interface components {
         /** @description The signed-in user. */
         LoginResponse: {
             /**
+             * @description The user who signed in.
              * @example {
              *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50",
              *       "username": "admin"
@@ -35,7 +36,7 @@ export interface components {
              */
             user: components["schemas"]["User"];
             /**
-             * @description True when the password is the first server admin's default, so the dashboard offers to change it.
+             * @description True when the user is the first server admin and still has the bootstrap password, so the dashboard offers to change it.
              * @example false
              */
             passwordChangeSuggested: boolean;
@@ -78,6 +79,10 @@ export interface components {
              * @example default
              */
             name: string;
+            /**
+             * @description The user's role in the project. A server admin is admin in every project.
+             * @example viewer
+             */
             role: components["schemas"]["Role"];
             /**
              * @description The user's permissions in the project.
@@ -147,6 +152,7 @@ export interface components {
         /** @description The signed-in user and what they can do. */
         Me: {
             /**
+             * @description The signed-in user.
              * @example {
              *       "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50",
              *       "username": "admin"
@@ -240,7 +246,7 @@ export interface components {
             put?: never;
             /**
              * Sign out
-             * @description Ends the session and clears its cookie.
+             * @description Ends the session, if it is still live, and clears its cookie. A request without a live session also clears the cookie.
              */
             post: operations["logout"];
             delete?: never;
@@ -346,8 +352,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description unauthenticated: no live session */
-            401: components["responses"]["Error"];
             /** @description permission_denied: the request comes from another origin */
             403: components["responses"]["Error"];
         };
