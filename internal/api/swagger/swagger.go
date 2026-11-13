@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	pagePath = "/api/docs"
-	specPath = "/api/docs/openapi.yaml"
+	pagePath = "/docs"
+	specPath = "/docs/openapi.yaml"
 )
 
 const page = `<!doctype html>
@@ -36,8 +36,8 @@ const page = `<!doctype html>
 </html>
 `
 
-// Register serves the docs page at /api/docs and spec, the bundled OpenAPI document, at
-// /api/docs/openapi.yaml.
+// Register serves the docs page at /docs and spec, the bundled OpenAPI document, at
+// /docs/openapi.yaml.
 func Register(mux *http.ServeMux, spec []byte) {
 	mux.HandleFunc("GET "+pagePath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

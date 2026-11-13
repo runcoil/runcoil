@@ -17,8 +17,8 @@ func TestRegister(t *testing.T) {
 		wantType    string
 		wantContent string
 	}{
-		{path: "/api/docs", wantType: "text/html; charset=utf-8", wantContent: `url: "/api/docs/openapi.yaml"`},
-		{path: "/api/docs/openapi.yaml", wantType: "application/yaml", wantContent: "openapi: 3.1.0\n"},
+		{path: "/docs", wantType: "text/html; charset=utf-8", wantContent: `url: "/docs/openapi.yaml"`},
+		{path: "/docs/openapi.yaml", wantType: "application/yaml", wantContent: "openapi: 3.1.0\n"},
 	}
 
 	for _, tt := range tests {
