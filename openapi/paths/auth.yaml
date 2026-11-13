@@ -29,13 +29,13 @@ login:
             schema:
               $ref: "../components/schemas/auth.yaml#/LoginResponse"
       "400":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/InvalidRequest"
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
       "413":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
 
 logout:
   post:
@@ -55,6 +55,6 @@ logout:
             schema:
               type: string
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
