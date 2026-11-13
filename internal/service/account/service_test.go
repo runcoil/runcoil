@@ -28,7 +28,18 @@ type fakeStore struct {
 	createdWith   string
 	deleted       []byte
 	passwordHash  string
+	replacedHash  string
 	keptTokenHash []byte
+}
+
+func (f *fakeStore) GetUserByID(_ context.Context, id uuid.UUID) (domain.User, error) {
+	for _, u := range f.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+
+	return domain.User{}, domain.ErrUserNotFound
 }
 
 func (f *fakeStore) GetUserByUsername(_ context.Context, username string) (domain.User, error) {
@@ -77,12 +88,13 @@ func (f *fakeStore) DeleteSession(_ context.Context, tokenHash []byte) error {
 	return nil
 }
 
-func (f *fakeStore) UpdatePasswordAndDeleteOtherSessions(_ context.Context, _ uuid.UUID, passwordHash string, keepTokenHash []byte) error {
+func (f *fakeStore) UpdatePasswordAndDeleteOtherSessions(_ context.Context, _ uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error {
 	if f.updateErr != nil {
 		return f.updateErr
 	}
 
-	f.passwordHash = passwordHash
+	f.replacedHash = currentHash
+	f.passwordHash = newHash
 	f.keptTokenHash = keepTokenHash
 
 	return nil
@@ -97,12 +109,14 @@ func (f *fakeStore) ListProjects(context.Context) ([]domain.ProjectRole, error) 
 }
 
 var testConfig = Config{
-	SessionMaxLifetime: 30 * 24 * time.Hour,
-	SessionMaxInactive: 7 * 24 * time.Hour,
+	SessionMaxLifetime:     30 * 24 * time.Hour,
+	SessionMaxInactive:     7 * 24 * time.Hour,
+	BootstrapAdminUsername: "admin",
+	BootstrapAdminPassword: "admin",
 }
 
 func newService(store *fakeStore) *Service {
-	return New(testConfig, store, store, store, "admin")
+	return New(testConfig, store, store, store)
 }
 
 func hashPassword(t *testing.T, password string) string {
@@ -112,6 +126,10 @@ func hashPassword(t *testing.T, password string) string {
 	require.NoError(t, err)
 
 	return hash
+}
+
+func identityOf(user domain.User) domain.Identity {
+	return domain.Identity{Type: domain.IdentityUser, UserID: user.ID, SessionID: hashToken("token")}
 }
 
 func ptr[T any](v T) *T {
@@ -125,4 +143,12 @@ func assertUnauthenticated(t *testing.T, err error) {
 	require.True(t, ok, err)
 	assert.Equal(t, apperr.KindUnauthenticated, appErr.Kind)
 	assert.Equal(t, apperr.CodeUnauthenticated, appErr.Code)
+}
+
+func TestConfigValidate(t *testing.T) {
+	assert.NoError(t, testConfig.Validate())
+	assert.NoError(t, (&Config{SessionMaxLifetime: time.Hour, SessionMaxInactive: 5 * time.Minute}).Validate())
+	assert.EqualError(t, (&Config{SessionMaxInactive: time.Hour}).Validate(), "max lifetime must be positive")
+	assert.EqualError(t, (&Config{SessionMaxLifetime: time.Hour}).Validate(), "max inactive must be at least 5m")
+	assert.EqualError(t, (&Config{SessionMaxLifetime: time.Hour, SessionMaxInactive: 30 * time.Second}).Validate(), "max inactive must be at least 5m")
 }

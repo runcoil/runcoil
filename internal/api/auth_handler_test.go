@@ -29,9 +29,11 @@ type fakeAccountService struct {
 	user   domain.User
 	access account.Access
 
+	authenticated int
+
 	loginErr    error
 	changeErr   error
-	loggedOut   string
+	loggedOut   []byte
 	newPassword string
 }
 
@@ -48,34 +50,37 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (a
 	}, nil
 }
 
-func (f *fakeAccountService) AuthenticateSession(_ context.Context, token string) (domain.User, error) {
-	if token != testToken {
-		return domain.User{}, apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+func (f *fakeAccountService) Authenticate(_ context.Context, credential domain.Credential) (domain.Identity, error) {
+	f.authenticated++
+
+	if credential.Secret != testToken {
+		return domain.Identity{}, apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	}
 
-	return f.user, nil
+	permissions := []domain.Permission{}
+	if f.user.IsServerAdmin {
+		permissions = domain.Permissions
+	}
+
+	return domain.Identity{Type: domain.IdentityUser, UserID: f.user.ID, SessionID: []byte(testToken), Permissions: permissions}, nil
 }
 
-func (f *fakeAccountService) Logout(_ context.Context, token string) error {
-	f.loggedOut = token
+func (f *fakeAccountService) Logout(_ context.Context, identity domain.Identity) error {
+	f.loggedOut = identity.SessionID
 	return nil
 }
 
-func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.User, _, _, newPassword string) error {
+func (f *fakeAccountService) GetUser(context.Context, uuid.UUID) (domain.User, error) {
+	return f.user, nil
+}
+
+func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.Identity, _, newPassword string) error {
 	f.newPassword = newPassword
 	return f.changeErr
 }
 
 func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (account.Access, error) {
 	return f.access, nil
-}
-
-func (f *fakeAccountService) AuthorizePermission(user domain.User, _ domain.Permission) error {
-	if user.IsServerAdmin {
-		return nil
-	}
-
-	return apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 }
 
 func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler {
@@ -217,12 +222,39 @@ func TestLogout(t *testing.T) {
 	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: testToken})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, testToken, accountService.loggedOut)
+	assert.Equal(t, []byte(testToken), accountService.loggedOut)
 
 	cookies := rec.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, sessionCookieName, cookies[0].Name)
 	assert.Equal(t, -1, cookies[0].MaxAge)
+}
+
+func TestCrossOriginWriteIsRefusedBeforeTheSessionLookup(t *testing.T) {
+	accountService := &fakeAccountService{user: testUser}
+	h := newAPIServer(t, accountService)
+
+	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: testToken, origin: "https://evil.example"})
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Zero(t, accountService.authenticated)
+	assert.Nil(t, accountService.loggedOut)
+}
+
+func TestLogoutWithoutALiveSession(t *testing.T) {
+	for _, token := range []string{"", "ended"} {
+		accountService := &fakeAccountService{user: testUser}
+		h := newAPIServer(t, accountService)
+
+		rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: token})
+
+		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+		assert.Nil(t, accountService.loggedOut)
+
+		cookies := rec.Result().Cookies()
+		require.Len(t, cookies, 1)
+		assert.Equal(t, -1, cookies[0].MaxAge)
+	}
 }
 
 func TestGetMe(t *testing.T) {
@@ -313,16 +345,13 @@ func TestRequestsRefusedBeforeTheHandler(t *testing.T) {
 	}
 }
 
-func TestHandlersRefuseAContextWithoutACaller(t *testing.T) {
+func TestHandlersRefuseAContextWithoutAnIdentity(t *testing.T) {
 	h := newAuthHandler(&fakeAccountService{user: testUser}, false)
 	ctx := context.Background()
 
-	_, err := h.Logout(ctx, gen.LogoutRequestObject{})
-	assert.ErrorIs(t, err, errNoCaller)
-
-	_, err = h.GetMe(ctx, gen.GetMeRequestObject{})
-	assert.ErrorIs(t, err, errNoCaller)
+	_, err := h.GetMe(ctx, gen.GetMeRequestObject{})
+	assert.Error(t, err)
 
 	_, err = h.ChangeMyPassword(ctx, gen.ChangeMyPasswordRequestObject{Body: &gen.ChangeMyPasswordJSONRequestBody{}})
-	assert.ErrorIs(t, err, errNoCaller)
+	assert.Error(t, err)
 }

@@ -14,8 +14,6 @@ import (
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-var errNoCaller = errors.New("no caller in the context")
-
 type authHandler struct {
 	accountService AccountService
 	secureCookie   bool
@@ -33,7 +31,7 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 
 	return gen.Login200JSONResponse{
 		Body: gen.LoginResponse{
-			User:                    userToAPI(res.User),
+			User:                    userToResponse(res.User),
 			PasswordChangeSuggested: res.PasswordChangeSuggested,
 		},
 		Headers: gen.Login200ResponseHeaders{
@@ -43,13 +41,10 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 }
 
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
-	if !ok {
-		return nil, errNoCaller
-	}
-
-	if err := h.accountService.Logout(ctx, c.Token); err != nil {
-		return nil, fmt.Errorf("logout: %w", err)
+	if identity, ok := middleware.IdentityFromContext(ctx); ok {
+		if err := h.accountService.Logout(ctx, identity); err != nil {
+			return nil, fmt.Errorf("logout: %w", err)
+		}
 	}
 
 	cleared := h.sessionCookie("", time.Time{}) //nolint:gosec // Secure follows api.secure-cookie, off for a dashboard over plain HTTP.
@@ -61,12 +56,17 @@ func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (ge
 }
 
 func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
+	identity, ok := middleware.IdentityFromContext(ctx)
 	if !ok {
-		return nil, errNoCaller
+		return nil, errors.New("no identity in the context")
 	}
 
-	access, err := h.accountService.GetUserAccess(ctx, c.User)
+	user, err := h.accountService.GetUser(ctx, identity.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	access, err := h.accountService.GetUserAccess(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("get access: %w", err)
 	}
@@ -77,24 +77,24 @@ func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.
 			Id:          openapi_types.UUID(project.ProjectID),
 			Name:        project.ProjectName,
 			Role:        gen.Role(project.Role),
-			Permissions: permissionsToAPI(project.Permissions),
+			Permissions: permissionsToResponse(project.Permissions),
 		})
 	}
 
 	return gen.GetMe200JSONResponse{
-		User:        userToAPI(c.User),
-		Permissions: permissionsToAPI(access.Permissions),
+		User:        userToResponse(user),
+		Permissions: permissionsToResponse(access.Permissions),
 		Projects:    projects,
 	}, nil
 }
 
 func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
+	identity, ok := middleware.IdentityFromContext(ctx)
 	if !ok {
-		return nil, errNoCaller
+		return nil, errors.New("no identity in the context")
 	}
 
-	err := h.accountService.ChangePassword(ctx, c.User, c.Token, req.Body.CurrentPassword, req.Body.NewPassword)
+	err := h.accountService.ChangePassword(ctx, identity, req.Body.CurrentPassword, req.Body.NewPassword)
 	if err != nil {
 		return nil, fmt.Errorf("change password: %w", err)
 	}
@@ -114,7 +114,7 @@ func (h *authHandler) sessionCookie(token string, expires time.Time) *http.Cooki
 	}
 }
 
-func userToAPI(user domain.User) gen.User {
+func userToResponse(user domain.User) gen.User {
 	return gen.User{
 		Id:       openapi_types.UUID(user.ID),
 		Username: user.Username,
@@ -122,7 +122,7 @@ func userToAPI(user domain.User) gen.User {
 	}
 }
 
-func permissionsToAPI(permissions []domain.Permission) []gen.Permission {
+func permissionsToResponse(permissions []domain.Permission) []gen.Permission {
 	out := make([]gen.Permission, 0, len(permissions))
 	for _, permission := range permissions {
 		out = append(out, gen.Permission(permission))

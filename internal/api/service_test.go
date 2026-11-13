@@ -177,3 +177,19 @@ func TestRunListenError(t *testing.T) {
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
 }
+
+func TestSwagger(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		h := newAPIServerWithConfig(t, Config{Port: 8080, Swagger: enabled}, &fakeAccountService{user: testUser})
+
+		for _, path := range []string{"/docs", "/docs/openapi.yaml"} {
+			rec := do(t, h, call{method: http.MethodGet, path: path})
+
+			if enabled {
+				assert.Equal(t, http.StatusOK, rec.Code, path)
+			} else {
+				assert.Equal(t, http.StatusNotFound, rec.Code, path)
+			}
+		}
+	}
+}

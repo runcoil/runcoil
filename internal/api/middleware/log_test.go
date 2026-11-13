@@ -88,9 +88,3 @@ func TestLogRequestDefaultsToOK(t *testing.T) {
 
 	assert.InDelta(t, 200, decodeLogLine(t, buf)["status"], 0)
 }
-
-func TestRecordErrorOutsideARequestDoesNothing(t *testing.T) {
-	assert.NotPanics(t, func() {
-		RecordError(httptest.NewRequest(http.MethodGet, "/", nil).Context(), errors.New("x"))
-	})
-}

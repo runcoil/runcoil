@@ -1,7 +1,6 @@
 package apperr
 
-// Code is the stable identifier of an application error, in lower snake case. The dashboard
-// API sends it as an ErrorCode of its schema.
+// Code is the stable identifier of an application error, in lower snake case.
 type Code string
 
 // The codes of the application.

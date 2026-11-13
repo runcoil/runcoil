@@ -29,22 +29,28 @@ login:
             schema:
               $ref: "../components/schemas/auth.yaml#/LoginResponse"
       "400":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: the body is not valid"
       "401":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/Unauthenticated"
+        description: "unauthenticated: the login or the password is wrong, or the user is disabled"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the request comes from another origin"
       "413":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PayloadTooLarge"
+        description: "payload_too_large: the body is larger than 1 MiB"
 
 logout:
   post:
     operationId: logout
     summary: Sign out
-    description: Ends the session and clears its cookie.
+    description: >-
+      Ends the session, if it is still live, and clears its cookie. A request without a
+      live session also clears the cookie.
     tags:
       - Auth
-    x-runcoil-permission: self
+    security: []
     responses:
       "204":
         description: The session is ended
@@ -54,7 +60,6 @@ logout:
             required: true
             schema:
               type: string
-      "401":
-        $ref: "../components/responses.yaml#/Error"
       "403":
-        $ref: "../components/responses.yaml#/Error"
+        $ref: "../components/responses.yaml#/PermissionDenied"
+        description: "permission_denied: the request comes from another origin"

@@ -1,8 +1,13 @@
 package account
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"regexp"
+	"uuid"
+
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
@@ -14,4 +19,14 @@ func ValidateUsername(name string) error {
 	}
 
 	return nil
+}
+
+// GetUser returns the user with id.
+func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	user, err := s.userStore.GetUserByID(ctx, id)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("get user: %w", err)
+	}
+
+	return user, nil
 }

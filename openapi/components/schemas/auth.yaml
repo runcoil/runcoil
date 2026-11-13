@@ -28,13 +28,14 @@ LoginResponse:
   properties:
     user:
       $ref: "#/User"
+      description: The user who signed in.
       x-order: 1
       example:
         id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
         username: admin
     passwordChangeSuggested:
       type: boolean
-      description: True when the password is the first server admin's default, so the dashboard offers to change it.
+      description: True when the user is the first server admin and still has the bootstrap password, so the dashboard offers to change it.
       example: false
       x-order: 2
   required:
@@ -96,6 +97,7 @@ Me:
   properties:
     user:
       $ref: "#/User"
+      description: The signed-in user.
       x-order: 1
       example:
         id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
@@ -148,6 +150,8 @@ ProjectAccess:
       x-order: 2
     role:
       $ref: "#/Role"
+      description: The user's role in the project. A server admin is admin in every project.
+      example: viewer
       x-order: 3
     permissions:
       type: array

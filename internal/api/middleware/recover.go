@@ -27,9 +27,11 @@ func Recover() func(http.Handler) http.Handler {
 
 				recordPanic(r.Context(), fmt.Errorf("panic: %v", v), string(debug.Stack()))
 
-				if !rec.wroteHeader {
-					httperr.Write(rec, http.StatusInternalServerError, httperr.Internal)
+				if rec.wroteHeader {
+					panic(http.ErrAbortHandler)
 				}
+
+				httperr.Write(rec, http.StatusInternalServerError, httperr.Internal)
 			}()
 
 			next.ServeHTTP(rec, r)

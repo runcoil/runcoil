@@ -15,27 +15,32 @@ import (
 )
 
 type fakeAuthenticator struct {
-	user domain.User
-	err  error
+	identity domain.Identity
+	err      error
+	got      *domain.Credential
 }
 
-func (f fakeAuthenticator) AuthenticateSession(context.Context, string) (domain.User, error) {
-	return f.user, f.err
+func (f fakeAuthenticator) Authenticate(_ context.Context, credential domain.Credential) (domain.Identity, error) {
+	if f.got != nil {
+		*f.got = credential
+	}
+
+	return f.identity, f.err
 }
 
-func TestLoadSession(t *testing.T) {
-	ana := domain.User{ID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50"), Username: "ana"}
+func TestAuthenticate(t *testing.T) {
+	ana := domain.Identity{Type: domain.IdentityUser, UserID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50")}
 
 	tests := []struct {
 		name          string
 		cookie        string
 		authenticator fakeAuthenticator
-		wantCaller    bool
+		wantIdentity  bool
 		wantHandled   bool
 	}{
 		{name: "no cookie"},
 		{name: "empty cookie", cookie: ""},
-		{name: "live session", cookie: "token", authenticator: fakeAuthenticator{user: ana}, wantCaller: true},
+		{name: "live session", cookie: "token", authenticator: fakeAuthenticator{identity: ana}, wantIdentity: true},
 		{name: "ended session", cookie: "token", authenticator: fakeAuthenticator{err: apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")}},
 		{name: "store failure", cookie: "token", authenticator: fakeAuthenticator{err: assert.AnError}, wantHandled: true},
 	}
@@ -44,13 +49,15 @@ func TestLoadSession(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var handled error
 			var reached bool
-			var caller Caller
-			var hasCaller bool
-			h := LoadSession("session", tt.authenticator, func(_ http.ResponseWriter, _ *http.Request, err error) {
+			var identity domain.Identity
+			var hasIdentity bool
+			var credential domain.Credential
+			tt.authenticator.got = &credential
+			h := Authenticate("session", tt.authenticator, func(_ http.ResponseWriter, _ *http.Request, err error) {
 				handled = err
 			})(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				reached = true
-				caller, hasCaller = CallerFromContext(r.Context())
+				identity, hasIdentity = IdentityFromContext(r.Context())
 			}))
 			r := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tt.cookie != "" {
@@ -68,21 +75,22 @@ func TestLoadSession(t *testing.T) {
 
 			assert.NoError(t, handled)
 			assert.True(t, reached)
-			assert.Equal(t, tt.wantCaller, hasCaller)
+			assert.Equal(t, tt.wantIdentity, hasIdentity)
 
-			if tt.wantCaller {
-				assert.Equal(t, Caller{User: ana, Token: "token"}, caller)
+			if tt.wantIdentity {
+				assert.Equal(t, ana, identity)
+				assert.Equal(t, domain.Credential{Type: domain.CredentialSession, Secret: "token"}, credential)
 			}
 		})
 	}
 }
 
-func TestLoadSessionPutsTheUserOnTheLogLine(t *testing.T) {
+func TestAuthenticatePutsTheUserOnTheLogLine(t *testing.T) {
 	logger, buf := newTestLogger()
-	ana := domain.User{ID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50")}
+	ana := domain.Identity{UserID: uuid.MustParse("019a5b1e-7c2d-7000-8000-4b1d2c3e4f50")}
 	h := Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 		LogRequest(logger),
-		LoadSession("session", fakeAuthenticator{user: ana}, nil),
+		Authenticate("session", fakeAuthenticator{identity: ana}, nil),
 	)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.AddCookie(&http.Cookie{Name: "session", Value: "token"})
@@ -90,10 +98,4 @@ func TestLoadSessionPutsTheUserOnTheLogLine(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), r)
 
 	assert.Equal(t, "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", decodeLogLine(t, buf)["user_id"])
-}
-
-func TestCallerFromContextWithoutACaller(t *testing.T) {
-	_, ok := CallerFromContext(context.Background())
-
-	assert.False(t, ok)
 }

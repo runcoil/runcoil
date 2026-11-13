@@ -72,6 +72,10 @@ func TestValidateRequest(t *testing.T) {
 			wantBody: `{"code": "invalid_request", "message": "size is not valid: got string, want integer", "params": [{"field": "size", "message": "size is not valid: got string, want integer"}]}`,
 		},
 		{
+			name: "body not an object", method: http.MethodPost, path: "/api/things/" + id, body: `[]`, wantCode: http.StatusBadRequest,
+			wantBody: `{"code": "invalid_request", "message": "body is not valid: got array, want object", "params": [{"field": "body", "message": "body is not valid: got array, want object"}]}`,
+		},
+		{
 			name: "bad path parameter", method: http.MethodPost, path: "/api/things/nope", body: `{"name":"a","size":1}`, wantCode: http.StatusBadRequest,
 			wantBody: `{"code": "invalid_request", "message": "value nope: an invalid integer: invalid syntax", "params": [{"field": "id", "message": "value nope: an invalid integer: invalid syntax"}]}`,
 		},

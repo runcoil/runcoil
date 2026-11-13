@@ -21,7 +21,10 @@ const (
 	permissionPublic    = "public"
 )
 
-var errNotSignedIn = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+var (
+	errNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	errPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
+)
 
 // Permissions reads the permission of every operation in spec, keyed by the operation's
 // Go name. An operation with `security: []` is public.
@@ -55,14 +58,9 @@ func Permissions(spec *openapi3.T) (map[string]string, error) {
 	return permissions, nil
 }
 
-// Authorizer decides whether a user has a permission.
-type Authorizer interface {
-	AuthorizePermission(user domain.User, permission domain.Permission) error
-}
-
-// CheckPermission lets an operation run only for a caller with its permission. It refuses
-// an operation that permissions does not list.
-func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.StrictMiddlewareFunc {
+// CheckPermission lets an operation run only for an identity with its permission. It
+// refuses an operation that permissions does not list.
+func CheckPermission(permissions map[string]string) gen.StrictMiddlewareFunc {
 	return func(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
 		permission, ok := permissions[operationID]
 		if !ok {
@@ -76,15 +74,13 @@ func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.S
 		}
 
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
-			c, ok := CallerFromContext(ctx)
+			identity, ok := IdentityFromContext(ctx)
 			if !ok {
 				return nil, errNotSignedIn
 			}
 
-			if permission != permissionSelf {
-				if err := authorizer.AuthorizePermission(c.User, domain.Permission(permission)); err != nil {
-					return nil, fmt.Errorf("authorize: %w", err)
-				}
+			if permission != permissionSelf && !slices.Contains(identity.Permissions, domain.Permission(permission)) {
+				return nil, errPermissionDenied
 			}
 
 			return f(ctx, w, r, req)
