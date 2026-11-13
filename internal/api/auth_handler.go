@@ -41,12 +41,12 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 }
 
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
+	identity, ok := middleware.IdentityFromContext(ctx)
 	if !ok {
-		return nil, errors.New("no caller in the context")
+		return nil, errors.New("no identity in the context")
 	}
 
-	if err := h.accountService.Logout(ctx, c.Token); err != nil {
+	if err := h.accountService.Logout(ctx, identity); err != nil {
 		return nil, fmt.Errorf("logout: %w", err)
 	}
 
@@ -59,12 +59,17 @@ func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (ge
 }
 
 func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMeResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
+	identity, ok := middleware.IdentityFromContext(ctx)
 	if !ok {
-		return nil, errors.New("no caller in the context")
+		return nil, errors.New("no identity in the context")
 	}
 
-	access, err := h.accountService.GetUserAccess(ctx, c.User)
+	user, err := h.accountService.GetUser(ctx, identity.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	access, err := h.accountService.GetUserAccess(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("get access: %w", err)
 	}
@@ -80,19 +85,19 @@ func (h *authHandler) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.
 	}
 
 	return gen.GetMe200JSONResponse{
-		User:        userToAPI(c.User),
+		User:        userToAPI(user),
 		Permissions: permissionsToAPI(access.Permissions),
 		Projects:    projects,
 	}, nil
 }
 
 func (h *authHandler) ChangeMyPassword(ctx context.Context, req gen.ChangeMyPasswordRequestObject) (gen.ChangeMyPasswordResponseObject, error) {
-	c, ok := middleware.CallerFromContext(ctx)
+	identity, ok := middleware.IdentityFromContext(ctx)
 	if !ok {
-		return nil, errors.New("no caller in the context")
+		return nil, errors.New("no identity in the context")
 	}
 
-	err := h.accountService.ChangePassword(ctx, c.User, c.Token, req.Body.CurrentPassword, req.Body.NewPassword)
+	err := h.accountService.ChangePassword(ctx, identity, req.Body.CurrentPassword, req.Body.NewPassword)
 	if err != nil {
 		return nil, fmt.Errorf("change password: %w", err)
 	}

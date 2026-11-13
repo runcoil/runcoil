@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/pflag"
@@ -54,11 +55,11 @@ func (c *Config) Validate() error {
 // AccountService signs users in and out and decides what they may do.
 type AccountService interface {
 	Login(ctx context.Context, login, password string) (account.LoginResult, error)
-	AuthenticateSession(ctx context.Context, token string) (domain.User, error)
-	Logout(ctx context.Context, token string) error
-	ChangePassword(ctx context.Context, user domain.User, token, currentPassword, newPassword string) error
+	Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error)
+	Logout(ctx context.Context, identity domain.Identity) error
+	ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error
+	GetUser(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserAccess(ctx context.Context, user domain.User) (account.Access, error)
-	AuthorizePermission(user domain.User, permission domain.Permission) error
 }
 
 // Service serves the dashboard API and the health checks of the process.
@@ -161,7 +162,7 @@ func (s *Service) newHTTPServer() *http.Server {
 func (s *Service) apiHandler() http.Handler {
 	strict := gen.NewStrictHandlerWithOptions(
 		s.newHandler(),
-		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions, s.accountService)},
+		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions)},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  s.handleRequestError,
 			ResponseErrorHandlerFunc: s.handleResponseError,
@@ -178,7 +179,7 @@ func (s *Service) apiHandler() http.Handler {
 		middleware.LogRequest(s.logger),
 		middleware.Recover(),
 		middleware.LimitBody(maxBodyBytes),
-		middleware.LoadSession(sessionCookieName, s.accountService, s.handleResponseError),
+		middleware.Authenticate(sessionCookieName, s.accountService, s.handleResponseError),
 		middleware.CheckOrigin(),
 		middleware.ValidateRequest(s.spec, "/api/v1"),
 	)

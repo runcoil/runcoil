@@ -24,3 +24,8 @@ SELECT id
 FROM users
 WHERE id = @id::uuid
 FOR UPDATE;
+
+-- name: UserGetByID :one
+SELECT id, username, email, password_hash, is_server_admin, disabled_at
+FROM users
+WHERE id = @id::uuid;

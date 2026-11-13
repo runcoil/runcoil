@@ -31,6 +31,16 @@ type fakeStore struct {
 	keptTokenHash []byte
 }
 
+func (f *fakeStore) GetUserByID(_ context.Context, id uuid.UUID) (domain.User, error) {
+	for _, u := range f.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+
+	return domain.User{}, domain.ErrUserNotFound
+}
+
 func (f *fakeStore) GetUserByUsername(_ context.Context, username string) (domain.User, error) {
 	for _, u := range f.users {
 		if u.Username == username {
@@ -112,6 +122,10 @@ func hashPassword(t *testing.T, password string) string {
 	require.NoError(t, err)
 
 	return hash
+}
+
+func identityOf(user domain.User) domain.Identity {
+	return domain.Identity{Type: domain.IdentityUser, UserID: user.ID, SessionID: hashToken("token")}
 }
 
 func ptr[T any](v T) *T {

@@ -1,10 +1,15 @@
 package account
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/runcoil/runcoil/internal/domain"
 )
 
 func TestValidateUsername(t *testing.T) {
@@ -32,4 +37,16 @@ func TestValidateUsername(t *testing.T) {
 			assert.EqualError(t, err, "must be 1 to 64 characters of a-z, 0-9, '.', '_' and '-'")
 		})
 	}
+}
+
+func TestGetUser(t *testing.T) {
+	ana := domain.User{ID: uuid.NewV7(), Username: "ana"}
+	s := newService(&fakeStore{users: []domain.User{ana}})
+
+	user, err := s.GetUser(context.Background(), ana.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ana, user)
+
+	_, err = s.GetUser(context.Background(), uuid.NewV7())
+	assert.ErrorIs(t, err, domain.ErrUserNotFound)
 }

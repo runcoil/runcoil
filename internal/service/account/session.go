@@ -72,23 +72,35 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	}, nil
 }
 
-// AuthenticateSession returns the user of a session token and records the activity.
-func (s *Service) AuthenticateSession(ctx context.Context, token string) (domain.User, error) {
-	user, err := s.sessionStore.GetSessionUserAndTouch(ctx, hashToken(token), s.cfg.SessionMaxInactive)
+// Authenticate returns the identity a credential proves, and records the activity of its
+// session.
+func (s *Service) Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error) {
+	if credential.Kind != domain.CredentialSession {
+		return domain.Identity{}, fmt.Errorf("unknown credential kind %q", credential.Kind)
+	}
+
+	sessionID := hashToken(credential.Secret)
+
+	user, err := s.sessionStore.GetSessionUserAndTouch(ctx, sessionID, s.cfg.SessionMaxInactive)
 	if errors.Is(err, domain.ErrSessionNotFound) {
-		return domain.User{}, ErrNotSignedIn
+		return domain.Identity{}, ErrNotSignedIn
 	}
 
 	if err != nil {
-		return domain.User{}, fmt.Errorf("get session user: %w", err)
+		return domain.Identity{}, fmt.Errorf("get session user: %w", err)
 	}
 
-	return user, nil
+	return domain.Identity{
+		Type:        domain.IdentityUser,
+		UserID:      user.ID,
+		SessionID:   sessionID,
+		Permissions: userPermissions(user),
+	}, nil
 }
 
-// Logout ends the session of token.
-func (s *Service) Logout(ctx context.Context, token string) error {
-	if err := s.sessionStore.DeleteSession(ctx, hashToken(token)); err != nil {
+// Logout ends the session of identity.
+func (s *Service) Logout(ctx context.Context, identity domain.Identity) error {
+	if err := s.sessionStore.DeleteSession(ctx, identity.SessionID); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
 

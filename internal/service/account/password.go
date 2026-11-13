@@ -40,9 +40,14 @@ var hashSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 var errMalformedHash = errors.New("malformed password hash")
 
-// ChangePassword sets the password of user, who is signed in with token, and ends the
-// user's other sessions.
-func (s *Service) ChangePassword(ctx context.Context, user domain.User, token, currentPassword, newPassword string) error {
+// ChangePassword sets the password of the user of identity and ends the user's other
+// sessions.
+func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error {
+	user, err := s.userStore.GetUserByID(ctx, identity.UserID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+
 	ok, err := VerifyPassword(ctx, user.PasswordHash, currentPassword)
 	if err != nil {
 		return fmt.Errorf("verify password: %w", err)
@@ -61,7 +66,7 @@ func (s *Service) ChangePassword(ctx context.Context, user domain.User, token, c
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, hash, hashToken(token))
+	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, hash, identity.SessionID)
 	if errors.Is(err, domain.ErrSessionNotFound) {
 		return ErrNotSignedIn
 	}

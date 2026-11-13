@@ -31,7 +31,7 @@ type fakeAccountService struct {
 
 	loginErr    error
 	changeErr   error
-	loggedOut   string
+	loggedOut   []byte
 	newPassword string
 }
 
@@ -48,34 +48,35 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (a
 	}, nil
 }
 
-func (f *fakeAccountService) AuthenticateSession(_ context.Context, token string) (domain.User, error) {
-	if token != testToken {
-		return domain.User{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
+func (f *fakeAccountService) Authenticate(_ context.Context, credential domain.Credential) (domain.Identity, error) {
+	if credential.Secret != testToken {
+		return domain.Identity{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
 	}
 
-	return f.user, nil
+	permissions := []domain.Permission{}
+	if f.user.IsServerAdmin {
+		permissions = domain.Permissions
+	}
+
+	return domain.Identity{Type: domain.IdentityUser, UserID: f.user.ID, SessionID: []byte(testToken), Permissions: permissions}, nil
 }
 
-func (f *fakeAccountService) Logout(_ context.Context, token string) error {
-	f.loggedOut = token
+func (f *fakeAccountService) Logout(_ context.Context, identity domain.Identity) error {
+	f.loggedOut = identity.SessionID
 	return nil
 }
 
-func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.User, _, _, newPassword string) error {
+func (f *fakeAccountService) GetUser(context.Context, uuid.UUID) (domain.User, error) {
+	return f.user, nil
+}
+
+func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.Identity, _, newPassword string) error {
 	f.newPassword = newPassword
 	return f.changeErr
 }
 
 func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (account.Access, error) {
 	return f.access, nil
-}
-
-func (f *fakeAccountService) AuthorizePermission(user domain.User, _ domain.Permission) error {
-	if user.IsServerAdmin {
-		return nil
-	}
-
-	return apierr.PermissionDenied(apierr.CodePermissionDenied, "permission denied")
 }
 
 func newAPIServer(t *testing.T, accountService *fakeAccountService) http.Handler {
@@ -217,7 +218,7 @@ func TestLogout(t *testing.T) {
 	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/auth/logout", token: testToken})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, testToken, accountService.loggedOut)
+	assert.Equal(t, []byte(testToken), accountService.loggedOut)
 
 	cookies := rec.Result().Cookies()
 	require.Len(t, cookies, 1)
@@ -313,7 +314,7 @@ func TestRequestsRefusedBeforeTheHandler(t *testing.T) {
 	}
 }
 
-func TestHandlersRefuseAContextWithoutACaller(t *testing.T) {
+func TestHandlersRefuseAContextWithoutAnIdentity(t *testing.T) {
 	h := newAuthHandler(&fakeAccountService{user: testUser}, false)
 	ctx := context.Background()
 
