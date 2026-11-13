@@ -44,7 +44,7 @@ type Config struct {
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&c.Port, "api.port", 8080, "Port of the API and the health checks.")
 	fs.BoolVar(&c.SecureCookie, "api.secure-cookie", false, "Send the session cookie over HTTPS only. Turn it on when the dashboard is served over HTTPS.")
-	fs.BoolVar(&c.Swagger, "api.swagger", false, "Serve the API docs with Swagger UI at /api/docs.")
+	fs.BoolVar(&c.Swagger, "api.swagger", false, "Serve the API docs with Swagger UI at /docs.")
 }
 
 // Validate checks the configuration.
@@ -162,8 +162,8 @@ func (s *Service) newHTTPServer() *http.Server {
 		swagger.Register(docs, openapi.Spec)
 
 		handler := middleware.Chain(docs, middleware.LogRequest(s.logger), middleware.Recover())
-		mux.Handle("/api/docs", handler)
-		mux.Handle("/api/docs/", handler)
+		mux.Handle("/docs", handler)
+		mux.Handle("/docs/", handler)
 	}
 
 	return &http.Server{

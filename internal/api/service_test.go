@@ -183,7 +183,7 @@ func TestSwagger(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		h := newAPIServerWithConfig(t, Config{Port: 8080, Swagger: enabled}, &fakeAccountService{user: testUser})
 
-		for _, path := range []string{"/api/docs", "/api/docs/openapi.yaml"} {
+		for _, path := range []string{"/docs", "/docs/openapi.yaml"} {
 			rec := do(t, h, call{method: http.MethodGet, path: path})
 
 			if enabled {
