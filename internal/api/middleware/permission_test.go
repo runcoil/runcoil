@@ -36,7 +36,14 @@ func TestEveryOperationHasAPermission(t *testing.T) {
 		assert.Contains(t, permissions, operations.Method(i).Name)
 	}
 
-	assert.Equal(t, permissionPublic, permissions["Login"])
+	var public []string
+	for operation, permission := range permissions {
+		if permission == permissionPublic {
+			public = append(public, operation)
+		}
+	}
+
+	assert.ElementsMatch(t, []string{"Login", "Logout"}, public)
 	assert.Equal(t, permissionSelf, permissions["GetMe"])
 }
 

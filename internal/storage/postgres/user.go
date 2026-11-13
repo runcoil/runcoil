@@ -92,14 +92,21 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (domain.Us
 	return domain.User(row), nil
 }
 
-// UpdatePasswordAndDeleteOtherSessions sets the password hash of userID and deletes the
-// user's sessions other than the one of keepTokenHash, in one transaction. It returns
-// domain.ErrSessionNotFound when that session has ended, and changes nothing then.
-func (s *UserStore) UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, passwordHash string, keepTokenHash []byte) error {
+// UpdatePasswordAndDeleteOtherSessions replaces the password hash currentHash of userID
+// with newHash and deletes the user's sessions other than the one of keepTokenHash, in one
+// transaction. It changes nothing and returns domain.ErrSessionNotFound when that session
+// has ended, domain.ErrPasswordChanged when the hash is no longer currentHash, and
+// domain.ErrUserNotFound when the user is gone.
+func (s *UserStore) UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error {
 	return s.db.WithTx(ctx, func(tx DB) error {
 		// The user row is locked first, so two password changes of one user run one after
-		// the other and the second sees that the first ended its session.
-		if _, err := s.queries.UserLockForUpdate(ctx, tx, userID); err != nil {
+		// the other: the second sees that the first ended its session or changed the hash.
+		_, err := s.queries.UserLockForUpdate(ctx, tx, userID)
+		if isNoRowsError(err) {
+			return domain.ErrUserNotFound
+		}
+
+		if err != nil {
 			return fmt.Errorf("lock user: %w", err)
 		}
 
@@ -115,12 +122,17 @@ func (s *UserStore) UpdatePasswordAndDeleteOtherSessions(ctx context.Context, us
 			return domain.ErrSessionNotFound
 		}
 
-		err = s.queries.UserUpdatePassword(ctx, tx, sqlc.UserUpdatePasswordParams{
-			ID:           userID,
-			PasswordHash: passwordHash,
+		rows, err := s.queries.UserUpdatePassword(ctx, tx, sqlc.UserUpdatePasswordParams{
+			ID:                  userID,
+			NewPasswordHash:     newHash,
+			CurrentPasswordHash: currentHash,
 		})
 		if err != nil {
 			return fmt.Errorf("update password: %w", err)
+		}
+
+		if rows == 0 {
+			return domain.ErrPasswordChanged
 		}
 
 		err = s.queries.SessionDeleteOthers(ctx, tx, sqlc.SessionDeleteOthersParams{

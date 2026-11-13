@@ -36,7 +36,7 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	}
 
 	if errors.Is(err, domain.ErrUserNotFound) {
-		_, _ = VerifyPassword(ctx, s.dummyHash(), password)
+		_, _ = VerifyPassword(ctx, s.dummyHash, password)
 		return LoginResult{}, ErrWrongLogin
 	}
 

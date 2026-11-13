@@ -129,16 +129,16 @@ type LoginRequest struct {
 
 // LoginResponse The signed-in user.
 type LoginResponse struct {
-	// User A dashboard user.
+	// User The user who signed in.
 	User User `json:"user"`
 
-	// PasswordChangeSuggested True when the password is the first server admin's default, so the dashboard offers to change it.
+	// PasswordChangeSuggested True when the user is the first server admin and still has the bootstrap password, so the dashboard offers to change it.
 	PasswordChangeSuggested bool `json:"passwordChangeSuggested"`
 }
 
 // Me The signed-in user and what they can do.
 type Me struct {
-	// User A dashboard user.
+	// User The signed-in user.
 	User User `json:"user"`
 
 	// Permissions The server-wide permissions of the user. Only a server admin has any.
@@ -159,7 +159,7 @@ type ProjectAccess struct {
 	// Name The project's name.
 	Name string `json:"name"`
 
-	// Role A role in a project.
+	// Role The user's role in the project. A server admin is admin in every project.
 	Role Role `json:"role"`
 
 	// Permissions The user's permissions in the project.
@@ -508,21 +508,7 @@ func (response Logout204Response) VisitLogoutResponse(w http.ResponseWriter) err
 	return nil
 }
 
-type Logout401JSONResponse struct{ ErrorJSONResponse }
-
-func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type Logout403JSONResponse ErrorResponse
+type Logout403JSONResponse struct{ ErrorJSONResponse }
 
 func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
 

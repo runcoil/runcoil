@@ -3,7 +3,6 @@ package account
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 	"uuid"
 
@@ -24,7 +23,7 @@ type UserStore interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
-	UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, passwordHash string, keepTokenHash []byte) error
+	UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error
 }
 
 // SessionStore keeps the sessions.
@@ -47,9 +46,6 @@ type Config struct {
 	SessionMaxLifetime time.Duration
 	SessionMaxInactive time.Duration
 
-	// BootstrapAdminUsername and BootstrapAdminPassword are the seed's bootstrap admin,
-	// which main copies here: a login as that user with that password is asked to change
-	// it. They have no key of their own.
 	BootstrapAdminUsername string
 	BootstrapAdminPassword string
 }
@@ -83,20 +79,19 @@ type Service struct {
 	projectStore ProjectStore
 	now          func() time.Time
 
-	dummyHash func() string
+	dummyHash string
 }
 
 // New creates the account service.
 func New(cfg Config, userStore UserStore, sessionStore SessionStore, projectStore ProjectStore) *Service {
+	dummyHash, _ := HashPassword(context.Background(), "")
+
 	return &Service{
 		cfg:          cfg,
 		userStore:    userStore,
 		sessionStore: sessionStore,
 		projectStore: projectStore,
 		now:          time.Now,
-		dummyHash: sync.OnceValue(func() string {
-			hash, _ := HashPassword(context.Background(), "")
-			return hash
-		}),
+		dummyHash:    dummyHash,
 	}
 }

@@ -14,10 +14,11 @@ SELECT id, username, email, password_hash, is_server_admin, disabled_at
 FROM users
 WHERE email = @email::text;
 
--- name: UserUpdatePassword :exec
+-- name: UserUpdatePassword :execrows
 UPDATE users
-SET password_hash = @password_hash::text
-WHERE id = @id::uuid;
+SET password_hash = @new_password_hash::text
+WHERE id = @id::uuid
+  AND password_hash = @current_password_hash::text;
 
 -- name: UserLockForUpdate :one
 SELECT id

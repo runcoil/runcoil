@@ -184,8 +184,8 @@ func (s *Service) apiHandler() http.Handler {
 		middleware.LogRequest(s.logger),
 		middleware.Recover(),
 		middleware.LimitBody(maxBodyBytes),
-		middleware.Authenticate(sessionCookieName, s.accountService, s.handleResponseError),
 		middleware.CheckOrigin(),
+		middleware.Authenticate(sessionCookieName, s.accountService, s.handleResponseError),
 		middleware.ValidateRequest(s.spec, "/api/v1"),
 	)
 }

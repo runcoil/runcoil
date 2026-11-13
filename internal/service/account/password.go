@@ -40,10 +40,16 @@ var hashSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 var errMalformedHash = errors.New("malformed password hash")
 
+var errWrongCurrentPassword = apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+
 // ChangePassword sets the password of the user of identity and ends the user's other
 // sessions.
 func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error {
 	user, err := s.userStore.GetUserByID(ctx, identity.UserID)
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return ErrNotSignedIn
+	}
+
 	if err != nil {
 		return fmt.Errorf("get user: %w", err)
 	}
@@ -54,7 +60,7 @@ func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, 
 	}
 
 	if !ok {
-		return apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword")
+		return errWrongCurrentPassword
 	}
 
 	if err := ValidatePassword(newPassword); err != nil {
@@ -66,9 +72,13 @@ func (s *Service) ChangePassword(ctx context.Context, identity domain.Identity, 
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, hash, identity.SessionID)
-	if errors.Is(err, domain.ErrSessionNotFound) {
+	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, user.PasswordHash, hash, identity.SessionID)
+	if errors.Is(err, domain.ErrSessionNotFound) || errors.Is(err, domain.ErrUserNotFound) {
 		return ErrNotSignedIn
+	}
+
+	if errors.Is(err, domain.ErrPasswordChanged) {
+		return errWrongCurrentPassword
 	}
 
 	if err != nil {

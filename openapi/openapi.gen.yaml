@@ -59,13 +59,14 @@ components:
       properties:
         user:
           $ref: "#/components/schemas/User"
+          description: The user who signed in.
           x-order: 1
           example:
             id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
             username: admin
         passwordChangeSuggested:
           type: boolean
-          description: True when the password is the first server admin's default, so the dashboard offers to change it.
+          description: True when the user is the first server admin and still has the bootstrap password, so the dashboard offers to change it.
           example: false
           x-order: 2
       required:
@@ -131,6 +132,8 @@ components:
           x-order: 2
         role:
           $ref: "#/components/schemas/Role"
+          description: The user's role in the project. A server admin is admin in every project.
+          example: viewer
           x-order: 3
         permissions:
           type: array
@@ -215,6 +218,7 @@ components:
       properties:
         user:
           $ref: "#/components/schemas/User"
+          description: The signed-in user.
           x-order: 1
           example:
             id: 019a5b1e-7c2d-7000-8000-4b1d2c3e4f50
@@ -323,10 +327,11 @@ components:
       post:
         operationId: logout
         summary: Sign out
-        description: Ends the session and clears its cookie.
+        description: >-
+          Ends the session, if it is still live, and clears its cookie. A request without a live session also clears the cookie.
         tags:
           - Auth
-        x-runcoil-permission: self
+        security: []
         responses:
           "204":
             description: The session is ended
@@ -336,9 +341,6 @@ components:
                 required: true
                 schema:
                   type: string
-          "401":
-            $ref: "#/components/responses/Error"
-            description: "unauthenticated: no live session"
           "403":
             $ref: "#/components/responses/Error"
             description: "permission_denied: the request comes from another origin"

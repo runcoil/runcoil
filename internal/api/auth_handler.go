@@ -41,13 +41,10 @@ func (h *authHandler) Login(ctx context.Context, req gen.LoginRequestObject) (ge
 }
 
 func (h *authHandler) Logout(ctx context.Context, _ gen.LogoutRequestObject) (gen.LogoutResponseObject, error) {
-	identity, ok := middleware.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.New("no identity in the context")
-	}
-
-	if err := h.accountService.Logout(ctx, identity); err != nil {
-		return nil, fmt.Errorf("logout: %w", err)
+	if identity, ok := middleware.IdentityFromContext(ctx); ok {
+		if err := h.accountService.Logout(ctx, identity); err != nil {
+			return nil, fmt.Errorf("logout: %w", err)
+		}
 	}
 
 	cleared := h.sessionCookie("", time.Time{}) //nolint:gosec // Secure follows api.secure-cookie, off for a dashboard over plain HTTP.

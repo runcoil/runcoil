@@ -132,9 +132,14 @@ func violationParams(violation *jsonschema.ValidationError) []gen.ErrorParam {
 }
 
 func fieldPath(location []string, name string) string {
-	if name == "" {
-		return strings.Join(location, ".")
+	path := location
+	if name != "" {
+		path = append(slices.Clone(location), name)
 	}
 
-	return strings.Join(append(slices.Clone(location), name), ".")
+	if len(path) == 0 {
+		return "body"
+	}
+
+	return strings.Join(path, ".")
 }
