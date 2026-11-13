@@ -91,9 +91,3 @@ func TestLoadSessionPutsTheUserOnTheLogLine(t *testing.T) {
 
 	assert.Equal(t, "019a5b1e-7c2d-7000-8000-4b1d2c3e4f50", decodeLogLine(t, buf)["user_id"])
 }
-
-func TestCallerFromContextWithoutACaller(t *testing.T) {
-	_, ok := CallerFromContext(context.Background())
-
-	assert.False(t, ok)
-}

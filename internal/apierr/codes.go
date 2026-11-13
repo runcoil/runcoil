@@ -1,7 +1,6 @@
 package apierr
 
-// Code is the stable identifier of an API error. The dashboard API sends it in lower case,
-// as an ErrorCode of its schema.
+// Code is the stable identifier of an API error. The dashboard API sends it in lower case.
 type Code string
 
 // The codes of the API.
