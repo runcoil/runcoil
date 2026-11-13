@@ -18,6 +18,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
+	"github.com/runcoil/runcoil/internal/api/swagger"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/openapi"
@@ -36,12 +37,14 @@ const (
 type Config struct {
 	Port         int
 	SecureCookie bool
+	Swagger      bool
 }
 
 // RegisterFlags declares every key with its default and help text.
 func (c *Config) RegisterFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&c.Port, "api.port", 8080, "Port of the API and the health checks.")
 	fs.BoolVar(&c.SecureCookie, "api.secure-cookie", false, "Send the session cookie over HTTPS only. Turn it on when the dashboard is served over HTTPS.")
+	fs.BoolVar(&c.Swagger, "api.swagger", false, "Serve the API docs with Swagger UI at /api/docs.")
 }
 
 // Validate checks the configuration.
@@ -153,6 +156,15 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.Handle("/api/", s.apiHandler())
 	mux.Handle("/", dashboardHandler(s.ui))
+
+	if s.cfg.Swagger {
+		docs := http.NewServeMux()
+		swagger.Register(docs, openapi.Spec)
+
+		handler := middleware.Chain(docs, middleware.LogRequest(s.logger), middleware.Recover())
+		mux.Handle("/api/docs", handler)
+		mux.Handle("/api/docs/", handler)
+	}
 
 	return &http.Server{
 		Handler:           mux,
