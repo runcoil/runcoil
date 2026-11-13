@@ -18,7 +18,7 @@ import (
 
 func TestChangePassword(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
-	store := &fakeUserStore{}
+	store := &fakeStore{}
 
 	err := newService(store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
 
@@ -45,7 +45,7 @@ func TestChangePasswordRefused(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := &fakeUserStore{}
+			store := &fakeStore{}
 
 			err := newService(store).ChangePassword(context.Background(), ana, "token", tt.current, tt.new)
 
@@ -57,6 +57,15 @@ func TestChangePasswordRefused(t *testing.T) {
 			assert.Empty(t, store.passwordHash)
 		})
 	}
+}
+
+func TestChangePasswordWhenTheSessionEnded(t *testing.T) {
+	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
+	store := &fakeStore{updateErr: domain.ErrSessionNotFound}
+
+	err := newService(store).ChangePassword(context.Background(), ana, "token", "admin", "Secret-1")
+
+	assert.ErrorIs(t, err, ErrNotSignedIn)
 }
 
 func TestHashPassword(t *testing.T) {

@@ -61,8 +61,13 @@ func (s *Service) ChangePassword(ctx context.Context, user domain.User, token, c
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	if err := s.userStore.ChangePassword(ctx, user.ID, hash, hashToken(token)); err != nil {
-		return fmt.Errorf("change password: %w", err)
+	err = s.userStore.UpdatePasswordAndDeleteOtherSessions(ctx, user.ID, hash, hashToken(token))
+	if errors.Is(err, domain.ErrSessionNotFound) {
+		return ErrNotSignedIn
+	}
+
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
 	}
 
 	return nil

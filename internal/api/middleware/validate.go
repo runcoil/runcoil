@@ -18,6 +18,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/httperr"
+	"github.com/runcoil/runcoil/internal/apierr"
 )
 
 const invalidRequestMessage = "request is not valid"
@@ -35,20 +36,22 @@ func ValidateRequest(spec *openapi3.T, prefix string) func(http.Handler) http.Ha
 	})
 }
 
-func handleValidationError(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, _ nethttpmiddleware.ErrorHandlerOpts) {
+func handleValidationError(_ context.Context, err error, w http.ResponseWriter, r *http.Request, _ nethttpmiddleware.ErrorHandlerOpts) {
+	RecordError(r.Context(), err)
+
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
-		httperr.Write(w, http.StatusRequestEntityTooLarge, httperr.New(gen.ErrorCodePayloadTooLarge, "request body is too large"))
+		httperr.Write(w, http.StatusRequestEntityTooLarge, httperr.New(apierr.CodePayloadTooLarge, "request body is too large"))
 		return
 	}
 
 	if errors.Is(err, routers.ErrPathNotFound) {
-		httperr.Write(w, http.StatusNotFound, httperr.New(gen.ErrorCodeNotFound, "no such operation"))
+		httperr.Write(w, http.StatusNotFound, httperr.New(apierr.CodeNotFound, "no such operation"))
 		return
 	}
 
 	if errors.Is(err, routers.ErrMethodNotAllowed) {
-		httperr.Write(w, http.StatusMethodNotAllowed, httperr.New(gen.ErrorCodeInvalidRequest, "method not allowed"))
+		httperr.Write(w, http.StatusMethodNotAllowed, httperr.New(apierr.CodeInvalidRequest, "method not allowed"))
 		return
 	}
 
@@ -60,18 +63,26 @@ func handleValidationError(_ context.Context, err error, w http.ResponseWriter, 
 
 	var requestErr *openapi3filter.RequestError
 	if errors.As(err, &requestErr) && requestErr.Parameter != nil {
-		param := gen.ErrorParam{Field: requestErr.Parameter.Name, Message: requestErr.Reason}
+		param := gen.ErrorParam{Field: requestErr.Parameter.Name, Message: requestErrorText(requestErr)}
 		httperr.Write(w, http.StatusBadRequest, invalidRequest([]gen.ErrorParam{param}))
 
 		return
 	}
 
-	if errors.As(err, &requestErr) && requestErr.Reason != "" {
-		httperr.Write(w, http.StatusBadRequest, httperr.New(gen.ErrorCodeInvalidRequest, requestErr.Reason))
+	if errors.As(err, &requestErr) && requestErrorText(requestErr) != "" {
+		httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, requestErrorText(requestErr)))
 		return
 	}
 
-	httperr.Write(w, http.StatusBadRequest, httperr.New(gen.ErrorCodeInvalidRequest, invalidRequestMessage))
+	httperr.Write(w, http.StatusBadRequest, httperr.New(apierr.CodeInvalidRequest, invalidRequestMessage))
+}
+
+func requestErrorText(requestErr *openapi3filter.RequestError) string {
+	if requestErr.Reason != "" || requestErr.Err == nil {
+		return requestErr.Reason
+	}
+
+	return requestErr.Err.Error()
 }
 
 func invalidRequest(params []gen.ErrorParam) gen.ErrorResponse {
@@ -80,7 +91,7 @@ func invalidRequest(params []gen.ErrorParam) gen.ErrorResponse {
 		text = params[0].Message
 	}
 
-	return httperr.New(gen.ErrorCodeInvalidRequest, text, params...)
+	return httperr.New(apierr.CodeInvalidRequest, text, params...)
 }
 
 func violationParams(violation *jsonschema.ValidationError) []gen.ErrorParam {

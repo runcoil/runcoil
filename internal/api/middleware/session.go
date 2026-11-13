@@ -17,15 +17,20 @@ type Caller struct {
 
 type callerKey struct{}
 
-// CallerFrom returns the caller that LoadSession put in ctx.
-func CallerFrom(ctx context.Context) (Caller, bool) {
+func withCaller(ctx context.Context, c Caller) context.Context {
+	return context.WithValue(ctx, callerKey{}, c)
+}
+
+// CallerFromContext returns the caller that LoadSession put in ctx. It reports false
+// when the request has no live session.
+func CallerFromContext(ctx context.Context) (Caller, bool) {
 	c, ok := ctx.Value(callerKey{}).(Caller)
 	return c, ok
 }
 
 // Authenticator returns the user of a session token.
 type Authenticator interface {
-	Authenticate(ctx context.Context, token string) (domain.User, error)
+	AuthenticateSession(ctx context.Context, token string) (domain.User, error)
 }
 
 // LoadSession puts the caller of a live session cookie in the context. A request without
@@ -40,7 +45,7 @@ func LoadSession(cookieName string, authenticator Authenticator, handleError fun
 				return
 			}
 
-			user, err := authenticator.Authenticate(r.Context(), cookie.Value)
+			user, err := authenticator.AuthenticateSession(r.Context(), cookie.Value)
 
 			var apiErr *apierr.Error
 			if errors.As(err, &apiErr) && apiErr.Kind == apierr.KindUnauthenticated {
@@ -53,8 +58,8 @@ func LoadSession(cookieName string, authenticator Authenticator, handleError fun
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), callerKey{}, Caller{User: user, Token: cookie.Value})
-			next.ServeHTTP(w, r.WithContext(ctx))
+			recordUserID(r.Context(), user.ID.String())
+			next.ServeHTTP(w, r.WithContext(withCaller(r.Context(), Caller{User: user, Token: cookie.Value})))
 		})
 	}
 }

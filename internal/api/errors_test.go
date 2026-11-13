@@ -4,20 +4,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apierr"
 )
-
-func TestDashboardCodesAreInTheSpec(t *testing.T) {
-	for _, code := range []apierr.Code{apierr.CodeInvalidRequest, apierr.CodeUnauthenticated, apierr.CodePermissionDenied} {
-		assert.True(t, gen.ErrorCode(strings.ToLower(string(code))).Valid(), code)
-	}
-}
 
 func TestHandleResponseError(t *testing.T) {
 	tests := []struct {
@@ -33,10 +25,10 @@ func TestHandleResponseError(t *testing.T) {
 			wantBody:   `{"code": "unauthenticated", "message": "not signed in"}`,
 		},
 		{
-			name:       "code not in the spec",
-			err:        apierr.NotFound(apierr.CodeRunNotFound, "run not found"),
-			wantStatus: http.StatusInternalServerError,
-			wantBody:   `{"code": "internal", "message": "internal error"}`,
+			name:       "api error with a field",
+			err:        apierr.Invalid(apierr.CodeInvalidRequest, "current password is wrong").WithDetail("field", "currentPassword"),
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `{"code": "invalid_request", "message": "current password is wrong", "params": [{"field": "currentPassword", "message": "current password is wrong"}]}`,
 		},
 		{
 			name:       "unexpected error",

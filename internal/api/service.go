@@ -54,11 +54,11 @@ func (c *Config) Validate() error {
 // AccountService signs users in and out and decides what they may do.
 type AccountService interface {
 	Login(ctx context.Context, login, password string) (account.LoginResult, error)
-	Authenticate(ctx context.Context, token string) (domain.User, error)
+	AuthenticateSession(ctx context.Context, token string) (domain.User, error)
 	Logout(ctx context.Context, token string) error
 	ChangePassword(ctx context.Context, user domain.User, token, currentPassword, newPassword string) error
-	Access(ctx context.Context, user domain.User) (account.Access, error)
-	Authorize(user domain.User, permission domain.Permission) error
+	GetUserAccess(ctx context.Context, user domain.User) (account.Access, error)
+	AuthorizePermission(user domain.User, permission domain.Permission) error
 }
 
 // Service serves the dashboard API and the health checks of the process.
@@ -175,8 +175,8 @@ func (s *Service) apiHandler() http.Handler {
 	})
 
 	return middleware.Chain(routes,
-		middleware.Recover(s.logger),
 		middleware.LogRequest(s.logger),
+		middleware.Recover(),
 		middleware.LimitBody(maxBodyBytes),
 		middleware.LoadSession(sessionCookieName, s.accountService, s.handleResponseError),
 		middleware.CheckOrigin(),

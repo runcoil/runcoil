@@ -1,33 +1,5 @@
-InvalidRequest:
-  description: "invalid_request: the request is not valid; params names the fields at fault"
-  content:
-    application/json:
-      schema:
-        $ref: "./schemas/errors.yaml#/ErrorResponse"
-
-Unauthenticated:
-  description: "unauthenticated: no live session, or a wrong login or password"
-  content:
-    application/json:
-      schema:
-        $ref: "./schemas/errors.yaml#/ErrorResponse"
-
-PermissionDenied:
-  description: "permission_denied: the caller lacks the operation's permission, or a write came from another origin"
-  content:
-    application/json:
-      schema:
-        $ref: "./schemas/errors.yaml#/ErrorResponse"
-
-PayloadTooLarge:
-  description: "payload_too_large: the request body is larger than 1 MiB"
-  content:
-    application/json:
-      schema:
-        $ref: "./schemas/errors.yaml#/ErrorResponse"
-
-Internal:
-  description: "internal: an unexpected failure"
+Error:
+  description: An error. The body's code says which.
   content:
     application/json:
       schema:

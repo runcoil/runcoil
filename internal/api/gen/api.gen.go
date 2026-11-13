@@ -16,36 +16,6 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Defines values for ErrorCode.
-const (
-	ErrorCodeInternal         ErrorCode = "internal"
-	ErrorCodeInvalidRequest   ErrorCode = "invalid_request"
-	ErrorCodeNotFound         ErrorCode = "not_found"
-	ErrorCodePayloadTooLarge  ErrorCode = "payload_too_large"
-	ErrorCodePermissionDenied ErrorCode = "permission_denied"
-	ErrorCodeUnauthenticated  ErrorCode = "unauthenticated"
-)
-
-// Valid indicates whether the value is a known member of the ErrorCode enum.
-func (e ErrorCode) Valid() bool {
-	switch e {
-	case ErrorCodeInternal:
-		return true
-	case ErrorCodeInvalidRequest:
-		return true
-	case ErrorCodeNotFound:
-		return true
-	case ErrorCodePayloadTooLarge:
-		return true
-	case ErrorCodePermissionDenied:
-		return true
-	case ErrorCodeUnauthenticated:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for Permission.
 const (
 	ApiKeysRead    Permission = "api_keys:read"
@@ -127,9 +97,6 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
-// ErrorCode The code of an error.
-type ErrorCode string
-
 // ErrorParam A request field at fault.
 type ErrorParam struct {
 	// Field The field, as a dotted path in the body, or a parameter name.
@@ -141,8 +108,8 @@ type ErrorParam struct {
 
 // ErrorResponse The body of every error response.
 type ErrorResponse struct {
-	// Code The code of an error.
-	Code ErrorCode `json:"code"`
+	// Code What went wrong, in lower snake case, such as invalid_request, unauthenticated, permission_denied, not_found, payload_too_large or internal.
+	Code string `json:"code"`
 
 	// Message For people. Clients never parse it.
 	Message string `json:"message"`
@@ -214,20 +181,8 @@ type User struct {
 	Email *string `json:"email,omitempty"`
 }
 
-// Internal The body of every error response.
-type Internal = ErrorResponse
-
-// InvalidRequest The body of every error response.
-type InvalidRequest = ErrorResponse
-
-// PayloadTooLarge The body of every error response.
-type PayloadTooLarge = ErrorResponse
-
-// PermissionDenied The body of every error response.
-type PermissionDenied = ErrorResponse
-
-// Unauthenticated The body of every error response.
-type Unauthenticated = ErrorResponse
+// Error The body of every error response.
+type Error = ErrorResponse
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -444,15 +399,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
-type InternalJSONResponse ErrorResponse
-
-type InvalidRequestJSONResponse ErrorResponse
-
-type PayloadTooLargeJSONResponse ErrorResponse
-
-type PermissionDeniedJSONResponse ErrorResponse
-
-type UnauthenticatedJSONResponse ErrorResponse
+type ErrorJSONResponse ErrorResponse
 
 type LoginRequestObject struct {
 	Body *LoginJSONRequestBody
@@ -484,7 +431,7 @@ func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login400JSONResponse struct{ InvalidRequestJSONResponse }
+type Login400JSONResponse struct{ ErrorJSONResponse }
 
 func (response Login400JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -498,7 +445,7 @@ func (response Login400JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login401JSONResponse struct{ UnauthenticatedJSONResponse }
+type Login401JSONResponse ErrorResponse
 
 func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -512,7 +459,7 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login403JSONResponse struct{ PermissionDeniedJSONResponse }
+type Login403JSONResponse ErrorResponse
 
 func (response Login403JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -526,7 +473,7 @@ func (response Login403JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
-type Login413JSONResponse struct{ PayloadTooLargeJSONResponse }
+type Login413JSONResponse ErrorResponse
 
 func (response Login413JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
 
@@ -536,20 +483,6 @@ func (response Login413JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(413)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type Login500JSONResponse struct{ InternalJSONResponse }
-
-func (response Login500JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -575,7 +508,7 @@ func (response Logout204Response) VisitLogoutResponse(w http.ResponseWriter) err
 	return nil
 }
 
-type Logout401JSONResponse struct{ UnauthenticatedJSONResponse }
+type Logout401JSONResponse struct{ ErrorJSONResponse }
 
 func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
 
@@ -589,7 +522,7 @@ func (response Logout401JSONResponse) VisitLogoutResponse(w http.ResponseWriter)
 	return err
 }
 
-type Logout403JSONResponse struct{ PermissionDeniedJSONResponse }
+type Logout403JSONResponse ErrorResponse
 
 func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
 
@@ -599,20 +532,6 @@ func (response Logout403JSONResponse) VisitLogoutResponse(w http.ResponseWriter)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type Logout500JSONResponse struct{ InternalJSONResponse }
-
-func (response Logout500JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -638,7 +557,7 @@ func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	return err
 }
 
-type GetMe401JSONResponse struct{ UnauthenticatedJSONResponse }
+type GetMe401JSONResponse struct{ ErrorJSONResponse }
 
 func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
 
@@ -648,20 +567,6 @@ func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetMe500JSONResponse struct{ InternalJSONResponse }
-
-func (response GetMe500JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -682,7 +587,7 @@ func (response ChangeMyPassword204Response) VisitChangeMyPasswordResponse(w http
 	return nil
 }
 
-type ChangeMyPassword400JSONResponse struct{ InvalidRequestJSONResponse }
+type ChangeMyPassword400JSONResponse struct{ ErrorJSONResponse }
 
 func (response ChangeMyPassword400JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -696,7 +601,7 @@ func (response ChangeMyPassword400JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword401JSONResponse struct{ UnauthenticatedJSONResponse }
+type ChangeMyPassword401JSONResponse ErrorResponse
 
 func (response ChangeMyPassword401JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -710,7 +615,7 @@ func (response ChangeMyPassword401JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword403JSONResponse struct{ PermissionDeniedJSONResponse }
+type ChangeMyPassword403JSONResponse ErrorResponse
 
 func (response ChangeMyPassword403JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -724,7 +629,7 @@ func (response ChangeMyPassword403JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
-type ChangeMyPassword413JSONResponse struct{ PayloadTooLargeJSONResponse }
+type ChangeMyPassword413JSONResponse ErrorResponse
 
 func (response ChangeMyPassword413JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
 
@@ -734,20 +639,6 @@ func (response ChangeMyPassword413JSONResponse) VisitChangeMyPasswordResponse(w 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(413)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ChangeMyPassword500JSONResponse struct{ InternalJSONResponse }
-
-func (response ChangeMyPassword500JSONResponse) VisitChangeMyPasswordResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
 }

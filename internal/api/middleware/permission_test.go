@@ -88,7 +88,7 @@ type fakeAuthorizer struct {
 	asked domain.Permission
 }
 
-func (f *fakeAuthorizer) Authorize(user domain.User, permission domain.Permission) error {
+func (f *fakeAuthorizer) AuthorizePermission(user domain.User, permission domain.Permission) error {
 	f.asked = permission
 	if user.IsServerAdmin {
 		return nil

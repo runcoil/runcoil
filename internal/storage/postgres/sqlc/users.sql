@@ -18,3 +18,9 @@ WHERE email = @email::text;
 UPDATE users
 SET password_hash = @password_hash::text
 WHERE id = @id::uuid;
+
+-- name: UserLockForUpdate :one
+SELECT id
+FROM users
+WHERE id = @id::uuid
+FOR UPDATE;

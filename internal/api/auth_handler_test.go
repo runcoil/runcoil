@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apierr"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
@@ -47,7 +48,7 @@ func (f *fakeAccountService) Login(_ context.Context, login, password string) (a
 	}, nil
 }
 
-func (f *fakeAccountService) Authenticate(_ context.Context, token string) (domain.User, error) {
+func (f *fakeAccountService) AuthenticateSession(_ context.Context, token string) (domain.User, error) {
 	if token != testToken {
 		return domain.User{}, apierr.Unauthenticated(apierr.CodeUnauthenticated, "not signed in")
 	}
@@ -65,11 +66,11 @@ func (f *fakeAccountService) ChangePassword(_ context.Context, _ domain.User, _,
 	return f.changeErr
 }
 
-func (f *fakeAccountService) Access(context.Context, domain.User) (account.Access, error) {
+func (f *fakeAccountService) GetUserAccess(context.Context, domain.User) (account.Access, error) {
 	return f.access, nil
 }
 
-func (f *fakeAccountService) Authorize(user domain.User, _ domain.Permission) error {
+func (f *fakeAccountService) AuthorizePermission(user domain.User, _ domain.Permission) error {
 	if user.IsServerAdmin {
 		return nil
 	}
@@ -310,4 +311,18 @@ func TestRequestsRefusedBeforeTheHandler(t *testing.T) {
 			assert.Equal(t, tt.wantError, code, rec.Body.String())
 		})
 	}
+}
+
+func TestHandlersRefuseAContextWithoutACaller(t *testing.T) {
+	h := newAuthHandler(&fakeAccountService{user: testUser}, false)
+	ctx := context.Background()
+
+	_, err := h.Logout(ctx, gen.LogoutRequestObject{})
+	assert.ErrorIs(t, err, errNoCaller)
+
+	_, err = h.GetMe(ctx, gen.GetMeRequestObject{})
+	assert.ErrorIs(t, err, errNoCaller)
+
+	_, err = h.ChangeMyPassword(ctx, gen.ChangeMyPasswordRequestObject{Body: &gen.ChangeMyPasswordJSONRequestBody{}})
+	assert.ErrorIs(t, err, errNoCaller)
 }

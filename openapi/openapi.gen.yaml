@@ -168,7 +168,10 @@ components:
       additionalProperties: false
       properties:
         code:
-          $ref: "#/components/schemas/ErrorCode"
+          type: string
+          description: >-
+            What went wrong, in lower snake case, such as invalid_request, unauthenticated, permission_denied, not_found, payload_too_large or internal.
+          example: invalid_request
           x-order: 1
         message:
           type: string
@@ -187,17 +190,6 @@ components:
       required:
         - code
         - message
-    ErrorCode:
-      type: string
-      description: The code of an error.
-      example: invalid_request
-      enum:
-        - invalid_request
-        - unauthenticated
-        - permission_denied
-        - not_found
-        - payload_too_large
-        - internal
     ErrorParam:
       type: object
       description: A request field at fault.
@@ -279,32 +271,8 @@ components:
         - currentPassword
         - newPassword
   responses:
-    InvalidRequest:
-      description: "invalid_request: the request is not valid; params names the fields at fault"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Unauthenticated:
-      description: "unauthenticated: no live session, or a wrong login or password"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    PermissionDenied:
-      description: "permission_denied: the caller lacks the operation's permission, or a write came from another origin"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    PayloadTooLarge:
-      description: "payload_too_large: the request body is larger than 1 MiB"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Internal:
-      description: "internal: an unexpected failure"
+    Error:
+      description: An error. The body's code says which.
       content:
         application/json:
           schema:
@@ -340,15 +308,13 @@ components:
                 schema:
                   $ref: "#/components/schemas/LoginResponse"
           "400":
-            $ref: "#/components/responses/InvalidRequest"
+            $ref: "#/components/responses/Error"
           "401":
-            $ref: "#/components/responses/Unauthenticated"
+            $ref: "#/components/responses/Error"
           "403":
-            $ref: "#/components/responses/PermissionDenied"
+            $ref: "#/components/responses/Error"
           "413":
-            $ref: "#/components/responses/PayloadTooLarge"
-          "500":
-            $ref: "#/components/responses/Internal"
+            $ref: "#/components/responses/Error"
     logout:
       post:
         operationId: logout
@@ -367,11 +333,9 @@ components:
                 schema:
                   type: string
           "401":
-            $ref: "#/components/responses/Unauthenticated"
+            $ref: "#/components/responses/Error"
           "403":
-            $ref: "#/components/responses/PermissionDenied"
-          "500":
-            $ref: "#/components/responses/Internal"
+            $ref: "#/components/responses/Error"
     me:
       get:
         operationId: getMe
@@ -389,9 +353,7 @@ components:
                 schema:
                   $ref: "#/components/schemas/Me"
           "401":
-            $ref: "#/components/responses/Unauthenticated"
-          "500":
-            $ref: "#/components/responses/Internal"
+            $ref: "#/components/responses/Error"
     mePassword:
       put:
         operationId: changeMyPassword
@@ -412,12 +374,10 @@ components:
           "204":
             description: The password is changed
           "400":
-            $ref: "#/components/responses/InvalidRequest"
+            $ref: "#/components/responses/Error"
           "401":
-            $ref: "#/components/responses/Unauthenticated"
+            $ref: "#/components/responses/Error"
           "403":
-            $ref: "#/components/responses/PermissionDenied"
+            $ref: "#/components/responses/Error"
           "413":
-            $ref: "#/components/responses/PayloadTooLarge"
-          "500":
-            $ref: "#/components/responses/Internal"
+            $ref: "#/components/responses/Error"

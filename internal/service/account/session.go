@@ -30,14 +30,14 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	var user domain.User
 	var err error
 	if strings.Contains(login, "@") {
-		user, err = s.userStore.UserByEmail(ctx, login)
+		user, err = s.userStore.GetUserByEmail(ctx, login)
 	} else {
-		user, err = s.userStore.UserByUsername(ctx, login)
+		user, err = s.userStore.GetUserByUsername(ctx, login)
 	}
 
 	if errors.Is(err, domain.ErrUserNotFound) {
 		_, _ = VerifyPassword(ctx, s.dummyHash(), password)
-		return LoginResult{}, errWrongLogin
+		return LoginResult{}, ErrWrongLogin
 	}
 
 	if err != nil {
@@ -50,14 +50,14 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	}
 
 	if !ok || user.DisabledAt != nil {
-		return LoginResult{}, errWrongLogin
+		return LoginResult{}, ErrWrongLogin
 	}
 
 	token := newSessionToken()
 
-	err = s.userStore.CreateSession(ctx, hashToken(token), user.ID, user.PasswordHash, s.cfg.SessionMaxLifetime)
+	err = s.sessionStore.CreateSession(ctx, hashToken(token), user.ID, user.PasswordHash, s.cfg.SessionMaxLifetime)
 	if errors.Is(err, domain.ErrUserNotFound) {
-		return LoginResult{}, errWrongLogin
+		return LoginResult{}, ErrWrongLogin
 	}
 
 	if err != nil {
@@ -72,31 +72,23 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 	}, nil
 }
 
-// Authenticate returns the user of a session token.
-func (s *Service) Authenticate(ctx context.Context, token string) (domain.User, error) {
-	tokenHash := hashToken(token)
-
-	session, err := s.userStore.SessionByToken(ctx, tokenHash, s.cfg.SessionMaxInactive)
+// AuthenticateSession returns the user of a session token and records the activity.
+func (s *Service) AuthenticateSession(ctx context.Context, token string) (domain.User, error) {
+	user, err := s.sessionStore.GetSessionUserAndTouch(ctx, hashToken(token), s.cfg.SessionMaxInactive)
 	if errors.Is(err, domain.ErrSessionNotFound) {
-		return domain.User{}, errNoSession
+		return domain.User{}, ErrNotSignedIn
 	}
 
 	if err != nil {
-		return domain.User{}, fmt.Errorf("get session: %w", err)
+		return domain.User{}, fmt.Errorf("get session user: %w", err)
 	}
 
-	if session.TouchDue {
-		if err := s.userStore.TouchSession(ctx, tokenHash); err != nil {
-			return domain.User{}, fmt.Errorf("touch session: %w", err)
-		}
-	}
-
-	return session.User, nil
+	return user, nil
 }
 
 // Logout ends the session of token.
 func (s *Service) Logout(ctx context.Context, token string) error {
-	if err := s.userStore.DeleteSession(ctx, hashToken(token)); err != nil {
+	if err := s.sessionStore.DeleteSession(ctx, hashToken(token)); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
 

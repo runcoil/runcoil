@@ -52,17 +52,17 @@ type ProjectAccess struct {
 	Permissions []domain.Permission
 }
 
-// Access returns what user may do. A server admin is admin in every project.
-func (s *Service) Access(ctx context.Context, user domain.User) (Access, error) {
+// GetUserAccess returns what user may do. A server admin is admin in every project.
+func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (Access, error) {
 	access := Access{Permissions: []domain.Permission{}}
 
 	var roles []domain.ProjectRole
 	var err error
 	if user.IsServerAdmin {
 		access.Permissions = serverAdminPermissions
-		roles, err = s.userStore.Projects(ctx)
+		roles, err = s.projectStore.ListProjects(ctx)
 	} else {
-		roles, err = s.userStore.ProjectRoles(ctx, user.ID)
+		roles, err = s.projectStore.ListProjectsWithRoleByUser(ctx, user.ID)
 	}
 
 	if err != nil {
@@ -80,11 +80,12 @@ func (s *Service) Access(ctx context.Context, user domain.User) (Access, error) 
 	return access, nil
 }
 
-// Authorize checks that user has permission. A server admin has every permission.
-func (s *Service) Authorize(user domain.User, permission domain.Permission) error {
-	if user.IsServerAdmin && slices.Contains(domain.Permissions, permission) {
+// AuthorizePermission checks that user has permission. A server admin has every
+// permission.
+func (s *Service) AuthorizePermission(user domain.User, _ domain.Permission) error {
+	if user.IsServerAdmin {
 		return nil
 	}
 
-	return errPermissionDenied
+	return ErrPermissionDenied
 }
