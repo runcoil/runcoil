@@ -79,7 +79,7 @@ func TestAuthenticate(t *testing.T) {
 
 			if tt.wantIdentity {
 				assert.Equal(t, ana, identity)
-				assert.Equal(t, domain.Credential{Kind: domain.CredentialSession, Secret: "token"}, credential)
+				assert.Equal(t, domain.Credential{Type: domain.CredentialSession, Secret: "token"}, credential)
 			}
 		})
 	}

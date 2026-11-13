@@ -26,7 +26,7 @@ func Authenticate(cookieName string, authenticator Authenticator, handleError fu
 				return
 			}
 
-			credential := domain.Credential{Kind: domain.CredentialSession, Secret: cookie.Value}
+			credential := domain.Credential{Type: domain.CredentialSession, Secret: cookie.Value}
 
 			identity, err := authenticator.Authenticate(r.Context(), credential)
 
