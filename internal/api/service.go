@@ -158,12 +158,7 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.Handle("/", dashboardHandler(s.ui))
 
 	if s.cfg.Swagger {
-		docs := http.NewServeMux()
-		swagger.Register(docs, openapi.Spec)
-
-		handler := middleware.Chain(docs, middleware.LogRequest(s.logger), middleware.Recover())
-		mux.Handle("/docs", handler)
-		mux.Handle("/docs/", handler)
+		swagger.Register(mux, openapi.Spec)
 	}
 
 	return &http.Server{
