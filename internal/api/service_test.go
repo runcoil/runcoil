@@ -47,9 +47,14 @@ func newTestService(t *testing.T, db *fakePinger) *Service {
 	return s
 }
 
-func get(s *Service, path string) *httptest.ResponseRecorder {
+func get(t *testing.T, s *Service, path string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	srv, err := s.newHTTPServer()
+	require.NoError(t, err)
+
 	rec := httptest.NewRecorder()
-	s.newHTTPServer().Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 
 	return rec
 }
@@ -69,7 +74,7 @@ func TestConfig(t *testing.T) {
 func TestLivez(t *testing.T) {
 	db := &fakePinger{err: errors.New("down")}
 
-	rec := get(newTestService(t, db), "/livez")
+	rec := get(t, newTestService(t, db), "/livez")
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Zero(t, db.calls.Load())
@@ -94,7 +99,7 @@ func TestReadyz(t *testing.T) {
 				s.Stop()
 			}
 
-			rec := get(s, "/readyz")
+			rec := get(t, s, "/readyz")
 
 			assert.Equal(t, tt.want, rec.Code)
 		})

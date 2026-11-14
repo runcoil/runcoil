@@ -11,7 +11,7 @@ import (
 
 func TestRegister(t *testing.T) {
 	mux := http.NewServeMux()
-	Register(mux, []byte("openapi: 3.1.0\ninfo:\n  version: 1.0.0\n"), "v0.3.0")
+	require.NoError(t, Register(mux, []byte("openapi: 3.1.0\ninfo:\n  version: 1.0.0\n"), "v0.3.0"))
 
 	tests := []struct {
 		path        string
@@ -36,14 +36,9 @@ func TestRegister(t *testing.T) {
 }
 
 func TestRegisterBadSpec(t *testing.T) {
-	mux := http.NewServeMux()
-	Register(mux, []byte("openapi: 3.1.0\n"), "v0.3.0")
+	err := Register(http.NewServeMux(), []byte("openapi: 3.1.0\n"), "v0.3.0")
 
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, specPath, nil))
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Contains(t, rec.Body.String(), "spec has no info")
+	assert.EqualError(t, err, "set spec version: spec has no info")
 }
 
 func TestWithVersion(t *testing.T) {

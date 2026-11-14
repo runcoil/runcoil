@@ -95,7 +95,10 @@ func newAPIServerWithConfig(t *testing.T, cfg Config, accountService *fakeAccoun
 	s, err := New(cfg, slog.New(slog.DiscardHandler), healthutil.New(), accountService)
 	require.NoError(t, err)
 
-	return s.newHTTPServer().Handler
+	srv, err := s.newHTTPServer()
+	require.NoError(t, err)
+
+	return srv.Handler
 }
 
 type call struct {

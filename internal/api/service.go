@@ -115,7 +115,10 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) serve(ctx context.Context, listener net.Listener) error {
-	srv := s.newHTTPServer()
+	srv, err := s.newHTTPServer()
+	if err != nil {
+		return fmt.Errorf("new http server: %w", errors.Join(err, listener.Close()))
+	}
 
 	served := make(chan error, 1)
 	go func() {
@@ -148,7 +151,7 @@ func (s *Service) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
-func (s *Service) newHTTPServer() *http.Server {
+func (s *Service) newHTTPServer() (*http.Server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
@@ -156,7 +159,9 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.Handle("/", uiHandler(ui.Dist()))
 
 	if s.cfg.Swagger {
-		swagger.Register(mux, openapi.Spec, build.Version)
+		if err := swagger.Register(mux, openapi.Spec, build.Version); err != nil {
+			return nil, fmt.Errorf("register swagger: %w", err)
+		}
 	} else {
 		mux.Handle("/docs", http.NotFoundHandler())
 		mux.Handle("/docs/", http.NotFoundHandler())
@@ -169,7 +174,7 @@ func (s *Service) newHTTPServer() *http.Server {
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
-	}
+	}, nil
 }
 
 func (s *Service) apiHandler() http.Handler {
