@@ -3,6 +3,7 @@ package runcoil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,20 +87,35 @@ func TestANonRetriableErrorIsMarked(t *testing.T) {
 	assert.Nil(t, steps[0].GetRetry(), "no step.Retry: the Task's policy")
 }
 
+// tooLarge is one way the server refuses an output for its size, and the failure text
+// the SDK reports in its place.
+type tooLarge struct {
+	err  error
+	want string
+}
+
 // tooLargeErrors are the two ways the server refuses an output for its size: over its
-// limit, and over the largest message it reads.
-func tooLargeErrors(t *testing.T) map[string]error {
+// limit, and over the largest message it reads. of names the output, size is its length.
+func tooLargeErrors(t *testing.T, of string, size int) map[string]tooLarge {
 	t.Helper()
 
-	return map[string]error{
-		"over the limit": codedError(t, connect.CodeInvalidArgument, runcoilv1.ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE,
-			"output is 2000000 bytes, over the limit of 1048576 bytes"),
-		"over the read limit": connect.NewError(connect.CodeResourceExhausted, "message is larger than configured max"),
+	limit := "output is 2000000 bytes, over the limit of 1048576 bytes"
+	read := "message is larger than configured max"
+
+	return map[string]tooLarge{
+		"over the limit": {
+			err:  codedError(t, connect.CodeInvalidArgument, runcoilv1.ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE, limit),
+			want: limit,
+		},
+		"over the read limit": {
+			err:  connect.NewError(connect.CodeResourceExhausted, read),
+			want: fmt.Sprintf("%s output of %d bytes is too large: %s", of, size, read),
+		},
 	}
 }
 
 func TestAStepOutputTooLargeFailsTheStep(t *testing.T) {
-	for name, tooLarge := range tooLargeErrors(t) {
+	for name, tc := range tooLargeErrors(t, "step", 16) {
 		t.Run(name, func(t *testing.T) {
 			f, url := newFakeServer(t)
 			st := newFakeStream()
@@ -108,7 +124,7 @@ func TestAStepOutputTooLargeFailsTheStep(t *testing.T) {
 			f.set(func(f *fakeServer) {
 				f.stepAnswer = func(req *runcoilv1.CompleteStepRequest) (*runcoilv1.CompleteStepResponse, error) {
 					if req.GetError() == nil {
-						return nil, tooLarge
+						return nil, tc.err
 					}
 
 					rec := storedRecord(req)
@@ -134,7 +150,7 @@ func TestAStepOutputTooLargeFailsTheStep(t *testing.T) {
 
 			run := f.waitRun(t)
 			assert.Equal(t, "big", run.GetError().GetStepId())
-			assert.Contains(t, run.GetError().GetMessage(), "step output of 16 bytes is too large")
+			assert.Equal(t, tc.want, run.GetError().GetMessage())
 
 			_, _, _, steps := f.snapshot()
 			require.Len(t, steps, 2)
@@ -147,7 +163,7 @@ func TestAStepOutputTooLargeFailsTheStep(t *testing.T) {
 }
 
 func TestARunOutputTooLargeFailsTheRun(t *testing.T) {
-	for name, tooLarge := range tooLargeErrors(t) {
+	for name, tc := range tooLargeErrors(t, "run", 17) {
 		t.Run(name, func(t *testing.T) {
 			f, url := newFakeServer(t)
 			st := newFakeStream()
@@ -156,7 +172,7 @@ func TestARunOutputTooLargeFailsTheRun(t *testing.T) {
 			f.set(func(f *fakeServer) {
 				f.runRefuse = func(req *runcoilv1.CompleteRunRequest) error {
 					if req.GetError() == nil {
-						return tooLarge
+						return tc.err
 					}
 
 					return nil
@@ -173,7 +189,7 @@ func TestARunOutputTooLargeFailsTheRun(t *testing.T) {
 
 			run := f.waitRun(t)
 			assert.Equal(t, runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE, run.GetError().GetKind())
-			assert.Contains(t, run.GetError().GetMessage(), "run output of 17 bytes is too large")
+			assert.Equal(t, tc.want, run.GetError().GetMessage())
 			assert.Equal(t, "run-1", run.GetLease().GetRunId())
 			assert.Len(t, f.sentRuns(), 2)
 		})
