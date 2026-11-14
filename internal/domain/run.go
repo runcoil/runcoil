@@ -10,7 +10,8 @@ import (
 // MaxOutputBytes is the largest output a Step or a Run may store.
 const MaxOutputBytes = 1 << 20
 
-// MaxErrorMessageBytes is the longest error message stored. CleanMessage cuts a longer one.
+// MaxErrorMessageBytes is the longest error message stored. Failure.Cleaned cuts a longer
+// one.
 const MaxErrorMessageBytes = 64 << 10
 
 // RunStatus is where a Run is in its life.
@@ -57,10 +58,21 @@ type Failure struct {
 	StepID  string
 }
 
-// CleanMessage returns an error message as it is stored: each NUL byte, which PostgreSQL
-// refuses in text, becomes U+FFFD, and the text is cut to MaxErrorMessageBytes at a
-// character boundary.
-func CleanMessage(message string) string {
+// Cleaned returns the failure as it is stored: in its message, each NUL byte, which
+// cannot be stored, becomes U+FFFD, and the text is cut to MaxErrorMessageBytes at a
+// character boundary. Nil stays nil.
+func (f *Failure) Cleaned() *Failure {
+	if f == nil {
+		return nil
+	}
+
+	cleaned := *f
+	cleaned.Message = cleanMessage(f.Message)
+
+	return &cleaned
+}
+
+func cleanMessage(message string) string {
 	message = strings.ReplaceAll(message, "\x00", "\uFFFD")
 	if len(message) <= MaxErrorMessageBytes {
 		return message

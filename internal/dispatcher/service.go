@@ -302,7 +302,7 @@ func (s *Service) claimAll(ctx context.Context) {
 		}
 
 		// The claim may have committed before the error, so the worker reconnects and the
-		// reconcile requeues what it was never sent.
+		// reconcile puts what it was never sent back in the queue, counted as lost.
 		if err != nil {
 			s.logger.ErrorContext(ctx, "claim runs failed, ending the stream",
 				slog.String("worker_id", c.workerID.String()),

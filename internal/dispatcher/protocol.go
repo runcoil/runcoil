@@ -169,11 +169,7 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 		return domain.StepResult{}, outputTooLarge("step", n)
 	}
 
-	if f := params.Outcome.Failure; f != nil {
-		cleaned := *f
-		cleaned.Message = domain.CleanMessage(f.Message)
-		params.Outcome.Failure = &cleaned
-	}
+	params.Outcome.Failure = params.Outcome.Failure.Cleaned()
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
 	if errors.Is(err, domain.ErrStaleLease) {
@@ -261,11 +257,7 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 		return outputTooLarge("run", n)
 	}
 
-	if f := result.Failure; f != nil {
-		cleaned := *f
-		cleaned.Message = domain.CleanMessage(f.Message)
-		result.Failure = &cleaned
-	}
+	result.Failure = result.Failure.Cleaned()
 
 	end := result.End()
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)
