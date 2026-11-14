@@ -76,6 +76,35 @@ func retryable(err error) bool {
 	}
 }
 
+// refused reports whether the server refused a report for good: the same report would be
+// refused again. A stale lease and an ended session are not refusals; they end the
+// attempt.
+func refused(err error) bool {
+	switch connect.CodeOf(err) {
+	case connect.CodeInvalidArgument, connect.CodeResourceExhausted:
+		return true
+	default:
+		return false
+	}
+}
+
+// outputTooLarge reports whether the server refused a report for the size of its output:
+// over the server's limit, or over the largest message it reads.
+func outputTooLarge(err error) bool {
+	return errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE ||
+		connect.CodeOf(err) == connect.CodeResourceExhausted
+}
+
+// refusal returns the server's text of a refused call, without the SDK's wrapping.
+func refusal(err error) string {
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		return ce.Message()
+	}
+
+	return err.Error()
+}
+
 // errorCode returns the Runcoil error code in the details of err, or
 // ERROR_CODE_UNSPECIFIED when there is none.
 func errorCode(err error) runcoilv1.ErrorCode {
