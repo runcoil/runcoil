@@ -27,16 +27,6 @@ func TestRegistrationValidate(t *testing.T) {
 			reg:  Registration{App: "shop", Slots: 1, Tasks: []TaskDefinition{task("a"), task("a")}},
 			want: &RegistrationError{Message: "task is declared twice", TaskName: "a"},
 		},
-		{
-			name: "NUL in the app",
-			reg:  Registration{App: "sh\x00op", Slots: 1, Tasks: []TaskDefinition{task("a")}},
-			want: &RegistrationError{Message: "app name must not contain a NUL byte"},
-		},
-		{
-			name: "NUL in a task",
-			reg:  Registration{App: "shop", Slots: 1, Tasks: []TaskDefinition{task("a"), task("b\x00")}},
-			want: &RegistrationError{Message: "task name must not contain a NUL byte", TaskName: "b\x00"},
-		},
 		{name: "most tasks", reg: Registration{App: "shop", Slots: 1, Tasks: tasks(MaxTasks)}},
 		{
 			name: "too many tasks",

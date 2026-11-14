@@ -9,6 +9,7 @@ message TaskDefinition {
   string name = 1 [(buf.validate.field).string = {
     min_len: 1
     max_bytes: 255
+    not_contains: "\x00"
   }];
   RetryPolicy retry = 2;
   // Only for the first start. Unset: no deadline.

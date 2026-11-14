@@ -259,10 +259,9 @@ var File_runcoil_v1_task_proto protoreflect.FileDescriptor
 const file_runcoil_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15runcoil/v1/task.proto\x12\n" +
-	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd3\x01\n" +
-	"\x0eTaskDefinition\x12\x1e\n" +
-	"\x04name\x18\x01 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01(\xff\x01R\x04name\x12-\n" +
+	"runcoil.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd7\x01\n" +
+	"\x0eTaskDefinition\x12\"\n" +
+	"\x04name\x18\x01 \x01(\tB\x0e\xbaH\vr\t\x10\x01(\xff\x01\xba\x01\x01\x00R\x04name\x12-\n" +
 	"\x05retry\x18\x02 \x01(\v2\x17.runcoil.v1.RetryPolicyR\x05retry\x12@\n" +
 	"\x0estart_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\rstartDeadline\x120\n" +
 	"\bschedule\x18\x04 \x01(\v2\x14.runcoil.v1.ScheduleR\bschedule\"c\n" +

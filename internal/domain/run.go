@@ -1,18 +1,12 @@
 package domain
 
 import (
-	"strings"
 	"time"
-	"unicode/utf8"
 	"uuid"
 )
 
-// MaxOutputBytes is the largest output a Step or a Run may store.
+// MaxOutputBytes is the largest output a Step or a Run may store: 1 MiB.
 const MaxOutputBytes = 1 << 20
-
-// MaxErrorMessageBytes is the longest error message stored. Failure.Cleaned cuts a longer
-// one.
-const MaxErrorMessageBytes = 64 << 10
 
 // RunStatus is where a Run is in its life.
 type RunStatus string
@@ -56,34 +50,6 @@ type Failure struct {
 	Code    FailureCode
 	Message string
 	StepID  string
-}
-
-// Cleaned returns the failure as it is stored: in its message, each NUL byte, which
-// cannot be stored, becomes U+FFFD, and the text is cut to MaxErrorMessageBytes at a
-// character boundary. Nil stays nil.
-func (f *Failure) Cleaned() *Failure {
-	if f == nil {
-		return nil
-	}
-
-	cleaned := *f
-	cleaned.Message = cleanMessage(f.Message)
-
-	return &cleaned
-}
-
-func cleanMessage(message string) string {
-	message = strings.ReplaceAll(message, "\x00", "\uFFFD")
-	if len(message) <= MaxErrorMessageBytes {
-		return message
-	}
-
-	cut := MaxErrorMessageBytes
-	for cut > 0 && !utf8.RuneStart(message[cut]) {
-		cut--
-	}
-
-	return message[:cut]
 }
 
 // Lease names one attempt of one Run.

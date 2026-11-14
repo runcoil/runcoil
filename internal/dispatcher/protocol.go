@@ -157,10 +157,6 @@ func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason s
 // failed try that may be tried again ends the attempt instead: the result carries the
 // retry, the Run waits for its next try, and the worker's slot is free.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
-	if err := domain.ValidateStepID(params.StepID); err != nil {
-		return domain.StepResult{}, apperr.Invalid(apperr.CodeInvalidRequest, err.Error())
-	}
-
 	if err := params.Retry.Validate(); err != nil {
 		return domain.StepResult{}, apperr.Invalid(apperr.CodeInvalidRequest, err.Error())
 	}
@@ -168,8 +164,6 @@ func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepPa
 	if n := len(params.Outcome.Output); n > domain.MaxOutputBytes {
 		return domain.StepResult{}, outputTooLarge("step", n)
 	}
-
-	params.Outcome.Failure = params.Outcome.Failure.Cleaned()
 
 	result, err := s.runStore.CompleteStep(ctx, params, s.retryDecider(params.Outcome, params.Retry))
 	if errors.Is(err, domain.ErrStaleLease) {
@@ -256,8 +250,6 @@ func (s *Service) CompleteRun(ctx context.Context, worker domain.Worker, lease d
 	if n := len(result.Output); n > domain.MaxOutputBytes {
 		return outputTooLarge("run", n)
 	}
-
-	result.Failure = result.Failure.Cleaned()
 
 	end := result.End()
 	ended, err := s.runStore.FinishRun(ctx, worker.ID, lease, end)

@@ -3,13 +3,9 @@ package domain
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"uuid"
 )
-
-// MaxStepIDBytes is the longest Step ID.
-const MaxStepIDBytes = 255
 
 // StepKind is what a Step record records.
 type StepKind string
@@ -60,20 +56,6 @@ type CompleteStepParams struct {
 	StepID   string
 	Outcome  StepOutcome
 	Retry    StepRetry
-}
-
-// ValidateStepID checks that id is 1 to MaxStepIDBytes bytes long and has no NUL byte,
-// which cannot be stored.
-func ValidateStepID(id string) error {
-	if id == "" || len(id) > MaxStepIDBytes {
-		return fmt.Errorf("step id must be 1 to %d bytes long", MaxStepIDBytes)
-	}
-
-	if strings.ContainsRune(id, 0) {
-		return errors.New("step id must not contain a NUL byte")
-	}
-
-	return nil
 }
 
 // StepRetry is what a worker says about retrying a failed try of a Step.
