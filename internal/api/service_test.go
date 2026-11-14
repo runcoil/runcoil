@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/runcoil/runcoil/internal/build"
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
@@ -47,14 +46,9 @@ func newTestService(t *testing.T, db *fakePinger) *Service {
 	return s
 }
 
-func get(t *testing.T, s *Service, path string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	srv, err := s.newHTTPServer()
-	require.NoError(t, err)
-
+func get(s *Service, path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	s.newHTTPServer().Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 
 	return rec
 }
@@ -74,7 +68,7 @@ func TestConfig(t *testing.T) {
 func TestLivez(t *testing.T) {
 	db := &fakePinger{err: errors.New("down")}
 
-	rec := get(t, newTestService(t, db), "/livez")
+	rec := get(newTestService(t, db), "/livez")
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Zero(t, db.calls.Load())
@@ -99,7 +93,7 @@ func TestReadyz(t *testing.T) {
 				s.Stop()
 			}
 
-			rec := get(t, s, "/readyz")
+			rec := get(s, "/readyz")
 
 			assert.Equal(t, tt.want, rec.Code)
 		})
@@ -182,15 +176,6 @@ func TestRunListenError(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
-}
-
-func TestSwaggerSpecVersion(t *testing.T) {
-	h := newAPIServerWithConfig(t, Config{Port: 8080, Swagger: true}, &fakeAccountService{user: testUser})
-
-	rec := do(t, h, call{method: http.MethodGet, path: "/docs/openapi.yaml"})
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "version: "+build.Get().Version+"\n")
 }
 
 func TestSwagger(t *testing.T) {

@@ -6,12 +6,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRegister(t *testing.T) {
 	mux := http.NewServeMux()
-	require.NoError(t, Register(mux, []byte("openapi: 3.1.0\ninfo:\n  version: 1.0.0\n"), "v0.3.0"))
+	Register(mux, []byte("openapi: 3.1.0\n"))
 
 	tests := []struct {
 		path        string
@@ -19,7 +18,7 @@ func TestRegister(t *testing.T) {
 		wantContent string
 	}{
 		{path: "/docs", wantType: "text/html; charset=utf-8", wantContent: `url: "/docs/openapi.yaml"`},
-		{path: "/docs/openapi.yaml", wantType: "application/yaml", wantContent: "version: v0.3.0\n"},
+		{path: "/docs/openapi.yaml", wantType: "application/yaml", wantContent: "openapi: 3.1.0\n"},
 	}
 
 	for _, tt := range tests {
@@ -31,41 +30,6 @@ func TestRegister(t *testing.T) {
 			assert.Equal(t, http.StatusOK, rec.Code)
 			assert.Equal(t, tt.wantType, rec.Header().Get("Content-Type"))
 			assert.Contains(t, rec.Body.String(), tt.wantContent)
-		})
-	}
-}
-
-func TestRegisterBadSpec(t *testing.T) {
-	err := Register(http.NewServeMux(), []byte("openapi: 3.1.0\n"), "v0.3.0")
-
-	assert.EqualError(t, err, "set spec version: spec has no info")
-}
-
-func TestWithVersion(t *testing.T) {
-	spec := []byte("openapi: 3.1.0\ninfo:\n  title: Runcoil\n  version: 1.0.0\npaths: {}\n")
-
-	got, err := withVersion(spec, "v0.3.0")
-
-	require.NoError(t, err)
-	assert.Equal(t, "openapi: 3.1.0\ninfo:\n    title: Runcoil\n    version: v0.3.0\npaths: {}\n", string(got))
-}
-
-func TestWithVersionErrors(t *testing.T) {
-	tests := []struct {
-		name string
-		spec string
-		want string
-	}{
-		{name: "empty", spec: "", want: "spec is empty"},
-		{name: "no info", spec: "openapi: 3.1.0\n", want: "spec has no info"},
-		{name: "no version", spec: "info:\n  title: Runcoil\n", want: "spec has no info.version"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := withVersion([]byte(tt.spec), "v0.3.0")
-
-			assert.EqualError(t, err, tt.want)
 		})
 	}
 }

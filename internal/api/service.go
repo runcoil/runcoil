@@ -18,7 +18,6 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/api/swagger"
-	"github.com/runcoil/runcoil/internal/build"
 	"github.com/runcoil/runcoil/internal/domain"
 	"github.com/runcoil/runcoil/internal/service/account"
 	"github.com/runcoil/runcoil/openapi"
@@ -115,10 +114,7 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) serve(ctx context.Context, listener net.Listener) error {
-	srv, err := s.newHTTPServer()
-	if err != nil {
-		return fmt.Errorf("new http server: %w", errors.Join(err, listener.Close()))
-	}
+	srv := s.newHTTPServer()
 
 	served := make(chan error, 1)
 	go func() {
@@ -151,7 +147,7 @@ func (s *Service) Stop() {
 	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
-func (s *Service) newHTTPServer() (*http.Server, error) {
+func (s *Service) newHTTPServer() *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", s.livez)
 	mux.HandleFunc("GET /readyz", s.readyz)
@@ -159,9 +155,7 @@ func (s *Service) newHTTPServer() (*http.Server, error) {
 	mux.Handle("/", uiHandler(ui.Dist()))
 
 	if s.cfg.Swagger {
-		if err := swagger.Register(mux, openapi.Spec, build.Version); err != nil {
-			return nil, fmt.Errorf("register swagger: %w", err)
-		}
+		swagger.Register(mux, openapi.Spec)
 	} else {
 		mux.Handle("/docs", http.NotFoundHandler())
 		mux.Handle("/docs/", http.NotFoundHandler())
@@ -174,7 +168,7 @@ func (s *Service) newHTTPServer() (*http.Server, error) {
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
-	}, nil
+	}
 }
 
 func (s *Service) apiHandler() http.Handler {
