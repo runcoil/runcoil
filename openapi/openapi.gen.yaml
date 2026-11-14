@@ -15,6 +15,7 @@ tags:
   - name: Projects
   - name: Users
   - name: Members
+  - name: System
 paths:
   /auth/login:
     $ref: "#/components/pathItems/login"
@@ -26,6 +27,8 @@ paths:
     $ref: "#/components/pathItems/members"
   /users:
     $ref: "#/components/pathItems/users"
+  /version:
+    $ref: "#/components/pathItems/version"
   /me/password:
     $ref: "#/components/pathItems/mePassword"
   /auth/logout:
@@ -566,6 +569,36 @@ components:
           x-order: 1
       required:
         - newPassword
+    Version:
+      type: object
+      description: The build of the running server.
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+          description: The release tag, or dev for a local build.
+          example: v0.3.0
+          x-order: 1
+        commit:
+          type: string
+          description: The Git commit the server was built from. Empty for a local build.
+          example: d0716664e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6
+          x-order: 2
+        buildDate:
+          type: string
+          description: When the server was built, in RFC 3339 UTC. Empty for a local build.
+          example: "2026-11-14T08:00:00Z"
+          x-order: 3
+        goVersion:
+          type: string
+          description: The Go version the server was built with.
+          example: go1.27.0
+          x-order: 4
+      required:
+        - version
+        - commit
+        - buildDate
+        - goVersion
   responses:
     InvalidRequest:
       description: "invalid_request: the request is not valid. params lists the fields at fault."
@@ -1114,3 +1147,18 @@ components:
           "413":
             $ref: "#/components/responses/PayloadTooLarge"
             description: "payload_too_large: the body is larger than 1 MiB"
+    version:
+      get:
+        operationId: getVersion
+        summary: Get the server version
+        description: Returns the version, the commit and the build date of the running server.
+        tags:
+          - System
+        security: []
+        responses:
+          "200":
+            description: The server version
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Version"

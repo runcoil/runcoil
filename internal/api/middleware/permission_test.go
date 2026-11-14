@@ -44,7 +44,7 @@ func TestEveryOperationHasAPermission(t *testing.T) {
 		}
 	}
 
-	assert.ElementsMatch(t, []string{"Login", "Logout"}, public)
+	assert.ElementsMatch(t, []string{"Login", "Logout", "GetVersion"}, public)
 	assert.Equal(t, permissionSelf, permissions["GetMe"])
 }
 

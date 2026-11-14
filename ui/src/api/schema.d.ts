@@ -6,6 +6,7 @@
 export interface paths {
     "/auth/login": components["pathItems"]["login"];
     "/me": components["pathItems"]["me"];
+    "/version": components["pathItems"]["version"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
 }
@@ -187,6 +188,29 @@ export interface components {
              */
             newPassword: string;
         };
+        /** @description The build of the running server. */
+        Version: {
+            /**
+             * @description The release tag, or dev for a local build.
+             * @example v0.3.0
+             */
+            version: string;
+            /**
+             * @description The Git commit the server was built from. Empty for a local build.
+             * @example d0716664e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6
+             */
+            commit: string;
+            /**
+             * @description When the server was built, in RFC 3339 UTC. Empty for a local build.
+             * @example 2026-11-14T08:00:00Z
+             */
+            buildDate: string;
+            /**
+             * @description The Go version the server was built with.
+             * @example go1.27.0
+             */
+            goVersion: string;
+        };
     };
     responses: {
         /** @description invalid_request: the request is not valid. params lists the fields at fault. */
@@ -344,6 +368,26 @@ export interface components {
             patch?: never;
             trace?: never;
         };
+        version: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * Get the server version
+             * @description Returns the version, the commit and the build date of the running server.
+             */
+            get: operations["getVersion"];
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
     };
 }
 export type $defs = Record<string, never>;
@@ -456,6 +500,26 @@ export interface operations {
             403: components["responses"]["PermissionDenied"];
             /** @description payload_too_large: the body is larger than 1 MiB */
             413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    getVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The server version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Version"];
+                };
+            };
         };
     };
 }

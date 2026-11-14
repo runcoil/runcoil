@@ -4,6 +4,17 @@ env:
   GOWORK: 'off'
 
 vars:
+  BUILD_PKG: github.com/runcoil/runcoil/internal/build
+  VERSION:
+    sh: git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse HEAD 2>/dev/null || true
+  BUILD_DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: >-
+    -X {{.BUILD_PKG}}.Version={{.VERSION}}
+    -X {{.BUILD_PKG}}.Commit={{.COMMIT}}
+    -X {{.BUILD_PKG}}.BuildDate={{.BUILD_DATE}}
   GOOSE_DBSTRING: '{{.GOOSE_DBSTRING | default "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"}}'
   GOOSE: >-
     GOOSE_DRIVER=postgres
@@ -31,12 +42,12 @@ tasks:
   build:
     desc: Build the server
     cmds:
-      - go build ./...
+      - go build -ldflags '{{.LDFLAGS}}' ./...
 
   run:
     desc: Run the server
     cmds:
-      - go run ./cmd/runcoil {{.CLI_ARGS}}
+      - go run -ldflags '{{.LDFLAGS}}' ./cmd/runcoil {{.CLI_ARGS}}
 
   sqlc-gen:
     desc: Generate the Go code of the SQL queries

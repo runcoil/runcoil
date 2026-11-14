@@ -215,6 +215,7 @@ type handler struct {
 	*projectHandler
 	*userHandler
 	*memberHandler
+	*versionHandler
 }
 
 func (s *Service) newHandler() *handler {
@@ -223,6 +224,7 @@ func (s *Service) newHandler() *handler {
 		projectHandler: newProjectHandler(s.accountService),
 		userHandler:    newUserHandler(s.accountService),
 		memberHandler:  newMemberHandler(s.accountService),
+		versionHandler: newVersionHandler(),
 	}
 }
 
