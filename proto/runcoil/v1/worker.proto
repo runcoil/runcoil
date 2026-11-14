@@ -27,6 +27,7 @@ message RegisterRequest {
   string app = 1 [(buf.validate.field).string = {
     min_len: 1
     max_bytes: 255
+    not_contains: "\x00"
   }];
   repeated TaskDefinition tasks = 2;
   uint32 slots = 3;
@@ -77,7 +78,11 @@ message HeartbeatResponse {}
 
 message CompleteStepRequest {
   Lease lease = 1 [(buf.validate.field).required = true];
-  string step_id = 2 [(buf.validate.field).string.min_len = 1];
+  string step_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 255
+    not_contains: "\x00"
+  }];
   oneof outcome {
     option (buf.validate.oneof).required = true;
     bytes output = 3;
@@ -137,4 +142,5 @@ enum ErrorKind {
   ERROR_KIND_ERROR = 1;
   ERROR_KIND_PANIC = 2;
   ERROR_KIND_OUTPUT_NOT_ENCODABLE = 3;
+  ERROR_KIND_OUTPUT_TOO_LARGE = 4;
 }

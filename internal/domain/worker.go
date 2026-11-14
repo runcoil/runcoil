@@ -9,6 +9,10 @@ import (
 // MaxSlots is the most Runs one worker process may run at once.
 const MaxSlots = 100
 
+// MaxTasks is the most Tasks one registration may declare. Register stores them all in
+// one transaction, and every Register repeats it.
+const MaxTasks = 1000
+
 // Registration is what one worker process declares at Register.
 type Registration struct {
 	App   string
@@ -27,8 +31,9 @@ func (e *RegistrationError) Error() string {
 	return e.Message
 }
 
-// Validate checks what the request rules do not: the slots, that each Task is declared
-// once, and the limits of each Task's retry policy and start deadline.
+// Validate checks what the request rules do not: the slots, the number of Tasks, that
+// each Task is declared once, and the limits of each Task's retry policy and start
+// deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {
 		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
@@ -36,6 +41,10 @@ func (r Registration) Validate() error {
 
 	if len(r.Tasks) == 0 {
 		return &RegistrationError{Message: "a registration needs at least one task"}
+	}
+
+	if len(r.Tasks) > MaxTasks {
+		return &RegistrationError{Message: fmt.Sprintf("a registration declares at most %d tasks", MaxTasks)}
 	}
 
 	seen := make(map[string]struct{}, len(r.Tasks))
@@ -107,14 +116,25 @@ type Worker struct {
 }
 
 // AttachStreamParams moves a worker to a new stream. Running is what the worker reports
-// it is running. Attached gets the reported attempts the worker no longer holds while
-// the worker row is still locked, before the commit.
+// it is running. The leases it does not report count as lost, and a Run lost more than
+// MaxLost times fails. Attached gets the reported attempts the worker no longer holds
+// while the worker row is still locked, before the commit.
 type AttachStreamParams struct {
 	WorkerID     uuid.UUID
 	DispatcherID uuid.UUID
 	StreamID     uuid.UUID
 	Running      []Lease
+	MaxLost      int
 	Attached     func(notHeld []Lease)
+}
+
+// AttachStreamResult is what a new stream changed. NotHeld are the reported attempts the
+// worker no longer holds. Requeued and Failed count the leases it did not report: back in
+// the queue, or failed with FailureCodeAttemptLost.
+type AttachStreamResult struct {
+	NotHeld  []Lease
+	Requeued int
+	Failed   int
 }
 
 // ClaimRunsParams claims up to Slots queued Runs of TaskIDs for the worker on the stream.
