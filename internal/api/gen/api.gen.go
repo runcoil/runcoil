@@ -181,6 +181,21 @@ type User struct {
 	Email *string `json:"email,omitempty"`
 }
 
+// Version The build of the running server.
+type Version struct {
+	// Version The release tag, or dev for a local build.
+	Version string `json:"version"`
+
+	// Commit The Git commit the server was built from. Empty for a local build.
+	Commit string `json:"commit"`
+
+	// BuildDate When the server was built, in RFC 3339 UTC. Empty for a local build.
+	BuildDate string `json:"buildDate"`
+
+	// GoVersion The Go version the server was built with.
+	GoVersion string `json:"goVersion"`
+}
+
 // InvalidRequest The body of every error response.
 type InvalidRequest = ErrorResponse
 
@@ -213,6 +228,9 @@ type ServerInterface interface {
 	// ChangeMyPassword Change my password
 	// (PUT /me/password)
 	ChangeMyPassword(w http.ResponseWriter, r *http.Request)
+	// GetVersion Get the server version
+	// (GET /version)
+	GetVersion(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -271,6 +289,20 @@ func (siw *ServerInterfaceWrapper) ChangeMyPassword(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangeMyPassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVersion(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -404,6 +436,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/logout", wrapper.Logout)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangeMyPassword)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 
 	return m
 }
@@ -644,6 +677,27 @@ func (response ChangeMyPassword413JSONResponse) VisitChangeMyPasswordResponse(w 
 	return err
 }
 
+type GetVersionRequestObject struct {
+}
+
+type GetVersionResponseObject interface {
+	VisitGetVersionResponse(w http.ResponseWriter) error
+}
+
+type GetVersion200JSONResponse Version
+
+func (response GetVersion200JSONResponse) VisitGetVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Login Sign in
@@ -658,6 +712,9 @@ type StrictServerInterface interface {
 	// ChangeMyPassword Change my password
 	// (PUT /me/password)
 	ChangeMyPassword(ctx context.Context, request ChangeMyPasswordRequestObject) (ChangeMyPasswordResponseObject, error)
+	// GetVersion Get the server version
+	// (GET /version)
+	GetVersion(ctx context.Context, request GetVersionRequestObject) (GetVersionResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -802,6 +859,30 @@ func (sh *strictHandler) ChangeMyPassword(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ChangeMyPasswordResponseObject); ok {
 		if err := validResponse.VisitChangeMyPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVersion operation middleware
+func (sh *strictHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
+	var request GetVersionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVersion(ctx, request.(GetVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVersionResponseObject); ok {
+		if err := validResponse.VisitGetVersionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

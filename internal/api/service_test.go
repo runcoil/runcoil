@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/runcoil/runcoil/internal/build"
 	"github.com/runcoil/runcoil/pkg/configutil"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 )
@@ -176,6 +177,15 @@ func TestRunListenError(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
+}
+
+func TestSwaggerSpecVersion(t *testing.T) {
+	h := newAPIServerWithConfig(t, Config{Port: 8080, Swagger: true}, &fakeAccountService{user: testUser})
+
+	rec := do(t, h, call{method: http.MethodGet, path: "/docs/openapi.yaml"})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "version: "+build.Get().Version+"\n")
 }
 
 func TestSwagger(t *testing.T) {

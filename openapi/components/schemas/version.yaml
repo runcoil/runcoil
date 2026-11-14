@@ -1,0 +1,30 @@
+Version:
+  type: object
+  description: The build of the running server.
+  additionalProperties: false
+  properties:
+    version:
+      type: string
+      description: The release tag, or dev for a local build.
+      example: v0.3.0
+      x-order: 1
+    commit:
+      type: string
+      description: The Git commit the server was built from. Empty for a local build.
+      example: d0716664e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6
+      x-order: 2
+    buildDate:
+      type: string
+      description: When the server was built, in RFC 3339 UTC. Empty for a local build.
+      example: "2026-11-14T08:00:00Z"
+      x-order: 3
+    goVersion:
+      type: string
+      description: The Go version the server was built with.
+      example: go1.27.0
+      x-order: 4
+  required:
+    - version
+    - commit
+    - buildDate
+    - goVersion

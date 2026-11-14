@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/pflag"
 
 	"github.com/runcoil/runcoil/internal/api"
+	"github.com/runcoil/runcoil/internal/build"
 	"github.com/runcoil/runcoil/internal/dispatcher"
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
@@ -98,7 +100,10 @@ func run() error {
 		schedulerService,
 	)
 
-	logger.InfoContext(ctx, "server is started")
+	logger.InfoContext(ctx, "server is started",
+		slog.String("version", build.Version),
+		slog.String("commit", build.Commit),
+	)
 
 	if err := manager.Run(ctx); err != nil {
 		return fmt.Errorf("run services: %w", err)

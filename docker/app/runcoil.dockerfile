@@ -11,6 +11,10 @@ RUN pnpm run build
 
 FROM golang:1.27 AS builder
 
+ARG VERSION=dev
+ARG COMMIT
+ARG BUILD_DATE
+
 WORKDIR /app
 COPY go.mod go.sum ./
 COPY proto/go.mod proto/go.sum ./proto/
@@ -22,7 +26,10 @@ COPY --from=ui /ui/dist ./ui/dist
 RUN GOWORK=off \
     CGO_ENABLED=0 \
     GOOS=linux \
-    go build -ldflags "-s -w" \
+    go build -ldflags "-s -w \
+    -X github.com/runcoil/runcoil/internal/build.Version=${VERSION} \
+    -X github.com/runcoil/runcoil/internal/build.Commit=${COMMIT} \
+    -X github.com/runcoil/runcoil/internal/build.BuildDate=${BUILD_DATE}" \
     -o main ./cmd/runcoil
 
 
