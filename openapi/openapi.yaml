@@ -16,6 +16,7 @@ security:
 
 tags:
   - name: Auth
+  - name: System
 
 paths:
   /auth/login:
@@ -26,6 +27,8 @@ paths:
     $ref: "./paths/me.yaml#/me"
   /me/password:
     $ref: "./paths/me.yaml#/mePassword"
+  /version:
+    $ref: "./paths/version.yaml#/version"
 
 components:
   securitySchemes:

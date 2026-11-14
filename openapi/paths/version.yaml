@@ -1,0 +1,15 @@
+version:
+  get:
+    operationId: getVersion
+    summary: Get the server version
+    description: Returns the version, the commit and the build date of the running server.
+    tags:
+      - System
+    security: []
+    responses:
+      "200":
+        description: The server version
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/version.yaml#/Version"

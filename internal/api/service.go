@@ -201,11 +201,13 @@ var _ gen.StrictServerInterface = (*handler)(nil)
 
 type handler struct {
 	*authHandler
+	*versionHandler
 }
 
 func (s *Service) newHandler() *handler {
 	return &handler{
-		authHandler: newAuthHandler(s.accountService, s.cfg.SecureCookie),
+		authHandler:    newAuthHandler(s.accountService, s.cfg.SecureCookie),
+		versionHandler: newVersionHandler(),
 	}
 }
 
