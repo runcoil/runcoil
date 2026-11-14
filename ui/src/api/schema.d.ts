@@ -6,9 +6,15 @@
 export interface paths {
     "/auth/login": components["pathItems"]["login"];
     "/me": components["pathItems"]["me"];
+    "/projects": components["pathItems"]["projects"];
+    "/projects/{projectId}/members": components["pathItems"]["members"];
+    "/users": components["pathItems"]["users"];
     "/version": components["pathItems"]["version"];
     "/me/password": components["pathItems"]["mePassword"];
     "/auth/logout": components["pathItems"]["logout"];
+    "/projects/{projectId}/members/{userId}": components["pathItems"]["member"];
+    "/users/{userId}": components["pathItems"]["user"];
+    "/users/{userId}/password": components["pathItems"]["userPassword"];
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -188,6 +194,216 @@ export interface components {
              */
             newPassword: string;
         };
+        /** @description Projects, by name. */
+        ProjectList: {
+            /**
+             * @description The projects.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f51",
+             *         "name": "default",
+             *         "createdAt": "2026-11-14T08:00:00Z"
+             *       }
+             *     ]
+             */
+            projects: components["schemas"]["Project"][];
+        };
+        /** @description The new project. */
+        CreateProjectRequest: {
+            /**
+             * @description The project's name, unique on the server and compared as written.
+             * @example billing
+             */
+            name: string;
+        };
+        /** @description A project. */
+        Project: {
+            /**
+             * Format: uuid
+             * @description The project's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f51
+             */
+            id: string;
+            /**
+             * @description The project's name.
+             * @example default
+             */
+            name: string;
+            /**
+             * Format: date-time
+             * @description When the project was created.
+             * @example 2026-11-14T08:00:00Z
+             */
+            createdAt: string;
+        };
+        /** @description The members of a project, by username. */
+        MemberList: {
+            /**
+             * @description The members.
+             * @example [
+             *       {
+             *         "userId": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f52",
+             *         "username": "ana",
+             *         "email": "ana@example.com",
+             *         "role": "editor"
+             *       }
+             *     ]
+             */
+            members: components["schemas"]["Member"][];
+        };
+        /** @description The user to add and their role. */
+        AddMemberRequest: {
+            /**
+             * @description The username of the user to add.
+             * @example ana
+             */
+            username: string;
+            /**
+             * @description The role in the project.
+             * @example editor
+             * @enum {string}
+             */
+            role: "admin" | "editor" | "viewer";
+        };
+        /** @description A member of a project and their role. */
+        Member: {
+            /**
+             * Format: uuid
+             * @description The member's user ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+             */
+            userId: string;
+            /**
+             * @description The member's username.
+             * @example ana
+             */
+            username: string;
+            /**
+             * @description The member's email. Absent when the user has none.
+             * @example ana@example.com
+             */
+            email?: string;
+            /**
+             * @description The member's role in the project.
+             * @example editor
+             */
+            role: components["schemas"]["Role"];
+        };
+        /** @description The member's new role. */
+        UpdateMemberRequest: {
+            /**
+             * @description The new role in the project.
+             * @example admin
+             * @enum {string}
+             */
+            role: "admin" | "editor" | "viewer";
+        };
+        /** @description A page of users, oldest first. */
+        UserList: {
+            /**
+             * @description The users of the page.
+             * @example [
+             *       {
+             *         "id": "019a5b1e-7c2d-7000-8000-4b1d2c3e4f52",
+             *         "username": "ana",
+             *         "email": "ana@example.com",
+             *         "isServerAdmin": false,
+             *         "createdAt": "2026-11-14T08:00:00Z"
+             *       }
+             *     ]
+             */
+            users: components["schemas"]["ManagedUser"][];
+            /**
+             * @description The token of the next page. Absent on the last page.
+             * @example AZpbHnwtcACAAEsdLD5PUg
+             */
+            nextPageToken?: string;
+        };
+        /** @description The new user. */
+        CreateUserRequest: {
+            /**
+             * @description The username. It is lowercased, then must be 1 to 64 characters of a-z, 0-9, '.', '_' and '-'.
+             * @example ana
+             */
+            username: string;
+            /**
+             * @description The email, lowercased. Optional.
+             * @example ana@example.com
+             */
+            email?: string;
+            /**
+             * @description The password: at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.
+             * @example Secret-123
+             */
+            password: string;
+            /**
+             * @description True to make the user a server admin.
+             * @example false
+             */
+            isServerAdmin: boolean;
+        };
+        /** @description A user as the user management page shows it. */
+        ManagedUser: {
+            /**
+             * Format: uuid
+             * @description The user's ID.
+             * @example 019a5b1e-7c2d-7000-8000-4b1d2c3e4f52
+             */
+            id: string;
+            /**
+             * @description The username, lowercase.
+             * @example ana
+             */
+            username: string;
+            /**
+             * @description The email, lowercase. Absent when the user has none.
+             * @example ana@example.com
+             */
+            email?: string;
+            /**
+             * @description True when the user is a server admin, admin in every project.
+             * @example false
+             */
+            isServerAdmin: boolean;
+            /**
+             * Format: date-time
+             * @description When the user was disabled. Absent while the user can sign in.
+             * @example 2026-11-14T09:00:00Z
+             */
+            disabledAt?: string;
+            /**
+             * Format: date-time
+             * @description When the user was created.
+             * @example 2026-11-14T08:00:00Z
+             */
+            createdAt: string;
+        };
+        /** @description The fields to change. An absent field stays as it is. */
+        UpdateUserRequest: {
+            /**
+             * @description The new email, lowercased. An empty string removes it.
+             * @example ana@example.com
+             */
+            email?: string;
+            /**
+             * @description True to make the user a server admin, false to take the role away.
+             * @example true
+             */
+            isServerAdmin?: boolean;
+            /**
+             * @description True to disable the user and end their sessions, false to let them sign in again.
+             * @example false
+             */
+            disabled?: boolean;
+        };
+        /** @description The user's new password. */
+        ResetPasswordRequest: {
+            /**
+             * @description The new password: at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.
+             * @example Secret-123
+             */
+            newPassword: string;
+        };
         /** @description The build of the running server. */
         Version: {
             /**
@@ -283,6 +499,42 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description already_exists or last_server_admin: the request clashes with what exists. */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "already_exists",
+                 *       "message": "username is taken",
+                 *       "params": [
+                 *         {
+                 *           "field": "username",
+                 *           "message": "username is taken"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description not_found: the resource does not exist, or the caller cannot see it. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "not_found",
+                 *       "message": "project not found"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: never;
     requestBodies: never;
@@ -361,6 +613,156 @@ export interface components {
              * @description Sets a new password for the signed-in user and ends their other sessions. The new password has at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a special character.
              */
             put: operations["changeMyPassword"];
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        projects: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * List projects
+             * @description Returns the projects the signed-in user is a member of, by name. A server admin gets every project.
+             */
+            get: operations["listProjects"];
+            put?: never;
+            /**
+             * Create a project
+             * @description Creates a project with no members. Only a server admin can create one.
+             */
+            post: operations["createProject"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        members: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The project's ID. */
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            /**
+             * List the members of a project
+             * @description Returns the members of a project, by username. Server admins are admin everywhere and are listed only when they are members.
+             */
+            get: operations["listMembers"];
+            put?: never;
+            /**
+             * Add a member to a project
+             * @description Gives a user, named by username, a role in a project.
+             */
+            post: operations["addMember"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        member: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The project's ID. */
+                    projectId: string;
+                    /** @description The member's user ID. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            get?: never;
+            put?: never;
+            post?: never;
+            /**
+             * Remove a member from a project
+             * @description Takes a user's role in the project away.
+             */
+            delete: operations["removeMember"];
+            options?: never;
+            head?: never;
+            /**
+             * Change a member's role
+             * @description Gives a member another role in the project.
+             */
+            patch: operations["updateMember"];
+            trace?: never;
+        };
+        users: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /**
+             * List users
+             * @description Returns a page of the users of the server, oldest first.
+             */
+            get: operations["listUsers"];
+            put?: never;
+            /**
+             * Create a user
+             * @description Creates a user who can sign in. The user is in no project until added to one.
+             */
+            post: operations["createUser"];
+            delete?: never;
+            options?: never;
+            head?: never;
+            patch?: never;
+            trace?: never;
+        };
+        user: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The user's ID. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            get?: never;
+            put?: never;
+            post?: never;
+            delete?: never;
+            options?: never;
+            head?: never;
+            /**
+             * Update a user
+             * @description Changes a user's email, server admin role or disabled state. Disabling a user ends their sessions. The last active server admin cannot lose the role or be disabled.
+             */
+            patch: operations["updateUser"];
+            trace?: never;
+        };
+        userPassword: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The user's ID. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            get?: never;
+            /**
+             * Reset a user's password
+             * @description Sets a new password for a user and ends all their sessions.
+             */
+            put: operations["resetUserPassword"];
             post?: never;
             delete?: never;
             options?: never;
@@ -498,6 +900,343 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the request comes from another origin */
             403: components["responses"]["PermissionDenied"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projects */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new project. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description The project is created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description invalid_request: the body is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description already_exists: a project has the name */
+            409: components["responses"]["Conflict"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The members */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberList"];
+                };
+            };
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /** @description The user and the role. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The member is added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            /** @description invalid_request: the body is not valid, or no user has the username */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, or the caller is not a member */
+            404: components["responses"]["NotFound"];
+            /** @description already_exists: the user is already a member */
+            409: components["responses"]["Conflict"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The member's user ID. */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member is removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the user is not a member */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The project's ID. */
+                projectId: string;
+                /** @description The member's user ID. */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        /** @description The new role. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            /** @description invalid_request: the body is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: the project does not exist, the caller is not a member, or the user is not a member */
+            404: components["responses"]["NotFound"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                /** @description The most users to return. */
+                pageSize?: number;
+                /** @description The nextPageToken of the previous page. Absent for the first page. */
+                pageToken?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserList"];
+                };
+            };
+            /** @description invalid_request: pageSize or pageToken is not valid */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin */
+            403: components["responses"]["PermissionDenied"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new user. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The user is created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            /** @description invalid_request: the body is not valid, the username or the email is malformed, or the password is too weak */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description already_exists: another user has the username or the email */
+            409: components["responses"]["Conflict"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The user's ID. */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        /** @description The fields to change. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            /** @description invalid_request: the body is not valid, or the email is malformed */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: no user has the ID */
+            404: components["responses"]["NotFound"];
+            /** @description already_exists: another user has the email; last_server_admin: the change would leave no active server admin */
+            409: components["responses"]["Conflict"];
+            /** @description payload_too_large: the body is larger than 1 MiB */
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The user's ID. */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        /** @description The new password. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description The password is reset */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid_request: the body is not valid, or the password is too weak */
+            400: components["responses"]["InvalidRequest"];
+            /** @description unauthenticated: no live session */
+            401: components["responses"]["Unauthenticated"];
+            /** @description permission_denied: the caller is not a server admin, or the request comes from another origin */
+            403: components["responses"]["PermissionDenied"];
+            /** @description not_found: no user has the ID */
+            404: components["responses"]["NotFound"];
             /** @description payload_too_large: the body is larger than 1 MiB */
             413: components["responses"]["PayloadTooLarge"];
         };
