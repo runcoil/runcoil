@@ -63,7 +63,7 @@ type CompleteStepParams struct {
 }
 
 // ValidateStepID checks that id is 1 to MaxStepIDBytes bytes long and has no NUL byte,
-// which PostgreSQL refuses in text.
+// which cannot be stored.
 func ValidateStepID(id string) error {
 	if id == "" || len(id) > MaxStepIDBytes {
 		return fmt.Errorf("step id must be 1 to %d bytes long", MaxStepIDBytes)

@@ -56,8 +56,8 @@ type claimTarget struct {
 
 // Listen attaches the worker to a new stream and sends its messages until ctx ends or
 // the dispatcher stops. running is what the worker reports it is running: the leases it
-// does not report go back to the queue, and the reported attempts it no longer holds get
-// a lease-lost message.
+// does not report count as lost and go back to the queue, and the reported attempts it
+// no longer holds get a lease-lost message.
 func (s *Service) Listen(
 	ctx context.Context,
 	worker domain.Worker,
@@ -190,8 +190,8 @@ func (s *Service) drop(workerID, streamID uuid.UUID) {
 }
 
 // end removes the worker's stream if it is still streamID and ends its Listen. The worker
-// reconnects, and the reconcile of its next Listen requeues the attempts it was never
-// sent.
+// reconnects, and the reconcile of its next Listen puts the attempts it was never sent
+// back in the queue, counted as lost.
 func (s *Service) end(workerID, streamID uuid.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -229,7 +229,7 @@ func (s *Service) claimable() []claimTarget {
 
 // push sends the claimed attempts to the stream that claimed them. When one cannot be
 // sent, the stream ends: the worker reconnects without reporting it, so the reconcile
-// puts it back in the queue.
+// puts it back in the queue, counted as lost.
 func (s *Service) push(ctx context.Context, workerID, streamID uuid.UUID, assigns []domain.Assign) {
 	if len(assigns) == 0 {
 		return

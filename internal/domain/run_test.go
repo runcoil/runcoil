@@ -35,20 +35,29 @@ func TestFailureCodeRetriable(t *testing.T) {
 	assert.False(t, FailureCodeOutputTooLarge.Retriable())
 }
 
+func TestFailureCleaned(t *testing.T) {
+	var none *Failure
+	assert.Nil(t, none.Cleaned())
+
+	f := &Failure{Code: FailureCodeError, Message: "bad\x00byte", StepID: "email"}
+	assert.Equal(t, &Failure{Code: FailureCodeError, Message: "bad\uFFFDbyte", StepID: "email"}, f.Cleaned())
+	assert.Equal(t, "bad\x00byte", f.Message, "the failure itself is not changed")
+}
+
 func TestCleanMessage(t *testing.T) {
-	assert.Equal(t, "smtp down", CleanMessage("smtp down"))
-	assert.Equal(t, "bad\uFFFDbyte", CleanMessage("bad\x00byte"))
+	assert.Equal(t, "smtp down", cleanMessage("smtp down"))
+	assert.Equal(t, "bad\uFFFDbyte", cleanMessage("bad\x00byte"))
 
 	long := strings.Repeat("x", MaxErrorMessageBytes+10)
-	assert.Equal(t, long[:MaxErrorMessageBytes], CleanMessage(long))
+	assert.Equal(t, long[:MaxErrorMessageBytes], cleanMessage(long))
 
 	// A three-byte character across the limit is dropped whole.
-	cut := CleanMessage(strings.Repeat("x", MaxErrorMessageBytes-1) + "€")
+	cut := cleanMessage(strings.Repeat("x", MaxErrorMessageBytes-1) + "\u20ac")
 	assert.Len(t, cut, MaxErrorMessageBytes-1)
 	assert.True(t, utf8.ValidString(cut))
 
 	// NUL grows to three bytes before the cut.
-	nuls := CleanMessage(strings.Repeat("\x00", MaxErrorMessageBytes))
+	nuls := cleanMessage(strings.Repeat("\x00", MaxErrorMessageBytes))
 	assert.LessOrEqual(t, len(nuls), MaxErrorMessageBytes)
 	assert.True(t, utf8.ValidString(nuls))
 	assert.NotContains(t, nuls, "\x00")

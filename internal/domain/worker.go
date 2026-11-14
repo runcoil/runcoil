@@ -33,7 +33,7 @@ func (e *RegistrationError) Error() string {
 }
 
 // Validate checks what the request rules do not: the slots, the number of Tasks, that no
-// name has a NUL byte, which PostgreSQL refuses in text, that each Task is declared once,
+// name has a NUL byte, which cannot be stored, that each Task is declared once,
 // and the limits of each Task's retry policy and start deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {

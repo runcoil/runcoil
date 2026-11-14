@@ -27,7 +27,8 @@ FROM moved
 RETURNING run_id, lease_epoch;
 
 -- name: LeaseReleaseUnknown :many
--- Leases the worker did not report: it dropped the attempt, so each counts as lost.
+-- Leases the worker did not report: it dropped the attempt, or never got it, so each
+-- counts as lost.
 -- lost_count + 1, then back to the queue, or, above @max_lost, the Run fails with
 -- attempt_lost. failed is true for a Run that failed.
 WITH unknown AS (
@@ -37,7 +38,7 @@ WITH unknown AS (
 ), failed AS (
     UPDATE runs
     SET status = 'failed', error_code = 'attempt_lost',
-        error_message = 'the run was dropped by its worker too many times without a result',
+        error_message = 'the run was lost too many times before its worker reported a result',
         ended_at = now()
     FROM unknown
     WHERE runs.id = unknown.run_id AND unknown.lost_count > @max_lost::integer
