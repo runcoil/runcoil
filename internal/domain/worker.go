@@ -3,7 +3,6 @@ package domain
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"uuid"
 )
 
@@ -32,16 +31,12 @@ func (e *RegistrationError) Error() string {
 	return e.Message
 }
 
-// Validate checks what the request rules do not: the slots, the number of Tasks, that no
-// name has a NUL byte, which cannot be stored, that each Task is declared once,
-// and the limits of each Task's retry policy and start deadline.
+// Validate checks what the request rules do not: the slots, the number of Tasks, that
+// each Task is declared once, and the limits of each Task's retry policy and start
+// deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {
 		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
-	}
-
-	if strings.ContainsRune(r.App, 0) {
-		return &RegistrationError{Message: "app name must not contain a NUL byte"}
 	}
 
 	if len(r.Tasks) == 0 {
@@ -54,10 +49,6 @@ func (r Registration) Validate() error {
 
 	seen := make(map[string]struct{}, len(r.Tasks))
 	for _, def := range r.Tasks {
-		if strings.ContainsRune(def.Name, 0) {
-			return &RegistrationError{Message: "task name must not contain a NUL byte", TaskName: def.Name}
-		}
-
 		if _, ok := seen[def.Name]; ok {
 			return &RegistrationError{Message: "task is declared twice", TaskName: def.Name}
 		}
