@@ -45,8 +45,8 @@ func runFailureToProto(kind runcoilv1.ErrorKind, message, stepID string) *runcoi
 	}}
 }
 
-// maxMessageBytes is the longest error message the server stores. A longer one is cut
-// before it is sent, so a huge error text does not make the report too large.
+// maxMessageBytes is the longest error message the server stores, 64 KiB. A longer one is
+// cut before it is sent, so a huge error text does not make the report too large.
 const maxMessageBytes = 64 << 10
 
 // cutMessage makes message fit a report: invalid UTF-8, which a proto string cannot
