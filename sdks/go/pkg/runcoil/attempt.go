@@ -200,6 +200,8 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 		a.logger.InfoContext(ctx, "run result refused: lease is stale")
 	case w.endSession(ctx, session, err):
 		a.logger.WarnContext(ctx, "run result refused: worker session ended")
+	case !a.open():
+		a.logger.InfoContext(ctx, "run result refused after the attempt ended", slog.Any("error", err))
 	default:
 		a.logger.ErrorContext(ctx, "report run result failed", slog.Any("error", err))
 	}
