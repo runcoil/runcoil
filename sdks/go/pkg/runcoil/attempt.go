@@ -223,8 +223,7 @@ func (w *Worker) completeRun(ctx context.Context, req *runcoilv1.CompleteRunRequ
 // output over the limit fails the Run with OUTPUT_TOO_LARGE, anything else with an error.
 func refusedRunResult(req *runcoilv1.CompleteRunRequest, err error) *runcoilv1.CompleteRunRequest {
 	if out := req.GetOutput(); out != nil && outputTooLarge(err) {
-		return runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE,
-			fmt.Sprintf("run output of %d bytes is too large: %s", len(out), refusal(err)), "")
+		return runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE, tooLargeMessage("run", len(out), err), "")
 	}
 
 	return runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR, "the server refused the run result: "+refusal(err), "")
@@ -275,7 +274,7 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 
 		r.Failure = &runstate.Failure{
 			Kind:         runstate.KindOutputTooLarge,
-			Message:      fmt.Sprintf("step output of %d bytes is too large: %s", len(r.Output), refusal(err)),
+			Message:      tooLargeMessage("step", len(r.Output), err),
 			NonRetriable: true,
 		}
 		r.Output = nil

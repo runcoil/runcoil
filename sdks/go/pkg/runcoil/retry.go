@@ -95,6 +95,17 @@ func outputTooLarge(err error) bool {
 		connect.CodeOf(err) == connect.CodeResourceExhausted
 }
 
+// tooLargeMessage is the failure text of an output the server refused for its size. The
+// server's own text already names the size and the limit; a refusal for the message size
+// does not.
+func tooLargeMessage(of string, size int, err error) string {
+	if errorCode(err) == runcoilv1.ErrorCode_ERROR_CODE_OUTPUT_TOO_LARGE {
+		return refusal(err)
+	}
+
+	return fmt.Sprintf("%s output of %d bytes is too large: %s", of, size, refusal(err))
+}
+
 // refusal returns the server's text of a refused call, without the SDK's wrapping.
 func refusal(err error) string {
 	var ce *connect.Error
