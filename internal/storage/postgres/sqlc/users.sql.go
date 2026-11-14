@@ -12,6 +12,51 @@ import (
 	"uuid"
 )
 
+const userCreate = `-- name: UserCreate :one
+INSERT INTO users (id, username, email, password_hash, is_server_admin)
+VALUES ($1::uuid, $2::text, $3::text, $4::text, $5::boolean)
+RETURNING id, username, email, password_hash, is_server_admin, disabled_at, created_at
+`
+
+type UserCreateParams struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+}
+
+type UserCreateRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+func (q *Queries) UserCreate(ctx context.Context, db DBTX, arg UserCreateParams) (UserCreateRow, error) {
+	row := db.QueryRow(ctx, userCreate,
+		arg.ID,
+		arg.Username,
+		arg.Email,
+		arg.PasswordHash,
+		arg.IsServerAdmin,
+	)
+	var i UserCreateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.IsServerAdmin,
+		&i.DisabledAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const userCreateFirstServerAdmin = `-- name: UserCreateFirstServerAdmin :execrows
 INSERT INTO users (id, username, password_hash, is_server_admin)
 SELECT $1::uuid, $2::text, $3::text, true
@@ -34,7 +79,7 @@ func (q *Queries) UserCreateFirstServerAdmin(ctx context.Context, db DBTX, arg U
 }
 
 const userGetByEmail = `-- name: UserGetByEmail :one
-SELECT id, username, email, password_hash, is_server_admin, disabled_at
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
 FROM users
 WHERE email = $1::text
 `
@@ -46,6 +91,7 @@ type UserGetByEmailRow struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
 }
 
 func (q *Queries) UserGetByEmail(ctx context.Context, db DBTX, email string) (UserGetByEmailRow, error) {
@@ -58,12 +104,13 @@ func (q *Queries) UserGetByEmail(ctx context.Context, db DBTX, email string) (Us
 		&i.PasswordHash,
 		&i.IsServerAdmin,
 		&i.DisabledAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const userGetByID = `-- name: UserGetByID :one
-SELECT id, username, email, password_hash, is_server_admin, disabled_at
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
 FROM users
 WHERE id = $1::uuid
 `
@@ -75,6 +122,7 @@ type UserGetByIDRow struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
 }
 
 func (q *Queries) UserGetByID(ctx context.Context, db DBTX, id uuid.UUID) (UserGetByIDRow, error) {
@@ -87,12 +135,13 @@ func (q *Queries) UserGetByID(ctx context.Context, db DBTX, id uuid.UUID) (UserG
 		&i.PasswordHash,
 		&i.IsServerAdmin,
 		&i.DisabledAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const userGetByUsername = `-- name: UserGetByUsername :one
-SELECT id, username, email, password_hash, is_server_admin, disabled_at
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
 FROM users
 WHERE username = $1::text
 `
@@ -104,6 +153,7 @@ type UserGetByUsernameRow struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
 }
 
 func (q *Queries) UserGetByUsername(ctx context.Context, db DBTX, username string) (UserGetByUsernameRow, error) {
@@ -116,8 +166,90 @@ func (q *Queries) UserGetByUsername(ctx context.Context, db DBTX, username strin
 		&i.PasswordHash,
 		&i.IsServerAdmin,
 		&i.DisabledAt,
+		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const userList = `-- name: UserList :many
+SELECT id, username, email, password_hash, is_server_admin, disabled_at, created_at
+FROM users
+WHERE $1::uuid IS NULL
+   OR id > $1::uuid
+ORDER BY id
+LIMIT $2::integer
+`
+
+type UserListParams struct {
+	AfterID   *uuid.UUID
+	PageLimit int32
+}
+
+type UserListRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+func (q *Queries) UserList(ctx context.Context, db DBTX, arg UserListParams) ([]UserListRow, error) {
+	rows, err := db.Query(ctx, userList, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserListRow{}
+	for rows.Next() {
+		var i UserListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.PasswordHash,
+			&i.IsServerAdmin,
+			&i.DisabledAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userLockActiveServerAdmins = `-- name: UserLockActiveServerAdmins :many
+SELECT id
+FROM users
+WHERE is_server_admin
+  AND disabled_at IS NULL
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) UserLockActiveServerAdmins(ctx context.Context, db DBTX) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, userLockActiveServerAdmins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const userLockForUpdate = `-- name: UserLockForUpdate :one
@@ -132,6 +264,77 @@ func (q *Queries) UserLockForUpdate(ctx context.Context, db DBTX, id uuid.UUID) 
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const userSetPassword = `-- name: UserSetPassword :execrows
+UPDATE users
+SET password_hash = $1::text
+WHERE id = $2::uuid
+`
+
+type UserSetPasswordParams struct {
+	PasswordHash string
+	ID           uuid.UUID
+}
+
+func (q *Queries) UserSetPassword(ctx context.Context, db DBTX, arg UserSetPasswordParams) (int64, error) {
+	result, err := db.Exec(ctx, userSetPassword, arg.PasswordHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const userUpdate = `-- name: UserUpdate :one
+UPDATE users
+SET email = CASE WHEN $1::boolean THEN $2::text ELSE email END,
+    is_server_admin = COALESCE($3::boolean, is_server_admin),
+    disabled_at = CASE
+        WHEN $4::boolean IS NULL THEN disabled_at
+        WHEN $4::boolean THEN COALESCE(disabled_at, now())
+        ELSE NULL
+    END
+WHERE id = $5::uuid
+RETURNING id, username, email, password_hash, is_server_admin, disabled_at, created_at
+`
+
+type UserUpdateParams struct {
+	SetEmail      bool
+	Email         *string
+	IsServerAdmin *bool
+	Disabled      *bool
+	ID            uuid.UUID
+}
+
+type UserUpdateRow struct {
+	ID            uuid.UUID
+	Username      string
+	Email         *string
+	PasswordHash  string
+	IsServerAdmin bool
+	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+func (q *Queries) UserUpdate(ctx context.Context, db DBTX, arg UserUpdateParams) (UserUpdateRow, error) {
+	row := db.QueryRow(ctx, userUpdate,
+		arg.SetEmail,
+		arg.Email,
+		arg.IsServerAdmin,
+		arg.Disabled,
+		arg.ID,
+	)
+	var i UserUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.IsServerAdmin,
+		&i.DisabledAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const userUpdatePassword = `-- name: UserUpdatePassword :execrows

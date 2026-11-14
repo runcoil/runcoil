@@ -13,6 +13,16 @@ type User struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+// UpdateUserParams is a change to the user with ID. A nil field stays as it is.
+type UpdateUserParams struct {
+	ID            uuid.UUID
+	Email         *string
+	RemoveEmail   bool
+	IsServerAdmin *bool
+	Disabled      *bool
 }
 
 // Role is a user's role in a project.
@@ -60,11 +70,4 @@ var Permissions = []Permission{
 	PermissionProjectsCreate,
 	PermissionUsersRead,
 	PermissionUsersWrite,
-}
-
-// ProjectRole is a project and the role a user has in it.
-type ProjectRole struct {
-	ProjectID   uuid.UUID
-	ProjectName string
-	Role        Role
 }

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 	"github.com/runcoil/runcoil/openapi"
 )
 
@@ -124,7 +126,7 @@ func TestCheckPermission(t *testing.T) {
 				return nil, nil
 			}
 
-			_, err := CheckPermission(permissions)(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+			_, err := CheckPermission(permissions, &fakeAuthorizer{})(next, tt.operation)(tt.ctx, nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
 
 			if tt.allowed {
 				require.NoError(t, err)
@@ -148,8 +150,75 @@ func TestCheckPermissionRefusesAnUnknownOperation(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := CheckPermission(map[string]string{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
+	_, err := CheckPermission(map[string]string{}, &fakeAuthorizer{})(next, "Unknown")(context.Background(), nil, httptest.NewRequest(http.MethodGet, "/", nil), nil)
 
 	assert.EqualError(t, err, "operation Unknown has no permission in the spec")
 	assert.False(t, called)
+}
+
+type fakeAuthorizer struct {
+	err error
+
+	projectID  uuid.UUID
+	permission domain.Permission
+}
+
+func (f *fakeAuthorizer) Authorize(_ context.Context, params service.AuthorizeParams) error {
+	f.projectID = params.ProjectID
+	f.permission = params.Permission
+
+	return f.err
+}
+
+func TestCheckPermissionInAProject(t *testing.T) {
+	permissions := map[string]string{"ListMembers": string(domain.PermissionMembersRead)}
+	signedIn := withIdentity(context.Background(), domain.Identity{Permissions: []domain.Permission{}})
+	projectID := uuid.NewV7()
+
+	request := func(projectID string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.SetPathValue("projectId", projectID)
+
+		return r
+	}
+
+	t.Run("asks the authorizer", func(t *testing.T) {
+		authorizer := &fakeAuthorizer{}
+		called := false
+		next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
+			called = true
+			return nil, nil
+		}
+
+		_, err := CheckPermission(permissions, authorizer)(next, "ListMembers")(signedIn, nil, request(projectID.String()), nil)
+
+		require.NoError(t, err)
+		assert.True(t, called)
+		assert.Equal(t, projectID, authorizer.projectID)
+		assert.Equal(t, domain.PermissionMembersRead, authorizer.permission)
+	})
+
+	t.Run("returns the authorizer's refusal", func(t *testing.T) {
+		refusal := apperr.NotFound(apperr.CodeNotFound, "project not found")
+		called := false
+		next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
+			called = true
+			return nil, nil
+		}
+
+		_, err := CheckPermission(permissions, &fakeAuthorizer{err: refusal})(next, "ListMembers")(signedIn, nil, request(projectID.String()), nil)
+
+		assert.ErrorIs(t, err, refusal)
+		assert.False(t, called)
+	})
+
+	t.Run("fails on a project ID that is not a UUID", func(t *testing.T) {
+		next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
+			return nil, nil
+		}
+
+		_, err := CheckPermission(permissions, &fakeAuthorizer{})(next, "ListMembers")(signedIn, nil, request("x"), nil)
+
+		assert.ErrorContains(t, err, "parse project id")
+	})
 }

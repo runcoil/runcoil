@@ -10,12 +10,15 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 // The errors the service returns to clients.
 var (
-	ErrWrongLogin  = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
-	ErrNotSignedIn = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	ErrWrongLogin       = apperr.Unauthenticated(apperr.CodeUnauthenticated, "wrong login or password")
+	ErrNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
+	ErrPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
+	ErrProjectNotFound  = apperr.NotFound(apperr.CodeNotFound, "project not found")
 )
 
 // UserStore keeps the users.
@@ -33,10 +36,11 @@ type SessionStore interface {
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 }
 
-// ProjectStore keeps the projects and their members.
+// ProjectStore reads the projects and the roles of their members.
 type ProjectStore interface {
-	ListProjects(ctx context.Context) ([]domain.ProjectRole, error)
+	ListProjects(ctx context.Context) ([]domain.Project, error)
 	ListProjectsWithRoleByUser(ctx context.Context, userID uuid.UUID) ([]domain.ProjectRole, error)
+	GetProjectRoleOfUser(ctx context.Context, projectID, userID uuid.UUID) (*domain.Role, error)
 }
 
 const minSessionMaxInactive = 5 * time.Minute
@@ -70,6 +74,8 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+var _ service.Account = (*Service)(nil)
 
 // Service signs users in and out, manages their passwords and decides what they may do.
 type Service struct {

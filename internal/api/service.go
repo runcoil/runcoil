@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/pflag"
@@ -18,8 +17,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/api/swagger"
-	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/service"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/ui"
@@ -56,22 +54,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// AccountService signs users in and out and decides what they may do.
-type AccountService interface {
-	Login(ctx context.Context, login, password string) (account.LoginResult, error)
-	Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error)
-	Logout(ctx context.Context, identity domain.Identity) error
-	ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error
-	GetUser(ctx context.Context, id uuid.UUID) (domain.User, error)
-	GetUserAccess(ctx context.Context, user domain.User) (account.Access, error)
-}
-
 // Service serves the dashboard API and the health checks of the process.
 type Service struct {
 	cfg            Config
 	logger         *slog.Logger
 	checks         *healthutil.Checks
-	accountService AccountService
+	accountService service.Account
+	userService    service.User
+	projectService service.Project
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -81,7 +71,7 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService AccountService) (*Service, error) {
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService service.Account, userService service.User, projectService service.Project) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -97,6 +87,8 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		logger:         logger,
 		checks:         checks,
 		accountService: accountService,
+		userService:    userService,
+		projectService: projectService,
 		spec:           spec,
 		permissions:    permissions,
 		stopped:        make(chan struct{}),
@@ -174,7 +166,7 @@ func (s *Service) newHTTPServer() *http.Server {
 func (s *Service) apiHandler() http.Handler {
 	strict := gen.NewStrictHandlerWithOptions(
 		s.newHandler(),
-		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions)},
+		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions, s.accountService)},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  s.handleRequestError,
 			ResponseErrorHandlerFunc: s.handleResponseError,
@@ -201,12 +193,18 @@ var _ gen.StrictServerInterface = (*handler)(nil)
 
 type handler struct {
 	*authHandler
+	*projectHandler
+	*userHandler
+	*memberHandler
 	*versionHandler
 }
 
 func (s *Service) newHandler() *handler {
 	return &handler{
 		authHandler:    newAuthHandler(s.accountService, s.cfg.SecureCookie),
+		projectHandler: newProjectHandler(s.projectService),
+		userHandler:    newUserHandler(s.userService),
+		memberHandler:  newMemberHandler(s.projectService),
 		versionHandler: newVersionHandler(),
 	}
 }

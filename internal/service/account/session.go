@@ -8,23 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 const sessionTokenLen = 32
 
-// LoginResult is a new session and its user.
-type LoginResult struct {
-	Token                   string
-	ExpiresAt               time.Time
-	User                    domain.User
-	PasswordChangeSuggested bool
-}
-
 // Login checks a username or an email and its password, and starts a session.
-func (s *Service) Login(ctx context.Context, login, password string) (LoginResult, error) {
+func (s *Service) Login(ctx context.Context, login, password string) (service.LoginResult, error) {
 	login = strings.ToLower(login)
 
 	var user domain.User
@@ -37,34 +29,34 @@ func (s *Service) Login(ctx context.Context, login, password string) (LoginResul
 
 	if errors.Is(err, domain.ErrUserNotFound) {
 		_, _ = VerifyPassword(ctx, s.dummyHash, password)
-		return LoginResult{}, ErrWrongLogin
+		return service.LoginResult{}, ErrWrongLogin
 	}
 
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("get user: %w", err)
+		return service.LoginResult{}, fmt.Errorf("get user: %w", err)
 	}
 
 	ok, err := VerifyPassword(ctx, user.PasswordHash, password)
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("verify password: %w", err)
+		return service.LoginResult{}, fmt.Errorf("verify password: %w", err)
 	}
 
 	if !ok || user.DisabledAt != nil {
-		return LoginResult{}, ErrWrongLogin
+		return service.LoginResult{}, ErrWrongLogin
 	}
 
 	token := newSessionToken()
 
 	err = s.sessionStore.CreateSession(ctx, hashToken(token), user.ID, user.PasswordHash, s.cfg.SessionMaxLifetime)
 	if errors.Is(err, domain.ErrUserNotFound) {
-		return LoginResult{}, ErrWrongLogin
+		return service.LoginResult{}, ErrWrongLogin
 	}
 
 	if err != nil {
-		return LoginResult{}, fmt.Errorf("create session: %w", err)
+		return service.LoginResult{}, fmt.Errorf("create session: %w", err)
 	}
 
-	return LoginResult{
+	return service.LoginResult{
 		Token:                   token,
 		ExpiresAt:               s.now().Add(s.cfg.SessionMaxLifetime),
 		User:                    user,
