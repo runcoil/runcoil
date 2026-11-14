@@ -2,8 +2,10 @@ package account
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
 )
@@ -56,17 +58,13 @@ type ProjectAccess struct {
 func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (Access, error) {
 	access := Access{Permissions: []domain.Permission{}}
 
-	var roles []domain.ProjectRole
-	var err error
-	if user.IsServerAdmin {
-		access.Permissions = serverAdminPermissions
-		roles, err = s.projectStore.ListProjects(ctx)
-	} else {
-		roles, err = s.projectStore.ListProjectsWithRoleByUser(ctx, user.ID)
-	}
-
+	roles, err := s.listProjectRoles(ctx, user)
 	if err != nil {
 		return Access{}, fmt.Errorf("list project roles: %w", err)
+	}
+
+	if user.IsServerAdmin {
+		access.Permissions = serverAdminPermissions
 	}
 
 	access.Projects = make([]ProjectAccess, 0, len(roles))
@@ -78,6 +76,57 @@ func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (Access, 
 	}
 
 	return access, nil
+}
+
+func (s *Service) listProjectRoles(ctx context.Context, user domain.User) ([]domain.ProjectRole, error) {
+	if !user.IsServerAdmin {
+		roles, err := s.projectStore.ListProjectsWithRoleByUser(ctx, user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list projects of user: %w", err)
+		}
+
+		return roles, nil
+	}
+
+	projects, err := s.projectStore.ListProjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+
+	roles := make([]domain.ProjectRole, 0, len(projects))
+	for _, project := range projects {
+		roles = append(roles, domain.ProjectRole{ProjectID: project.ID, ProjectName: project.Name, Role: domain.RoleAdmin})
+	}
+
+	return roles, nil
+}
+
+// Authorize checks that identity has permission in the project. A permission the identity
+// holds server-wide holds in every project. A user who is not a member gets
+// ErrProjectNotFound, so a project is hidden from those who cannot open it.
+func (s *Service) Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error {
+	role, err := s.projectStore.GetProjectRoleOfUser(ctx, projectID, identity.UserID)
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		return ErrProjectNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("get project role: %w", err)
+	}
+
+	if slices.Contains(identity.Permissions, permission) {
+		return nil
+	}
+
+	if role == nil {
+		return ErrProjectNotFound
+	}
+
+	if !slices.Contains(rolePermissions[*role], permission) {
+		return ErrPermissionDenied
+	}
+
+	return nil
 }
 
 // userPermissions returns what user may do anywhere on the server. A server admin has

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 
@@ -24,6 +25,7 @@ const (
 var (
 	errNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	errPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
+	errInvalidProjectID = apperr.Invalid(apperr.CodeInvalidRequest, "project ID is not a UUID").WithDetail("field", "projectId")
 )
 
 // Permissions reads the permission of every operation in spec, keyed by the operation's
@@ -58,9 +60,15 @@ func Permissions(spec *openapi3.T) (map[string]string, error) {
 	return permissions, nil
 }
 
-// CheckPermission lets an operation run only for an identity with its permission. It
-// refuses an operation that permissions does not list.
-func CheckPermission(permissions map[string]string) gen.StrictMiddlewareFunc {
+// Authorizer checks a permission inside a project.
+type Authorizer interface {
+	Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error
+}
+
+// CheckPermission lets an operation run only for an identity with its permission. The
+// permission of an operation under a project is checked in that project by authorizer.
+// It refuses an operation that permissions does not list.
+func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.StrictMiddlewareFunc {
 	return func(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
 		permission, ok := permissions[operationID]
 		if !ok {
@@ -79,7 +87,24 @@ func CheckPermission(permissions map[string]string) gen.StrictMiddlewareFunc {
 				return nil, errNotSignedIn
 			}
 
-			if permission != permissionSelf && !slices.Contains(identity.Permissions, domain.Permission(permission)) {
+			if permission == permissionSelf {
+				return f(ctx, w, r, req)
+			}
+
+			if projectID := r.PathValue("projectId"); projectID != "" {
+				id, err := uuid.Parse(projectID)
+				if err != nil {
+					return nil, errInvalidProjectID
+				}
+
+				if err := authorizer.Authorize(ctx, identity, id, domain.Permission(permission)); err != nil {
+					return nil, err
+				}
+
+				return f(ctx, w, r, req)
+			}
+
+			if !slices.Contains(identity.Permissions, domain.Permission(permission)) {
 				return nil, errPermissionDenied
 			}
 

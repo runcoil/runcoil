@@ -1,0 +1,57 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
+	"github.com/runcoil/runcoil/internal/api/gen"
+	"github.com/runcoil/runcoil/internal/api/middleware"
+	"github.com/runcoil/runcoil/internal/domain"
+)
+
+type projectHandler struct {
+	accountService AccountService
+}
+
+func newProjectHandler(accountService AccountService) *projectHandler {
+	return &projectHandler{accountService: accountService}
+}
+
+func (h *projectHandler) ListProjects(ctx context.Context, _ gen.ListProjectsRequestObject) (gen.ListProjectsResponseObject, error) {
+	identity, ok := middleware.IdentityFromContext(ctx)
+	if !ok {
+		return nil, errors.New("no identity in the context")
+	}
+
+	res, err := h.accountService.ListProjects(ctx, identity)
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+
+	projects := make([]gen.Project, 0, len(res))
+	for _, project := range res {
+		projects = append(projects, projectToResponse(project))
+	}
+
+	return gen.ListProjects200JSONResponse{Projects: projects}, nil
+}
+
+func (h *projectHandler) CreateProject(ctx context.Context, req gen.CreateProjectRequestObject) (gen.CreateProjectResponseObject, error) {
+	res, err := h.accountService.CreateProject(ctx, req.Body.Name)
+	if err != nil {
+		return nil, fmt.Errorf("create project: %w", err)
+	}
+
+	return gen.CreateProject201JSONResponse(projectToResponse(res)), nil
+}
+
+func projectToResponse(project domain.Project) gen.Project {
+	return gen.Project{
+		Id:        openapi_types.UUID(project.ID),
+		Name:      project.Name,
+		CreatedAt: project.CreatedAt,
+	}
+}

@@ -13,6 +13,15 @@ type User struct {
 	PasswordHash  string
 	IsServerAdmin bool
 	DisabledAt    *time.Time
+	CreatedAt     time.Time
+}
+
+// UserUpdate is a change to a user. A nil field stays as it is.
+type UserUpdate struct {
+	// Email is the new email; an empty string removes it.
+	Email         *string
+	IsServerAdmin *bool
+	Disabled      *bool
 }
 
 // Role is a user's role in a project.
@@ -67,4 +76,19 @@ type ProjectRole struct {
 	ProjectID   uuid.UUID
 	ProjectName string
 	Role        Role
+}
+
+// Project is a set of Tasks, Runs and API keys, and the users who may see them.
+type Project struct {
+	ID        uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
+// Member is a user with a role in a project.
+type Member struct {
+	UserID   uuid.UUID
+	Username string
+	Email    *string
+	Role     Role
 }

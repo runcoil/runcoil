@@ -64,6 +64,17 @@ type AccountService interface {
 	ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error
 	GetUser(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserAccess(ctx context.Context, user domain.User) (account.Access, error)
+	Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error
+	ListProjects(ctx context.Context, identity domain.Identity) ([]domain.Project, error)
+	CreateProject(ctx context.Context, name string) (domain.Project, error)
+	ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
+	CreateUser(ctx context.Context, params account.CreateUserParams) (domain.User, error)
+	UpdateUser(ctx context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error)
+	ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) error
+	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)
+	AddMember(ctx context.Context, projectID uuid.UUID, username string, role domain.Role) (domain.Member, error)
+	UpdateMember(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) (domain.Member, error)
+	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
 }
 
 // Service serves the dashboard API and the health checks of the process.
@@ -174,7 +185,7 @@ func (s *Service) newHTTPServer() *http.Server {
 func (s *Service) apiHandler() http.Handler {
 	strict := gen.NewStrictHandlerWithOptions(
 		s.newHandler(),
-		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions)},
+		[]gen.StrictMiddlewareFunc{middleware.CheckPermission(s.permissions, s.accountService)},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  s.handleRequestError,
 			ResponseErrorHandlerFunc: s.handleResponseError,
@@ -201,11 +212,17 @@ var _ gen.StrictServerInterface = (*handler)(nil)
 
 type handler struct {
 	*authHandler
+	*projectHandler
+	*userHandler
+	*memberHandler
 }
 
 func (s *Service) newHandler() *handler {
 	return &handler{
-		authHandler: newAuthHandler(s.accountService, s.cfg.SecureCookie),
+		authHandler:    newAuthHandler(s.accountService, s.cfg.SecureCookie),
+		projectHandler: newProjectHandler(s.accountService),
+		userHandler:    newUserHandler(s.accountService),
+		memberHandler:  newMemberHandler(s.accountService),
 	}
 }
 

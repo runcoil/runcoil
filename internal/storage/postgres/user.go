@@ -146,3 +146,125 @@ func (s *UserStore) UpdatePasswordAndDeleteOtherSessions(ctx context.Context, us
 		return nil
 	})
 }
+
+// CreateUser creates user. It returns domain.ErrUsernameTaken or domain.ErrEmailTaken
+// when another user has the username or the email.
+func (s *UserStore) CreateUser(ctx context.Context, user domain.User) (domain.User, error) {
+	row, err := s.queries.UserCreate(ctx, s.db, sqlc.UserCreateParams{
+		ID:            user.ID,
+		Username:      user.Username,
+		Email:         user.Email,
+		PasswordHash:  user.PasswordHash,
+		IsServerAdmin: user.IsServerAdmin,
+	})
+	if err != nil {
+		return domain.User{}, userWriteError("create user", err)
+	}
+
+	return domain.User(row), nil
+}
+
+// ListUsers returns at most limit users by ID, after afterID when it is set.
+func (s *UserStore) ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
+	rows, err := s.queries.UserList(ctx, s.db, sqlc.UserListParams{
+		AfterID:   afterID,
+		PageLimit: limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+
+	users := make([]domain.User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, domain.User(row))
+	}
+
+	return users, nil
+}
+
+// UpdateUser applies update to the user with id, and deletes the user's sessions when it
+// disables the user, in one transaction. It returns domain.ErrUserNotFound,
+// domain.ErrEmailTaken, or domain.ErrLastServerAdmin when the change would leave no active
+// server admin.
+func (s *UserStore) UpdateUser(ctx context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error) {
+	var user domain.User
+	err := s.db.WithTx(ctx, func(tx DB) error {
+		// The active server admins are locked first, so two changes that each remove one of
+		// the last two run one after the other, and the second sees only one left.
+		admins, err := s.queries.UserLockActiveServerAdmins(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("lock server admins: %w", err)
+		}
+
+		removesAdmin := (update.IsServerAdmin != nil && !*update.IsServerAdmin) || (update.Disabled != nil && *update.Disabled)
+		if removesAdmin && len(admins) == 1 && admins[0] == id {
+			return domain.ErrLastServerAdmin
+		}
+
+		params := sqlc.UserUpdateParams{
+			ID:            id,
+			SetEmail:      update.Email != nil,
+			IsServerAdmin: update.IsServerAdmin,
+			Disabled:      update.Disabled,
+		}
+		if update.Email != nil && *update.Email != "" {
+			params.Email = update.Email
+		}
+
+		row, err := s.queries.UserUpdate(ctx, tx, params)
+		if isNoRowsError(err) {
+			return domain.ErrUserNotFound
+		}
+
+		if err != nil {
+			return userWriteError("update user", err)
+		}
+
+		user = domain.User(row)
+
+		if user.DisabledAt != nil {
+			if err := s.queries.SessionDeleteByUser(ctx, tx, id); err != nil {
+				return fmt.Errorf("delete sessions: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	return user, err
+}
+
+// SetPasswordAndDeleteSessions sets the password hash of the user with id and deletes all
+// the user's sessions, in one transaction. It returns domain.ErrUserNotFound.
+func (s *UserStore) SetPasswordAndDeleteSessions(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	return s.db.WithTx(ctx, func(tx DB) error {
+		rows, err := s.queries.UserSetPassword(ctx, tx, sqlc.UserSetPasswordParams{
+			ID:           id,
+			PasswordHash: passwordHash,
+		})
+		if err != nil {
+			return fmt.Errorf("set password: %w", err)
+		}
+
+		if rows == 0 {
+			return domain.ErrUserNotFound
+		}
+
+		if err := s.queries.SessionDeleteByUser(ctx, tx, id); err != nil {
+			return fmt.Errorf("delete sessions: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func userWriteError(op string, err error) error {
+	switch constraint, _ := uniqueViolation(err); constraint {
+	case "users_username_key":
+		return domain.ErrUsernameTaken
+	case "users_email_key":
+		return domain.ErrEmailTaken
+	default:
+		return fmt.Errorf("%s: %w", op, err)
+	}
+}

@@ -18,7 +18,27 @@ type fakeStore struct {
 	users    []domain.User
 	sessions map[string]domain.User
 	roles    []domain.ProjectRole
-	projects []domain.ProjectRole
+	projects []domain.Project
+	mine     []domain.Project
+	members  []domain.Member
+
+	role    *domain.Role
+	roleErr error
+
+	userErr    error
+	projectErr error
+	memberErr  error
+
+	createdUser    domain.User
+	listedAfter    *uuid.UUID
+	listedLimit    int32
+	updatedID      uuid.UUID
+	updatedUser    domain.UserUpdate
+	resetID        uuid.UUID
+	resetHash      string
+	createdProject domain.Project
+	addedMember    uuid.UUID
+	addedRole      domain.Role
 
 	createErr error
 	updateErr error
@@ -104,8 +124,66 @@ func (f *fakeStore) ListProjectsWithRoleByUser(context.Context, uuid.UUID) ([]do
 	return f.roles, nil
 }
 
-func (f *fakeStore) ListProjects(context.Context) ([]domain.ProjectRole, error) {
+func (f *fakeStore) ListProjects(context.Context) ([]domain.Project, error) {
 	return f.projects, nil
+}
+
+func (f *fakeStore) ListProjectsByMember(context.Context, uuid.UUID) ([]domain.Project, error) {
+	return f.mine, nil
+}
+
+func (f *fakeStore) CreateUser(_ context.Context, user domain.User) (domain.User, error) {
+	f.createdUser = user
+	return user, f.userErr
+}
+
+func (f *fakeStore) ListUsers(_ context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
+	f.listedAfter = afterID
+	f.listedLimit = limit
+
+	return f.users, nil
+}
+
+func (f *fakeStore) UpdateUser(_ context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error) {
+	f.updatedID = id
+	f.updatedUser = update
+
+	return domain.User{ID: id, Email: update.Email}, f.userErr
+}
+
+func (f *fakeStore) SetPasswordAndDeleteSessions(_ context.Context, id uuid.UUID, passwordHash string) error {
+	f.resetID = id
+	f.resetHash = passwordHash
+
+	return f.userErr
+}
+
+func (f *fakeStore) CreateProject(_ context.Context, project domain.Project) (domain.Project, error) {
+	f.createdProject = project
+	return project, f.projectErr
+}
+
+func (f *fakeStore) GetProjectRoleOfUser(context.Context, uuid.UUID, uuid.UUID) (*domain.Role, error) {
+	return f.role, f.roleErr
+}
+
+func (f *fakeStore) ListMembers(context.Context, uuid.UUID) ([]domain.Member, error) {
+	return f.members, nil
+}
+
+func (f *fakeStore) AddMember(_ context.Context, _, userID uuid.UUID, role domain.Role) error {
+	f.addedMember = userID
+	f.addedRole = role
+
+	return f.memberErr
+}
+
+func (f *fakeStore) UpdateMemberRole(_ context.Context, _, userID uuid.UUID, role domain.Role) (domain.Member, error) {
+	return domain.Member{UserID: userID, Role: role}, f.memberErr
+}
+
+func (f *fakeStore) RemoveMember(context.Context, uuid.UUID, uuid.UUID) error {
+	return f.memberErr
 }
 
 var testConfig = Config{
@@ -134,6 +212,16 @@ func identityOf(user domain.User) domain.Identity {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func assertAppError(t *testing.T, err error, kind apperr.Kind, code apperr.Code, field string) {
+	t.Helper()
+
+	appErr, ok := errors.AsType[*apperr.Error](err)
+	require.True(t, ok, err)
+	assert.Equal(t, kind, appErr.Kind)
+	assert.Equal(t, code, appErr.Code)
+	assert.Equal(t, field, appErr.Details["field"])
 }
 
 func assertUnauthenticated(t *testing.T, err error) {

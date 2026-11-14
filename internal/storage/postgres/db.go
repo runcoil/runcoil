@@ -76,6 +76,18 @@ func isNoRowsError(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
 
+const uniqueViolationCode = "23505"
+
+// uniqueViolation returns the constraint that err violates, when err is a unique violation.
+func uniqueViolation(err error) (string, bool) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		return pgErr.ConstraintName, true
+	}
+
+	return "", false
+}
+
 // interval converts an optional duration to an interval; nil is NULL.
 func interval(d *time.Duration) pgtype.Interval {
 	if d == nil {
