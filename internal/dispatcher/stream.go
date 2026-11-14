@@ -82,11 +82,12 @@ func (s *Service) Listen(
 	// The stream goes in the map while the worker row is locked, so the map follows the
 	// order of the row lock: a slower, older Listen cannot replace a newer one.
 	free := 0
-	notHeld, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
+	attached, err := s.workerStore.AttachStream(ctx, domain.AttachStreamParams{
 		WorkerID:     worker.ID,
 		DispatcherID: s.id,
 		StreamID:     streamID,
 		Running:      running,
+		MaxLost:      s.cfg.MaxLostAttempts,
 		Attached: func(notHeld []domain.Lease) {
 			for _, l := range running {
 				st.held[l] = struct{}{}
@@ -111,12 +112,14 @@ func (s *Service) Listen(
 		slog.String("stream_id", streamID.String()),
 		slog.String("app", worker.App),
 		slog.Int("running", len(running)),
-		slog.Int("not_held", len(notHeld)),
+		slog.Int("not_held", len(attached.NotHeld)),
+		slog.Int("unknown_requeued", attached.Requeued),
+		slog.Int("unknown_failed", attached.Failed),
 		slog.Int("free_slots", free),
 	)
 
 	attachedAt := time.Now()
-	err = s.pump(ctx, st, notHeld, send)
+	err = s.pump(ctx, st, attached.NotHeld, send)
 
 	s.logger.InfoContext(ctx, "stream detached",
 		slog.String("worker_id", worker.ID.String()),

@@ -47,6 +47,7 @@ func TestFailureCodeFromProto(t *testing.T) {
 	assert.Equal(t, domain.FailureCodeError, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR))
 	assert.Equal(t, domain.FailureCodePanic, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_PANIC))
 	assert.Equal(t, domain.FailureCodeOutputNotEncodable, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE))
+	assert.Equal(t, domain.FailureCodeOutputTooLarge, failureCodeFromProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE))
 }
 
 func TestStepRecordToProto(t *testing.T) {
@@ -61,6 +62,13 @@ func TestStepRecordToProto(t *testing.T) {
 	assert.Equal(t, runcoilv1.Failure_CODE_PANIC, failed.GetFailure().GetCode())
 	assert.Equal(t, "boom", failed.GetFailure().GetMessage())
 	assert.Equal(t, "charge", failed.GetFailure().GetStepId())
+
+	tooLarge := stepRecordToProto(domain.StepRecord{
+		StepID:  "charge",
+		Kind:    domain.StepKindDo,
+		Failure: &domain.Failure{Code: domain.FailureCodeOutputTooLarge, Message: "too large"},
+	})
+	assert.Equal(t, runcoilv1.Failure_CODE_OUTPUT_TOO_LARGE, tooLarge.GetFailure().GetCode())
 }
 
 func TestStreamMessageToProto(t *testing.T) {

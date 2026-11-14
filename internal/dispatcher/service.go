@@ -28,6 +28,10 @@ type Config struct {
 	ClaimInterval     time.Duration
 	HeartbeatInterval time.Duration
 	WorkerTTL         time.Duration
+	// MaxLostAttempts is the scheduler's run.max-lost-attempts, which main copies here: a
+	// Run whose worker dropped it without a result more often fails. It has no key of its
+	// own.
+	MaxLostAttempts int
 	// Retry is the policy of a failed Step whose Run and Step set none.
 	Retry RetryConfig
 }
