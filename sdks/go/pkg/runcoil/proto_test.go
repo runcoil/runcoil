@@ -31,6 +31,9 @@ func TestErrorMessagesAreCutBeforeTheyAreSent(t *testing.T) {
 	run := runResultToProto(nil, errors.New(long))
 	assert.Len(t, run.GetError().GetMessage(), maxMessageBytes)
 
+	stepErr := runResultToProto(nil, &runstate.StepError{StepID: "bad\xffid", Message: "declined"})
+	assert.Equal(t, "bad\uFFFDid", stepErr.GetError().GetStepId())
+
 	step := stepReportToProto(nil, runstate.StepReport{StepID: "charge", Failure: &runstate.Failure{Kind: runstate.KindError, Message: long}})
 	assert.Len(t, step.GetError().GetMessage(), maxMessageBytes)
 }

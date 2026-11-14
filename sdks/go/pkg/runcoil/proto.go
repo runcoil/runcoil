@@ -41,7 +41,7 @@ func runResultToProto(out []byte, err error) *runcoilv1.CompleteRunRequest {
 // returned the final error of that Step.
 func runFailureToProto(kind runcoilv1.ErrorKind, message, stepID string) *runcoilv1.CompleteRunRequest {
 	return &runcoilv1.CompleteRunRequest{Result: &runcoilv1.CompleteRunRequest_Error{
-		Error: &runcoilv1.RunError{Kind: kind, Message: cutMessage(message), StepId: stepID},
+		Error: &runcoilv1.RunError{Kind: kind, Message: cutMessage(message), StepId: strings.ToValidUTF8(stepID, "\uFFFD")},
 	}}
 }
 
