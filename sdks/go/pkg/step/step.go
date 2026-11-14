@@ -14,7 +14,7 @@ import (
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
 )
 
-// maxIDBytes is the longest id the server stores.
+// maxIDBytes is the longest id the server stores, in bytes.
 const maxIDBytes = 255
 
 // Error is the final error of a Step that failed. Do returns it for such a Step, also on
