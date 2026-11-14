@@ -21,6 +21,8 @@ func TestCutMessage(t *testing.T) {
 	cut := cutMessage(strings.Repeat("x", maxMessageBytes-1) + "\u20ac")
 	assert.Len(t, cut, maxMessageBytes-1)
 	assert.True(t, utf8.ValidString(cut))
+
+	assert.Equal(t, "bad\uFFFDbytes", cutMessage("bad\xff\xfebytes"))
 }
 
 func TestErrorMessagesAreCutBeforeTheyAreSent(t *testing.T) {

@@ -262,6 +262,9 @@ func TestDoRefusesAnIDTheServerCannotStore(t *testing.T) {
 	_, err := Do(ctx, "bad\x00id", fn)
 	assert.EqualError(t, err, "step: id must not contain a NUL byte")
 
+	_, err = Do(ctx, "bad\xffid", fn)
+	assert.EqualError(t, err, "step: id must be valid UTF-8")
+
 	_, err = Do(ctx, strings.Repeat("x", maxIDBytes+1), fn)
 	assert.EqualError(t, err, "step: id must be at most 255 bytes, counter included, not 256")
 

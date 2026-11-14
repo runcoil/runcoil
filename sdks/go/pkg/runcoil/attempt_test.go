@@ -185,10 +185,10 @@ func TestARefusedRunResultFailsTheRun(t *testing.T) {
 	st := newFakeStream()
 	f.streams <- st
 
-	invalid := codedError(t, connect.CodeInvalidArgument, runcoilv1.ErrorCode_ERROR_CODE_INVALID_REQUEST, "step_id is not valid")
+	invalid := codedError(t, connect.CodeInvalidArgument, runcoilv1.ErrorCode_ERROR_CODE_INVALID_REQUEST, "result is not valid")
 	f.set(func(f *fakeServer) {
 		f.runRefuse = func(req *runcoilv1.CompleteRunRequest) error {
-			if req.GetError().GetStepId() != "" {
+			if req.GetError() == nil {
 				return invalid
 			}
 
@@ -197,17 +197,31 @@ func TestARefusedRunResultFailsTheRun(t *testing.T) {
 	})
 
 	startWorker(t, url, map[string]Handler{
-		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) {
-			return orderOutput{}, &step.Error{StepID: "bad\x00id", Message: "declined"}
-		}),
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) { return orderOutput{}, nil }),
 	})
 
 	st.send <- assignMsg("run-1", 1, "order", `{}`)
 
 	run := f.waitRun(t)
 	assert.Equal(t, runcoilv1.ErrorKind_ERROR_KIND_ERROR, run.GetError().GetKind())
-	assert.Equal(t, "the server refused the run result: step_id is not valid", run.GetError().GetMessage())
-	assert.Empty(t, run.GetError().GetStepId())
+	assert.Equal(t, "the server refused the run result: result is not valid", run.GetError().GetMessage())
+}
+
+func TestAnInvalidUTF8ErrorFailsTheRun(t *testing.T) {
+	f, url := newFakeServer(t)
+	st := newFakeStream()
+	f.streams <- st
+
+	startWorker(t, url, map[string]Handler{
+		"order": HandlerFunc(func(context.Context, orderInput) (orderOutput, error) {
+			return orderOutput{}, errors.New("bad\xffbyte")
+		}),
+	})
+
+	st.send <- assignMsg("run-1", 1, "order", `{}`)
+
+	run := f.waitRun(t)
+	assert.Equal(t, "bad\uFFFDbyte", run.GetError().GetMessage())
 }
 
 func TestARunResultRefusedTwiceIsDropped(t *testing.T) {

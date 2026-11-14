@@ -2,6 +2,7 @@ package runcoil
 
 import (
 	"errors"
+	"strings"
 	"unicode/utf8"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -48,8 +49,10 @@ func runFailureToProto(kind runcoilv1.ErrorKind, message, stepID string) *runcoi
 // before it is sent, so a huge error text does not make the report too large.
 const maxMessageBytes = 64 << 10
 
-// cutMessage cuts message to maxMessageBytes at a character boundary.
+// cutMessage makes message fit a report: invalid UTF-8, which a proto string cannot
+// carry, becomes U+FFFD, and the text is cut to maxMessageBytes at a character boundary.
 func cutMessage(message string) string {
+	message = strings.ToValidUTF8(message, "\uFFFD")
 	if len(message) <= maxMessageBytes {
 		return message
 	}
