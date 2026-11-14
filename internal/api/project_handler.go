@@ -10,14 +10,15 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 type projectHandler struct {
-	accountService AccountService
+	projectService service.Project
 }
 
-func newProjectHandler(accountService AccountService) *projectHandler {
-	return &projectHandler{accountService: accountService}
+func newProjectHandler(projectService service.Project) *projectHandler {
+	return &projectHandler{projectService: projectService}
 }
 
 func (h *projectHandler) ListProjects(ctx context.Context, _ gen.ListProjectsRequestObject) (gen.ListProjectsResponseObject, error) {
@@ -26,7 +27,7 @@ func (h *projectHandler) ListProjects(ctx context.Context, _ gen.ListProjectsReq
 		return nil, errors.New("no identity in the context")
 	}
 
-	res, err := h.accountService.ListProjects(ctx, identity)
+	res, err := h.projectService.ListProjects(ctx, identity)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -40,7 +41,7 @@ func (h *projectHandler) ListProjects(ctx context.Context, _ gen.ListProjectsReq
 }
 
 func (h *projectHandler) CreateProject(ctx context.Context, req gen.CreateProjectRequestObject) (gen.CreateProjectResponseObject, error) {
-	res, err := h.accountService.CreateProject(ctx, req.Body.Name)
+	res, err := h.projectService.CreateProject(ctx, req.Body.Name)
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
 	}

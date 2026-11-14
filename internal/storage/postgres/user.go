@@ -182,36 +182,33 @@ func (s *UserStore) ListUsers(ctx context.Context, afterID *uuid.UUID, limit int
 	return users, nil
 }
 
-// UpdateUser applies update to the user with id, and deletes the user's sessions when it
-// disables the user, in one transaction. It returns domain.ErrUserNotFound,
-// domain.ErrEmailTaken, or domain.ErrLastServerAdmin when the change would leave no active
-// server admin.
-func (s *UserStore) UpdateUser(ctx context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error) {
+// UpdateUser applies params to a user, and deletes the user's sessions when it disables
+// the user, in one transaction. It returns domain.ErrUserNotFound, domain.ErrEmailTaken, or
+// domain.ErrLastServerAdmin when the change would leave no active server admin.
+func (s *UserStore) UpdateUser(ctx context.Context, params domain.UpdateUserParams) (domain.User, error) {
 	var user domain.User
 	err := s.db.WithTx(ctx, func(tx DB) error {
-		// The active server admins are locked first, so two changes that each remove one of
-		// the last two run one after the other, and the second sees only one left.
-		admins, err := s.queries.UserLockActiveServerAdmins(ctx, tx)
-		if err != nil {
-			return fmt.Errorf("lock server admins: %w", err)
+		removesAdmin := (params.IsServerAdmin != nil && !*params.IsServerAdmin) || (params.Disabled != nil && *params.Disabled)
+		if removesAdmin {
+			// The active server admins are locked first, so two changes that each remove one
+			// of the last two run one after the other, and the second sees only one left.
+			admins, err := s.queries.UserLockActiveServerAdmins(ctx, tx)
+			if err != nil {
+				return fmt.Errorf("lock server admins: %w", err)
+			}
+
+			if len(admins) == 1 && admins[0] == params.ID {
+				return domain.ErrLastServerAdmin
+			}
 		}
 
-		removesAdmin := (update.IsServerAdmin != nil && !*update.IsServerAdmin) || (update.Disabled != nil && *update.Disabled)
-		if removesAdmin && len(admins) == 1 && admins[0] == id {
-			return domain.ErrLastServerAdmin
-		}
-
-		params := sqlc.UserUpdateParams{
-			ID:            id,
-			SetEmail:      update.Email != nil,
-			IsServerAdmin: update.IsServerAdmin,
-			Disabled:      update.Disabled,
-		}
-		if update.Email != nil && *update.Email != "" {
-			params.Email = update.Email
-		}
-
-		row, err := s.queries.UserUpdate(ctx, tx, params)
+		row, err := s.queries.UserUpdate(ctx, tx, sqlc.UserUpdateParams{
+			ID:            params.ID,
+			SetEmail:      params.Email != nil || params.RemoveEmail,
+			Email:         params.Email,
+			IsServerAdmin: params.IsServerAdmin,
+			Disabled:      params.Disabled,
+		})
 		if isNoRowsError(err) {
 			return domain.ErrUserNotFound
 		}
@@ -223,7 +220,7 @@ func (s *UserStore) UpdateUser(ctx context.Context, id uuid.UUID, update domain.
 		user = domain.User(row)
 
 		if user.DisabledAt != nil {
-			if err := s.queries.SessionDeleteByUser(ctx, tx, id); err != nil {
+			if err := s.queries.SessionDeleteByUser(ctx, tx, params.ID); err != nil {
 				return fmt.Errorf("delete sessions: %w", err)
 			}
 		}

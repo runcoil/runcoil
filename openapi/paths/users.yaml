@@ -114,7 +114,7 @@ user:
               $ref: "../components/schemas/users.yaml#/ManagedUser"
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: the body is not valid, or the email is malformed"
+        description: "invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
@@ -160,7 +160,7 @@ userPassword:
         description: The password is reset
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: the body is not valid, or the password is too weak"
+        description: "invalid_request: userId is not a UUID, the body is not valid, or the password is too weak"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"

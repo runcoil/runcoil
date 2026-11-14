@@ -10,6 +10,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 // The errors the service returns to clients.
@@ -18,14 +19,6 @@ var (
 	ErrNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	ErrPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
 	ErrProjectNotFound  = apperr.NotFound(apperr.CodeNotFound, "project not found")
-	ErrUserNotFound     = apperr.NotFound(apperr.CodeNotFound, "user not found")
-	ErrMemberNotFound   = apperr.NotFound(apperr.CodeNotFound, "user is not a member of the project")
-	ErrUsernameTaken    = apperr.Conflict(apperr.CodeAlreadyExists, "username is taken").WithDetail("field", "username")
-	ErrEmailTaken       = apperr.Conflict(apperr.CodeAlreadyExists, "email is taken").WithDetail("field", "email")
-	ErrProjectNameTaken = apperr.Conflict(apperr.CodeAlreadyExists, "project name is taken").WithDetail("field", "name")
-	ErrMemberExists     = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project").WithDetail("field", "username")
-	ErrNoSuchUsername   = apperr.Invalid(apperr.CodeInvalidRequest, "no user has this username").WithDetail("field", "username")
-	ErrLastServerAdmin  = apperr.Conflict(apperr.CodeLastServerAdmin, "the last active server admin cannot lose the role or be disabled")
 )
 
 // UserStore keeps the users.
@@ -34,10 +27,6 @@ type UserStore interface {
 	GetUserByUsername(ctx context.Context, username string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
 	UpdatePasswordAndDeleteOtherSessions(ctx context.Context, userID uuid.UUID, currentHash, newHash string, keepTokenHash []byte) error
-	CreateUser(ctx context.Context, user domain.User) (domain.User, error)
-	ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
-	UpdateUser(ctx context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error)
-	SetPasswordAndDeleteSessions(ctx context.Context, id uuid.UUID, passwordHash string) error
 }
 
 // SessionStore keeps the sessions.
@@ -47,17 +36,11 @@ type SessionStore interface {
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 }
 
-// ProjectStore keeps the projects and their members.
+// ProjectStore reads the projects and the roles of their members.
 type ProjectStore interface {
-	CreateProject(ctx context.Context, project domain.Project) (domain.Project, error)
 	ListProjects(ctx context.Context) ([]domain.Project, error)
-	ListProjectsByMember(ctx context.Context, userID uuid.UUID) ([]domain.Project, error)
 	ListProjectsWithRoleByUser(ctx context.Context, userID uuid.UUID) ([]domain.ProjectRole, error)
 	GetProjectRoleOfUser(ctx context.Context, projectID, userID uuid.UUID) (*domain.Role, error)
-	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)
-	AddMember(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) error
-	UpdateMemberRole(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) (domain.Member, error)
-	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
 }
 
 const minSessionMaxInactive = 5 * time.Minute
@@ -91,6 +74,8 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+var _ service.Account = (*Service)(nil)
 
 // Service signs users in and out, manages their passwords and decides what they may do.
 type Service struct {

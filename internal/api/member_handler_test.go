@@ -9,13 +9,15 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 var membersPath = "/api/v1/projects/" + testProjectID.String() + "/members"
 
 func TestListMembers(t *testing.T) {
-	accountService := &fakeAccountService{user: testUser, members: []domain.Member{{UserID: testUser.ID, Username: "ana", Email: new("ana@example.com"), Role: domain.RoleAdmin}}}
-	h := newAPIServer(t, accountService)
+	accountService := &fakeAccountService{user: testUser}
+	projectService := &fakeProjectService{members: []domain.Member{{UserID: testUser.ID, Username: "ana", Email: new("ana@example.com"), Role: domain.RoleAdmin}}}
+	h := newAPIServerWithServices(t, accountService, &fakeUserService{}, projectService)
 
 	rec := do(t, h, call{method: http.MethodGet, path: membersPath, token: testToken})
 
@@ -26,15 +28,15 @@ func TestListMembers(t *testing.T) {
 
 func TestAddMember(t *testing.T) {
 	accountService := &fakeAccountService{user: testUser}
-	h := newAPIServer(t, accountService)
+	projectService := &fakeProjectService{}
+	h := newAPIServerWithServices(t, accountService, &fakeUserService{}, projectService)
 
 	rec := do(t, h, call{method: http.MethodPost, path: membersPath, token: testToken, body: `{"username":"ana","role":"editor"}`})
 
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"userId":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","role":"editor"}`, rec.Body.String())
 	assert.Equal(t, domain.PermissionMembersWrite, accountService.authorizedPermission)
-	assert.Equal(t, "ana", accountService.addedUsername)
-	assert.Equal(t, domain.RoleEditor, accountService.memberRole)
+	assert.Equal(t, service.AddMemberParams{ProjectID: testProjectID, Username: "ana", Role: domain.RoleEditor}, projectService.addedMember)
 
 	rec = do(t, h, call{method: http.MethodPost, path: membersPath, token: testToken, body: `{"username":"ana","role":"owner"}`})
 
@@ -48,7 +50,7 @@ func TestAddMember(t *testing.T) {
 	_, fields = decodeError(t, rec)
 	assert.Equal(t, []string{"username", "role"}, fields)
 
-	accountService.manageErr = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project").WithDetail("field", "username")
+	projectService.err = apperr.Conflict(apperr.CodeAlreadyExists, "user is already a member of the project").WithDetail("field", "username")
 
 	rec = do(t, h, call{method: http.MethodPost, path: membersPath, token: testToken, body: `{"username":"ana","role":"editor"}`})
 
@@ -59,19 +61,20 @@ func TestAddMember(t *testing.T) {
 }
 
 func TestUpdateMember(t *testing.T) {
-	accountService := &fakeAccountService{user: testUser}
-	h := newAPIServer(t, accountService)
+	projectService := &fakeProjectService{}
+	h := newAPIServerWithServices(t, &fakeAccountService{user: testUser}, &fakeUserService{}, projectService)
 
 	rec := do(t, h, call{method: http.MethodPatch, path: membersPath + "/" + testUser.ID.String(), token: testToken, body: `{"role":"viewer"}`})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"userId":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","role":"viewer"}`, rec.Body.String())
-	assert.Equal(t, domain.RoleViewer, accountService.memberRole)
+	assert.Equal(t, service.UpdateMemberParams{ProjectID: testProjectID, UserID: testUser.ID, Role: domain.RoleViewer}, projectService.updatedMember)
 }
 
 func TestRemoveMember(t *testing.T) {
 	accountService := &fakeAccountService{user: testUser}
-	h := newAPIServer(t, accountService)
+	projectService := &fakeProjectService{}
+	h := newAPIServerWithServices(t, accountService, &fakeUserService{}, projectService)
 
 	rec := do(t, h, call{method: http.MethodDelete, path: membersPath + "/" + testUser.ID.String(), token: testToken, origin: "http://evil.test"})
 
@@ -80,10 +83,10 @@ func TestRemoveMember(t *testing.T) {
 	rec = do(t, h, call{method: http.MethodDelete, path: membersPath + "/" + testUser.ID.String(), token: testToken})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, testUser.ID, accountService.removedMember)
+	assert.Equal(t, testUser.ID, projectService.removedMember)
 	assert.Equal(t, domain.PermissionMembersWrite, accountService.authorizedPermission)
 
-	accountService.manageErr = apperr.NotFound(apperr.CodeNotFound, "user is not a member of the project")
+	projectService.err = apperr.NotFound(apperr.CodeNotFound, "user is not a member of the project")
 
 	rec = do(t, h, call{method: http.MethodDelete, path: membersPath + "/" + testUser.ID.String(), token: testToken})
 

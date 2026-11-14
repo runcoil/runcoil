@@ -15,7 +15,9 @@ import (
 	"github.com/runcoil/runcoil/internal/log"
 	"github.com/runcoil/runcoil/internal/scheduler"
 	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/service/project"
 	"github.com/runcoil/runcoil/internal/service/seed"
+	"github.com/runcoil/runcoil/internal/service/user"
 	"github.com/runcoil/runcoil/internal/storage/postgres"
 	"github.com/runcoil/runcoil/internal/storage/postgres/sqlc"
 	"github.com/runcoil/runcoil/pkg/configutil"
@@ -86,8 +88,10 @@ func run() error {
 	cfg.Account.BootstrapAdminUsername = cfg.Seed.AdminUsername
 	cfg.Account.BootstrapAdminPassword = cfg.Seed.AdminPassword
 	accountService := account.New(cfg.Account, userStore, sessionStore, projectStore)
+	userService := user.New(userStore)
+	projectService := project.New(projectStore, userStore)
 
-	apiService, err := api.New(cfg.API, logger, checks, accountService)
+	apiService, err := api.New(cfg.API, logger, checks, accountService, userService, projectService)
 	if err != nil {
 		return fmt.Errorf("new api service: %w", err)
 	}

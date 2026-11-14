@@ -381,10 +381,15 @@ export interface components {
         /** @description The fields to change. An absent field stays as it is. */
         UpdateUserRequest: {
             /**
-             * @description The new email, lowercased. An empty string removes it.
+             * @description The new email, lowercased. Not with removeEmail.
              * @example ana@example.com
              */
             email?: string;
+            /**
+             * @description True to remove the email. Not with email.
+             * @example false
+             */
+            removeEmail?: boolean;
             /**
              * @description True to make the user a server admin, false to take the role away.
              * @example true
@@ -982,6 +987,8 @@ export interface operations {
                     "application/json": components["schemas"]["MemberList"];
                 };
             };
+            /** @description invalid_request: projectId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the caller is not an admin of the project */
@@ -1016,7 +1023,7 @@ export interface operations {
                     "application/json": components["schemas"]["Member"];
                 };
             };
-            /** @description invalid_request: the body is not valid, or no user has the username */
+            /** @description invalid_request: projectId is not a UUID, the body is not valid, or no user has the username */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
@@ -1051,6 +1058,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description invalid_request: projectId or userId is not a UUID */
+            400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
             /** @description permission_denied: the caller is not an admin of the project, or the request comes from another origin */
@@ -1087,7 +1096,7 @@ export interface operations {
                     "application/json": components["schemas"]["Member"];
                 };
             };
-            /** @description invalid_request: the body is not valid */
+            /** @description invalid_request: projectId or userId is not a UUID, or the body is not valid */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
@@ -1191,7 +1200,7 @@ export interface operations {
                     "application/json": components["schemas"]["ManagedUser"];
                 };
             };
-            /** @description invalid_request: the body is not valid, or the email is malformed */
+            /** @description invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];
@@ -1229,7 +1238,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description invalid_request: the body is not valid, or the password is too weak */
+            /** @description invalid_request: userId is not a UUID, the body is not valid, or the password is too weak */
             400: components["responses"]["InvalidRequest"];
             /** @description unauthenticated: no live session */
             401: components["responses"]["Unauthenticated"];

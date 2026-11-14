@@ -540,20 +540,26 @@ components:
       properties:
         email:
           type: string
-          description: The new email, lowercased. An empty string removes it.
+          description: The new email, lowercased. Not with removeEmail.
+          minLength: 1
           maxLength: 254
           example: ana@example.com
           x-order: 1
+        removeEmail:
+          type: boolean
+          description: True to remove the email. Not with email.
+          example: false
+          x-order: 2
         isServerAdmin:
           type: boolean
           description: True to make the user a server admin, false to take the role away.
           example: true
-          x-order: 2
+          x-order: 3
         disabled:
           type: boolean
           description: True to disable the user and end their sessions, false to let them sign in again.
           example: false
-          x-order: 3
+          x-order: 4
     ResetPasswordRequest:
       type: object
       description: The user's new password.
@@ -854,6 +860,9 @@ components:
               application/json:
                 schema:
                   $ref: "#/components/schemas/MemberList"
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId is not a UUID"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -886,7 +895,7 @@ components:
                   $ref: "#/components/schemas/Member"
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: the body is not valid, or no user has the username"
+            description: "invalid_request: projectId is not a UUID, the body is not valid, or no user has the username"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -943,7 +952,7 @@ components:
                   $ref: "#/components/schemas/Member"
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: the body is not valid"
+            description: "invalid_request: projectId or userId is not a UUID, or the body is not valid"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -966,6 +975,9 @@ components:
         responses:
           "204":
             description: The member is removed
+          "400":
+            $ref: "#/components/responses/InvalidRequest"
+            description: "invalid_request: projectId or userId is not a UUID"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -1089,7 +1101,7 @@ components:
                   $ref: "#/components/schemas/ManagedUser"
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: the body is not valid, or the email is malformed"
+            description: "invalid_request: userId is not a UUID, the body is not valid, the email is malformed, or both email and removeEmail are set"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"
@@ -1134,7 +1146,7 @@ components:
             description: The password is reset
           "400":
             $ref: "#/components/responses/InvalidRequest"
-            description: "invalid_request: the body is not valid, or the password is too weak"
+            description: "invalid_request: userId is not a UUID, the body is not valid, or the password is too weak"
           "401":
             $ref: "#/components/responses/Unauthenticated"
             description: "unauthenticated: no live session"

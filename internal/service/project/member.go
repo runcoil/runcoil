@@ -1,4 +1,4 @@
-package account
+package project
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 // ListMembers returns the members of the project, by username.
@@ -20,9 +21,9 @@ func (s *Service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domai
 	return members, nil
 }
 
-// AddMember gives the user with username role in the project.
-func (s *Service) AddMember(ctx context.Context, projectID uuid.UUID, username string, role domain.Role) (domain.Member, error) {
-	user, err := s.userStore.GetUserByUsername(ctx, strings.ToLower(username))
+// AddMember gives the user with the username a role in the project.
+func (s *Service) AddMember(ctx context.Context, params service.AddMemberParams) (domain.Member, error) {
+	user, err := s.userStore.GetUserByUsername(ctx, strings.ToLower(params.Username))
 	if errors.Is(err, domain.ErrUserNotFound) {
 		return domain.Member{}, ErrNoSuchUsername
 	}
@@ -31,7 +32,11 @@ func (s *Service) AddMember(ctx context.Context, projectID uuid.UUID, username s
 		return domain.Member{}, fmt.Errorf("get user: %w", err)
 	}
 
-	err = s.projectStore.AddMember(ctx, projectID, user.ID, role)
+	err = s.projectStore.AddMember(ctx, domain.AddMemberParams{
+		ProjectID: params.ProjectID,
+		UserID:    user.ID,
+		Role:      params.Role,
+	})
 	if errors.Is(err, domain.ErrMemberExists) {
 		return domain.Member{}, ErrMemberExists
 	}
@@ -40,12 +45,12 @@ func (s *Service) AddMember(ctx context.Context, projectID uuid.UUID, username s
 		return domain.Member{}, fmt.Errorf("add member: %w", err)
 	}
 
-	return domain.Member{UserID: user.ID, Username: user.Username, Email: user.Email, Role: role}, nil
+	return domain.Member{UserID: user.ID, Username: user.Username, Email: user.Email, Role: params.Role}, nil
 }
 
-// UpdateMember gives the member userID role in the project.
-func (s *Service) UpdateMember(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) (domain.Member, error) {
-	member, err := s.projectStore.UpdateMemberRole(ctx, projectID, userID, role)
+// UpdateMember gives a member another role in the project.
+func (s *Service) UpdateMember(ctx context.Context, params service.UpdateMemberParams) (domain.Member, error) {
+	member, err := s.projectStore.UpdateMemberRole(ctx, domain.UpdateMemberRoleParams(params))
 	if errors.Is(err, domain.ErrMemberNotFound) {
 		return domain.Member{}, ErrMemberNotFound
 	}

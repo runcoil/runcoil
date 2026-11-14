@@ -132,13 +132,13 @@ func (s *ProjectStore) ListMembers(ctx context.Context, projectID uuid.UUID) ([]
 	return members, nil
 }
 
-// AddMember gives userID role in the project. It returns domain.ErrMemberExists when the
+// AddMember gives a user a role in a project. It returns domain.ErrMemberExists when the
 // user is already a member.
-func (s *ProjectStore) AddMember(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) error {
+func (s *ProjectStore) AddMember(ctx context.Context, params domain.AddMemberParams) error {
 	err := s.queries.ProjectMemberAdd(ctx, s.db, sqlc.ProjectMemberAddParams{
-		ProjectID: projectID,
-		UserID:    userID,
-		Role:      string(role),
+		ProjectID: params.ProjectID,
+		UserID:    params.UserID,
+		Role:      string(params.Role),
 	})
 	if constraint, ok := uniqueViolation(err); ok && constraint == "project_members_pkey" {
 		return domain.ErrMemberExists
@@ -151,13 +151,13 @@ func (s *ProjectStore) AddMember(ctx context.Context, projectID, userID uuid.UUI
 	return nil
 }
 
-// UpdateMemberRole gives the member userID role in the project. It returns
+// UpdateMemberRole gives a member another role in a project. It returns
 // domain.ErrMemberNotFound when the user is not a member.
-func (s *ProjectStore) UpdateMemberRole(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) (domain.Member, error) {
+func (s *ProjectStore) UpdateMemberRole(ctx context.Context, params domain.UpdateMemberRoleParams) (domain.Member, error) {
 	row, err := s.queries.ProjectMemberUpdateRole(ctx, s.db, sqlc.ProjectMemberUpdateRoleParams{
-		ProjectID: projectID,
-		UserID:    userID,
-		Role:      string(role),
+		ProjectID: params.ProjectID,
+		UserID:    params.UserID,
+		Role:      string(params.Role),
 	})
 	if isNoRowsError(err) {
 		return domain.Member{}, domain.ErrMemberNotFound

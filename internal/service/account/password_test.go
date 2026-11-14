@@ -14,13 +14,14 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 func TestChangePassword(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
 	store := &fakeStore{users: []domain.User{ana}}
 
-	err := newService(store).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
+	err := newService(store).ChangePassword(context.Background(), service.ChangePasswordParams{Identity: identityOf(ana), CurrentPassword: "admin", NewPassword: "Secret-1"})
 
 	require.NoError(t, err)
 	assert.Equal(t, hashToken("token"), store.keptTokenHash)
@@ -48,7 +49,7 @@ func TestChangePasswordRefused(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeStore{users: []domain.User{ana}}
 
-			err := newService(store).ChangePassword(context.Background(), identityOf(ana), tt.current, tt.new)
+			err := newService(store).ChangePassword(context.Background(), service.ChangePasswordParams{Identity: identityOf(ana), CurrentPassword: tt.current, NewPassword: tt.new})
 
 			appErr, ok := errors.AsType[*apperr.Error](err)
 			require.True(t, ok, err)
@@ -66,12 +67,12 @@ func TestChangePasswordWhenTheSessionEnded(t *testing.T) {
 	for _, updateErr := range []error{domain.ErrSessionNotFound, domain.ErrUserNotFound} {
 		store := &fakeStore{users: []domain.User{ana}, updateErr: updateErr}
 
-		err := newService(store).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
+		err := newService(store).ChangePassword(context.Background(), service.ChangePasswordParams{Identity: identityOf(ana), CurrentPassword: "admin", NewPassword: "Secret-1"})
 
 		assert.ErrorIs(t, err, ErrNotSignedIn, updateErr)
 	}
 
-	err := newService(&fakeStore{}).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
+	err := newService(&fakeStore{}).ChangePassword(context.Background(), service.ChangePasswordParams{Identity: identityOf(ana), CurrentPassword: "admin", NewPassword: "Secret-1"})
 	assert.ErrorIs(t, err, ErrNotSignedIn)
 }
 
@@ -79,7 +80,7 @@ func TestChangePasswordWhenThePasswordChangedMeanwhile(t *testing.T) {
 	ana := domain.User{ID: uuid.NewV7(), Username: "ana", PasswordHash: hashPassword(t, "admin")}
 	store := &fakeStore{users: []domain.User{ana}, updateErr: domain.ErrPasswordChanged}
 
-	err := newService(store).ChangePassword(context.Background(), identityOf(ana), "admin", "Secret-1")
+	err := newService(store).ChangePassword(context.Background(), service.ChangePasswordParams{Identity: identityOf(ana), CurrentPassword: "admin", NewPassword: "Secret-1"})
 
 	appErr, ok := errors.AsType[*apperr.Error](err)
 	require.True(t, ok, err)

@@ -323,8 +323,11 @@ type UpdateMemberRequestRole string
 
 // UpdateUserRequest The fields to change. An absent field stays as it is.
 type UpdateUserRequest struct {
-	// Email The new email, lowercased. An empty string removes it.
+	// Email The new email, lowercased. Not with removeEmail.
 	Email *string `json:"email,omitempty"`
+
+	// RemoveEmail True to remove the email. Not with email.
+	RemoveEmail *bool `json:"removeEmail,omitempty"`
 
 	// IsServerAdmin True to make the user a server admin, false to take the role away.
 	IsServerAdmin *bool `json:"isServerAdmin,omitempty"`
@@ -1338,6 +1341,20 @@ func (response ListMembers200JSONResponse) VisitListMembersResponse(w http.Respo
 	return err
 }
 
+type ListMembers400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response ListMembers400JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListMembers401JSONResponse struct{ UnauthenticatedJSONResponse }
 
 func (response ListMembers401JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
@@ -1502,6 +1519,20 @@ type RemoveMember204Response struct {
 func (response RemoveMember204Response) VisitRemoveMemberResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
+}
+
+type RemoveMember400JSONResponse struct{ InvalidRequestJSONResponse }
+
+func (response RemoveMember400JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type RemoveMember401JSONResponse struct{ UnauthenticatedJSONResponse }

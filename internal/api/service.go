@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	"uuid"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/spf13/pflag"
@@ -18,8 +17,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/api/middleware"
 	"github.com/runcoil/runcoil/internal/api/swagger"
-	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/service"
 	"github.com/runcoil/runcoil/openapi"
 	"github.com/runcoil/runcoil/pkg/healthutil"
 	"github.com/runcoil/runcoil/ui"
@@ -56,33 +54,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// AccountService signs users in and out and decides what they may do.
-type AccountService interface {
-	Login(ctx context.Context, login, password string) (account.LoginResult, error)
-	Authenticate(ctx context.Context, credential domain.Credential) (domain.Identity, error)
-	Logout(ctx context.Context, identity domain.Identity) error
-	ChangePassword(ctx context.Context, identity domain.Identity, currentPassword, newPassword string) error
-	GetUser(ctx context.Context, id uuid.UUID) (domain.User, error)
-	GetUserAccess(ctx context.Context, user domain.User) (account.Access, error)
-	Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error
-	ListProjects(ctx context.Context, identity domain.Identity) ([]domain.Project, error)
-	CreateProject(ctx context.Context, name string) (domain.Project, error)
-	ListUsers(ctx context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error)
-	CreateUser(ctx context.Context, params account.CreateUserParams) (domain.User, error)
-	UpdateUser(ctx context.Context, id uuid.UUID, update domain.UserUpdate) (domain.User, error)
-	ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) error
-	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.Member, error)
-	AddMember(ctx context.Context, projectID uuid.UUID, username string, role domain.Role) (domain.Member, error)
-	UpdateMember(ctx context.Context, projectID, userID uuid.UUID, role domain.Role) (domain.Member, error)
-	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
-}
-
 // Service serves the dashboard API and the health checks of the process.
 type Service struct {
 	cfg            Config
 	logger         *slog.Logger
 	checks         *healthutil.Checks
-	accountService AccountService
+	accountService service.Account
+	userService    service.User
+	projectService service.Project
 
 	spec        *openapi3.T
 	permissions map[string]string
@@ -92,7 +71,7 @@ type Service struct {
 }
 
 // New creates the API service. Its /readyz runs checks.
-func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService AccountService) (*Service, error) {
+func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountService service.Account, userService service.User, projectService service.Project) (*Service, error) {
 	spec, err := openapi3.NewLoader().LoadFromData(openapi.Spec)
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -108,6 +87,8 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		logger:         logger,
 		checks:         checks,
 		accountService: accountService,
+		userService:    userService,
+		projectService: projectService,
 		spec:           spec,
 		permissions:    permissions,
 		stopped:        make(chan struct{}),
@@ -221,9 +202,9 @@ type handler struct {
 func (s *Service) newHandler() *handler {
 	return &handler{
 		authHandler:    newAuthHandler(s.accountService, s.cfg.SecureCookie),
-		projectHandler: newProjectHandler(s.accountService),
-		userHandler:    newUserHandler(s.accountService),
-		memberHandler:  newMemberHandler(s.accountService),
+		projectHandler: newProjectHandler(s.projectService),
+		userHandler:    newUserHandler(s.userService),
+		memberHandler:  newMemberHandler(s.projectService),
 		versionHandler: newVersionHandler(),
 	}
 }

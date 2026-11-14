@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 var viewerPermissions = []domain.Permission{
@@ -41,35 +41,22 @@ var serverAdminPermissions = []domain.Permission{
 	domain.PermissionUsersWrite,
 }
 
-// Access is what a user may do: the server-wide permissions and the projects the user can
-// open.
-type Access struct {
-	Permissions []domain.Permission
-	Projects    []ProjectAccess
-}
-
-// ProjectAccess is a project the user can open, with the role and its permissions.
-type ProjectAccess struct {
-	domain.ProjectRole
-	Permissions []domain.Permission
-}
-
 // GetUserAccess returns what user may do. A server admin is admin in every project.
-func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (Access, error) {
-	access := Access{Permissions: []domain.Permission{}}
+func (s *Service) GetUserAccess(ctx context.Context, user domain.User) (service.Access, error) {
+	access := service.Access{Permissions: []domain.Permission{}}
 
 	roles, err := s.listProjectRoles(ctx, user)
 	if err != nil {
-		return Access{}, fmt.Errorf("list project roles: %w", err)
+		return service.Access{}, fmt.Errorf("list project roles: %w", err)
 	}
 
 	if user.IsServerAdmin {
 		access.Permissions = serverAdminPermissions
 	}
 
-	access.Projects = make([]ProjectAccess, 0, len(roles))
+	access.Projects = make([]service.ProjectAccess, 0, len(roles))
 	for _, role := range roles {
-		access.Projects = append(access.Projects, ProjectAccess{
+		access.Projects = append(access.Projects, service.ProjectAccess{
 			ProjectRole: role,
 			Permissions: rolePermissions[role.Role],
 		})
@@ -101,11 +88,11 @@ func (s *Service) listProjectRoles(ctx context.Context, user domain.User) ([]dom
 	return roles, nil
 }
 
-// Authorize checks that identity has permission in the project. A permission the identity
+// Authorize checks that the identity has the permission in the project. A permission the identity
 // holds server-wide holds in every project. A user who is not a member gets
 // ErrProjectNotFound, so a project is hidden from those who cannot open it.
-func (s *Service) Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error {
-	role, err := s.projectStore.GetProjectRoleOfUser(ctx, projectID, identity.UserID)
+func (s *Service) Authorize(ctx context.Context, params service.AuthorizeParams) error {
+	role, err := s.projectStore.GetProjectRoleOfUser(ctx, params.ProjectID, params.Identity.UserID)
 	if errors.Is(err, domain.ErrProjectNotFound) {
 		return ErrProjectNotFound
 	}
@@ -114,7 +101,7 @@ func (s *Service) Authorize(ctx context.Context, identity domain.Identity, proje
 		return fmt.Errorf("get project role: %w", err)
 	}
 
-	if slices.Contains(identity.Permissions, permission) {
+	if slices.Contains(params.Identity.Permissions, params.Permission) {
 		return nil
 	}
 
@@ -122,7 +109,7 @@ func (s *Service) Authorize(ctx context.Context, identity domain.Identity, proje
 		return ErrProjectNotFound
 	}
 
-	if !slices.Contains(rolePermissions[*role], permission) {
+	if !slices.Contains(rolePermissions[*role], params.Permission) {
 		return ErrPermissionDenied
 	}
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 func TestGetUserAccess(t *testing.T) {
@@ -20,16 +21,16 @@ func TestGetUserAccess(t *testing.T) {
 
 	access, err := s.GetUserAccess(context.Background(), domain.User{})
 	require.NoError(t, err)
-	assert.Equal(t, Access{
+	assert.Equal(t, service.Access{
 		Permissions: []domain.Permission{},
-		Projects:    []ProjectAccess{{ProjectRole: member[0], Permissions: viewerPermissions}},
+		Projects:    []service.ProjectAccess{{ProjectRole: member[0], Permissions: viewerPermissions}},
 	}, access)
 
 	access, err = s.GetUserAccess(context.Background(), domain.User{IsServerAdmin: true})
 	require.NoError(t, err)
-	assert.Equal(t, Access{
+	assert.Equal(t, service.Access{
 		Permissions: serverAdminPermissions,
-		Projects: []ProjectAccess{{
+		Projects: []service.ProjectAccess{{
 			ProjectRole: domain.ProjectRole{ProjectID: every[0].ID, ProjectName: "b", Role: domain.RoleAdmin},
 			Permissions: adminPermissions,
 		}},
@@ -66,7 +67,7 @@ func TestAuthorize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := newService(&tt.store).Authorize(context.Background(), tt.identity, uuid.NewV7(), tt.permission)
+			err := newService(&tt.store).Authorize(context.Background(), service.AuthorizeParams{Identity: tt.identity, ProjectID: uuid.NewV7(), Permission: tt.permission})
 			if tt.wantKind == apperr.KindInternal {
 				assert.NoError(t, err)
 				return
@@ -82,7 +83,7 @@ func TestAuthorize(t *testing.T) {
 func TestAuthorizeStoreFailure(t *testing.T) {
 	s := newService(&fakeStore{roleErr: errors.New("connection refused")})
 
-	err := s.Authorize(context.Background(), domain.Identity{}, uuid.NewV7(), domain.PermissionRunsRead)
+	err := s.Authorize(context.Background(), service.AuthorizeParams{ProjectID: uuid.NewV7(), Permission: domain.PermissionRunsRead})
 
 	assert.EqualError(t, err, "get project role: connection refused")
 }

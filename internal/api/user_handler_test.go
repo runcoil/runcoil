@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -11,8 +12,47 @@ import (
 
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/service"
 )
+
+type fakeUserService struct {
+	users []domain.User
+	err   error
+
+	listedAfter   *uuid.UUID
+	listedLimit   int32
+	createdUser   service.CreateUserParams
+	updatedUser   service.UpdateUserParams
+	resetPassword string
+}
+
+func (f *fakeUserService) ListUsers(_ context.Context, afterID *uuid.UUID, limit int32) ([]domain.User, error) {
+	f.listedAfter = afterID
+	f.listedLimit = limit
+
+	return f.users[:min(len(f.users), int(limit))], nil
+}
+
+func (f *fakeUserService) CreateUser(_ context.Context, params service.CreateUserParams) (domain.User, error) {
+	f.createdUser = params
+	return domain.User{ID: testUser.ID, Username: params.Username, Email: params.Email, IsServerAdmin: params.IsServerAdmin, CreatedAt: testTime}, f.err
+}
+
+func (f *fakeUserService) UpdateUser(_ context.Context, params service.UpdateUserParams) (domain.User, error) {
+	f.updatedUser = params
+	return domain.User{ID: params.ID, Username: "ana", DisabledAt: &testTime, CreatedAt: testTime}, f.err
+}
+
+func (f *fakeUserService) ResetPassword(_ context.Context, _ uuid.UUID, newPassword string) error {
+	f.resetPassword = newPassword
+	return f.err
+}
+
+func newUserAPI(t *testing.T, user domain.User, userService *fakeUserService) http.Handler {
+	t.Helper()
+
+	return newAPIServerWithServices(t, &fakeAccountService{user: user}, userService, &fakeProjectService{})
+}
 
 func TestListUsersPages(t *testing.T) {
 	users := []domain.User{
@@ -20,14 +60,14 @@ func TestListUsersPages(t *testing.T) {
 		{ID: uuid.NewV7(), Username: "b", CreatedAt: testTime},
 		{ID: uuid.NewV7(), Username: "c", CreatedAt: testTime},
 	}
-	accountService := &fakeAccountService{user: testAdmin, users: users}
-	h := newAPIServer(t, accountService)
+	userService := &fakeUserService{users: users}
+	h := newUserAPI(t, testAdmin, userService)
 
 	rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/users?pageSize=2", token: testToken})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, int32(3), accountService.listedLimit)
-	assert.Nil(t, accountService.listedAfter)
+	assert.Equal(t, int32(3), userService.listedLimit)
+	assert.Nil(t, userService.listedAfter)
 
 	var page struct {
 		Users []struct {
@@ -43,8 +83,8 @@ func TestListUsersPages(t *testing.T) {
 	rec = do(t, h, call{method: http.MethodGet, path: "/api/v1/users?pageToken=" + *page.NextPageToken, token: testToken})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, &users[1].ID, accountService.listedAfter)
-	assert.Equal(t, int32(defaultPageSize+1), accountService.listedLimit)
+	assert.Equal(t, &users[1].ID, userService.listedAfter)
+	assert.Equal(t, int32(defaultPageSize+1), userService.listedLimit)
 	assert.NotContains(t, rec.Body.String(), "nextPageToken")
 }
 
@@ -65,7 +105,7 @@ func TestListUsersErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newAPIServer(t, &fakeAccountService{user: tt.user})
+			h := newUserAPI(t, tt.user, &fakeUserService{})
 
 			rec := do(t, h, call{method: http.MethodGet, path: "/api/v1/users" + tt.query, token: testToken})
 
@@ -78,14 +118,14 @@ func TestListUsersErrors(t *testing.T) {
 }
 
 func TestCreateUser(t *testing.T) {
-	accountService := &fakeAccountService{user: testAdmin}
-	h := newAPIServer(t, accountService)
+	userService := &fakeUserService{}
+	h := newUserAPI(t, testAdmin, userService)
 
 	rec := do(t, h, call{method: http.MethodPost, path: "/api/v1/users", token: testToken, body: `{"username":"ana","email":"ana@example.com","password":"Secret-1","isServerAdmin":false}`})
 
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","email":"ana@example.com","isServerAdmin":false,"createdAt":"2026-11-14T08:00:00Z"}`, rec.Body.String())
-	assert.Equal(t, account.CreateUserParams{Username: "ana", Email: new("ana@example.com"), Password: "Secret-1"}, accountService.createdUser)
+	assert.Equal(t, service.CreateUserParams{Username: "ana", Email: new("ana@example.com"), Password: "Secret-1"}, userService.createdUser)
 
 	rec = do(t, h, call{method: http.MethodPost, path: "/api/v1/users", token: testToken, body: `{"username":"ana","password":"Secret-1"}`})
 
@@ -95,17 +135,26 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestUpdateUser(t *testing.T) {
-	accountService := &fakeAccountService{user: testAdmin}
-	h := newAPIServer(t, accountService)
+	userService := &fakeUserService{}
+	h := newUserAPI(t, testAdmin, userService)
 	path := "/api/v1/users/" + testUser.ID.String()
 
 	rec := do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"disabled":true}`})
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.JSONEq(t, `{"id":"019a5b1e-7c2d-7000-8000-4b1d2c3e4f50","username":"ana","isServerAdmin":false,"disabledAt":"2026-11-14T08:00:00Z","createdAt":"2026-11-14T08:00:00Z"}`, rec.Body.String())
-	assert.Equal(t, domain.UserUpdate{Disabled: new(true)}, accountService.updatedUser)
+	assert.Equal(t, service.UpdateUserParams{ID: testUser.ID, Disabled: new(true)}, userService.updatedUser)
 
-	accountService.manageErr = apperr.Conflict(apperr.CodeLastServerAdmin, "the last active server admin cannot lose the role or be disabled")
+	rec = do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"removeEmail":true}`})
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, service.UpdateUserParams{ID: testUser.ID, RemoveEmail: true}, userService.updatedUser)
+
+	rec = do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"email":""}`})
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+	userService.err = apperr.Conflict(apperr.CodeLastServerAdmin, "the last active server admin cannot lose the role or be disabled")
 
 	rec = do(t, h, call{method: http.MethodPatch, path: path, token: testToken, body: `{"isServerAdmin":false}`})
 
@@ -115,15 +164,15 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestResetUserPassword(t *testing.T) {
-	accountService := &fakeAccountService{user: testAdmin}
-	h := newAPIServer(t, accountService)
+	userService := &fakeUserService{}
+	h := newUserAPI(t, testAdmin, userService)
 
 	rec := do(t, h, call{method: http.MethodPut, path: "/api/v1/users/" + testUser.ID.String() + "/password", token: testToken, body: `{"newPassword":"Secret-1"}`})
 
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	assert.Equal(t, "Secret-1", accountService.resetPassword)
+	assert.Equal(t, "Secret-1", userService.resetPassword)
 
-	accountService.manageErr = apperr.NotFound(apperr.CodeNotFound, "user not found")
+	userService.err = apperr.NotFound(apperr.CodeNotFound, "user not found")
 
 	rec = do(t, h, call{method: http.MethodPut, path: "/api/v1/users/" + uuid.NewV7().String() + "/password", token: testToken, body: `{"newPassword":"Secret-1"}`})
 

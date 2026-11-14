@@ -22,6 +22,9 @@ members:
           application/json:
             schema:
               $ref: "../components/schemas/members.yaml#/MemberList"
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId is not a UUID"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
@@ -54,7 +57,7 @@ members:
               $ref: "../components/schemas/members.yaml#/Member"
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: the body is not valid, or no user has the username"
+        description: "invalid_request: projectId is not a UUID, the body is not valid, or no user has the username"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
@@ -112,7 +115,7 @@ member:
               $ref: "../components/schemas/members.yaml#/Member"
       "400":
         $ref: "../components/responses.yaml#/InvalidRequest"
-        description: "invalid_request: the body is not valid"
+        description: "invalid_request: projectId or userId is not a UUID, or the body is not valid"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"
@@ -135,6 +138,9 @@ member:
     responses:
       "204":
         description: The member is removed
+      "400":
+        $ref: "../components/responses.yaml#/InvalidRequest"
+        description: "invalid_request: projectId or userId is not a UUID"
       "401":
         $ref: "../components/responses.yaml#/Unauthenticated"
         description: "unauthenticated: no live session"

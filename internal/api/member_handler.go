@@ -9,18 +9,19 @@ import (
 
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 type memberHandler struct {
-	accountService AccountService
+	projectService service.Project
 }
 
-func newMemberHandler(accountService AccountService) *memberHandler {
-	return &memberHandler{accountService: accountService}
+func newMemberHandler(projectService service.Project) *memberHandler {
+	return &memberHandler{projectService: projectService}
 }
 
 func (h *memberHandler) ListMembers(ctx context.Context, req gen.ListMembersRequestObject) (gen.ListMembersResponseObject, error) {
-	res, err := h.accountService.ListMembers(ctx, uuid.UUID(req.ProjectId))
+	res, err := h.projectService.ListMembers(ctx, uuid.UUID(req.ProjectId))
 	if err != nil {
 		return nil, fmt.Errorf("list members: %w", err)
 	}
@@ -34,7 +35,11 @@ func (h *memberHandler) ListMembers(ctx context.Context, req gen.ListMembersRequ
 }
 
 func (h *memberHandler) AddMember(ctx context.Context, req gen.AddMemberRequestObject) (gen.AddMemberResponseObject, error) {
-	res, err := h.accountService.AddMember(ctx, uuid.UUID(req.ProjectId), req.Body.Username, domain.Role(req.Body.Role))
+	res, err := h.projectService.AddMember(ctx, service.AddMemberParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		Username:  req.Body.Username,
+		Role:      domain.Role(req.Body.Role),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("add member: %w", err)
 	}
@@ -43,7 +48,11 @@ func (h *memberHandler) AddMember(ctx context.Context, req gen.AddMemberRequestO
 }
 
 func (h *memberHandler) UpdateMember(ctx context.Context, req gen.UpdateMemberRequestObject) (gen.UpdateMemberResponseObject, error) {
-	res, err := h.accountService.UpdateMember(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.UserId), domain.Role(req.Body.Role))
+	res, err := h.projectService.UpdateMember(ctx, service.UpdateMemberParams{
+		ProjectID: uuid.UUID(req.ProjectId),
+		UserID:    uuid.UUID(req.UserId),
+		Role:      domain.Role(req.Body.Role),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("update member: %w", err)
 	}
@@ -52,7 +61,7 @@ func (h *memberHandler) UpdateMember(ctx context.Context, req gen.UpdateMemberRe
 }
 
 func (h *memberHandler) RemoveMember(ctx context.Context, req gen.RemoveMemberRequestObject) (gen.RemoveMemberResponseObject, error) {
-	if err := h.accountService.RemoveMember(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.UserId)); err != nil {
+	if err := h.projectService.RemoveMember(ctx, uuid.UUID(req.ProjectId), uuid.UUID(req.UserId)); err != nil {
 		return nil, fmt.Errorf("remove member: %w", err)
 	}
 

@@ -1,31 +1,24 @@
-package account
+package project
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
 )
 
-// ListProjects returns the projects the user of identity is a member of, by name. A server
-// admin gets every project.
+// ListProjects returns the projects the caller can open, by name: every project when the
+// caller may read Runs server-wide, otherwise the projects they are a member of.
 func (s *Service) ListProjects(ctx context.Context, identity domain.Identity) ([]domain.Project, error) {
-	user, err := s.userStore.GetUserByID(ctx, identity.UserID)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return nil, ErrNotSignedIn
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("get user: %w", err)
-	}
-
 	var projects []domain.Project
-	if user.IsServerAdmin {
+	var err error
+	if slices.Contains(identity.Permissions, domain.PermissionRunsRead) {
 		projects, err = s.projectStore.ListProjects(ctx)
 	} else {
-		projects, err = s.projectStore.ListProjectsByMember(ctx, user.ID)
+		projects, err = s.projectStore.ListProjectsByMember(ctx, identity.UserID)
 	}
 
 	if err != nil {

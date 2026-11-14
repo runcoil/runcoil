@@ -16,6 +16,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 	"github.com/runcoil/runcoil/openapi"
 )
 
@@ -162,9 +163,9 @@ type fakeAuthorizer struct {
 	permission domain.Permission
 }
 
-func (f *fakeAuthorizer) Authorize(_ context.Context, _ domain.Identity, projectID uuid.UUID, permission domain.Permission) error {
-	f.projectID = projectID
-	f.permission = permission
+func (f *fakeAuthorizer) Authorize(_ context.Context, params service.AuthorizeParams) error {
+	f.projectID = params.ProjectID
+	f.permission = params.Permission
 
 	return f.err
 }
@@ -207,20 +208,17 @@ func TestCheckPermissionInAProject(t *testing.T) {
 
 		_, err := CheckPermission(permissions, &fakeAuthorizer{err: refusal})(next, "ListMembers")(signedIn, nil, request(projectID.String()), nil)
 
-		assert.Same(t, refusal, err)
+		assert.ErrorIs(t, err, refusal)
 		assert.False(t, called)
 	})
 
-	t.Run("refuses a project ID that is not a UUID", func(t *testing.T) {
+	t.Run("fails on a project ID that is not a UUID", func(t *testing.T) {
 		next := func(context.Context, http.ResponseWriter, *http.Request, any) (any, error) {
 			return nil, nil
 		}
 
 		_, err := CheckPermission(permissions, &fakeAuthorizer{})(next, "ListMembers")(signedIn, nil, request("x"), nil)
 
-		appErr, ok := errors.AsType[*apperr.Error](err)
-		require.True(t, ok, err)
-		assert.Equal(t, apperr.KindInvalid, appErr.Kind)
-		assert.Equal(t, "projectId", appErr.Details["field"])
+		assert.ErrorContains(t, err, "parse project id")
 	})
 }

@@ -16,10 +16,11 @@ type User struct {
 	CreatedAt     time.Time
 }
 
-// UserUpdate is a change to a user. A nil field stays as it is.
-type UserUpdate struct {
-	// Email is the new email; an empty string removes it.
+// UpdateUserParams is a change to the user with ID. A nil field stays as it is.
+type UpdateUserParams struct {
+	ID            uuid.UUID
 	Email         *string
+	RemoveEmail   bool
 	IsServerAdmin *bool
 	Disabled      *bool
 }
@@ -69,26 +70,4 @@ var Permissions = []Permission{
 	PermissionProjectsCreate,
 	PermissionUsersRead,
 	PermissionUsersWrite,
-}
-
-// ProjectRole is a project and the role a user has in it.
-type ProjectRole struct {
-	ProjectID   uuid.UUID
-	ProjectName string
-	Role        Role
-}
-
-// Project is a set of Tasks, Runs and API keys, and the users who may see them.
-type Project struct {
-	ID        uuid.UUID
-	Name      string
-	CreatedAt time.Time
-}
-
-// Member is a user with a role in a project.
-type Member struct {
-	UserID   uuid.UUID
-	Username string
-	Email    *string
-	Role     Role
 }

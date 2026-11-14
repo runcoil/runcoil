@@ -11,7 +11,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
-	"github.com/runcoil/runcoil/internal/service/account"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 const defaultPageSize = 50
@@ -19,11 +19,11 @@ const defaultPageSize = 50
 var errInvalidPageToken = apperr.Invalid(apperr.CodeInvalidRequest, "page token is not valid").WithDetail("field", "pageToken")
 
 type userHandler struct {
-	accountService AccountService
+	userService service.User
 }
 
-func newUserHandler(accountService AccountService) *userHandler {
-	return &userHandler{accountService: accountService}
+func newUserHandler(userService service.User) *userHandler {
+	return &userHandler{userService: userService}
 }
 
 func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObject) (gen.ListUsersResponseObject, error) {
@@ -38,7 +38,7 @@ func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObj
 	}
 
 	// One more than the page holds tells whether another page follows.
-	res, err := h.accountService.ListUsers(ctx, afterID, pageSize+1)
+	res, err := h.userService.ListUsers(ctx, afterID, pageSize+1)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -58,7 +58,7 @@ func (h *userHandler) ListUsers(ctx context.Context, req gen.ListUsersRequestObj
 }
 
 func (h *userHandler) CreateUser(ctx context.Context, req gen.CreateUserRequestObject) (gen.CreateUserResponseObject, error) {
-	res, err := h.accountService.CreateUser(ctx, account.CreateUserParams{
+	res, err := h.userService.CreateUser(ctx, service.CreateUserParams{
 		Username:      req.Body.Username,
 		Email:         req.Body.Email,
 		Password:      req.Body.Password,
@@ -72,7 +72,7 @@ func (h *userHandler) CreateUser(ctx context.Context, req gen.CreateUserRequestO
 }
 
 func (h *userHandler) UpdateUser(ctx context.Context, req gen.UpdateUserRequestObject) (gen.UpdateUserResponseObject, error) {
-	res, err := h.accountService.UpdateUser(ctx, uuid.UUID(req.UserId), userUpdateFromRequest(*req.Body))
+	res, err := h.userService.UpdateUser(ctx, updateUserParamsFromRequest(uuid.UUID(req.UserId), *req.Body))
 	if err != nil {
 		return nil, fmt.Errorf("update user: %w", err)
 	}
@@ -81,7 +81,7 @@ func (h *userHandler) UpdateUser(ctx context.Context, req gen.UpdateUserRequestO
 }
 
 func (h *userHandler) ResetUserPassword(ctx context.Context, req gen.ResetUserPasswordRequestObject) (gen.ResetUserPasswordResponseObject, error) {
-	if err := h.accountService.ResetPassword(ctx, uuid.UUID(req.UserId), req.Body.NewPassword); err != nil {
+	if err := h.userService.ResetPassword(ctx, uuid.UUID(req.UserId), req.Body.NewPassword); err != nil {
 		return nil, fmt.Errorf("reset password: %w", err)
 	}
 
@@ -99,9 +99,11 @@ func managedUserToResponse(user domain.User) gen.ManagedUser {
 	}
 }
 
-func userUpdateFromRequest(body gen.UpdateUserRequest) domain.UserUpdate {
-	return domain.UserUpdate{
+func updateUserParamsFromRequest(id uuid.UUID, body gen.UpdateUserRequest) service.UpdateUserParams {
+	return service.UpdateUserParams{
+		ID:            id,
 		Email:         body.Email,
+		RemoveEmail:   body.RemoveEmail != nil && *body.RemoveEmail,
 		IsServerAdmin: body.IsServerAdmin,
 		Disabled:      body.Disabled,
 	}

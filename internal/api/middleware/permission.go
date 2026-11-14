@@ -14,6 +14,7 @@ import (
 	"github.com/runcoil/runcoil/internal/api/gen"
 	"github.com/runcoil/runcoil/internal/apperr"
 	"github.com/runcoil/runcoil/internal/domain"
+	"github.com/runcoil/runcoil/internal/service"
 )
 
 const (
@@ -25,7 +26,6 @@ const (
 var (
 	errNotSignedIn      = apperr.Unauthenticated(apperr.CodeUnauthenticated, "not signed in")
 	errPermissionDenied = apperr.PermissionDenied(apperr.CodePermissionDenied, "permission denied")
-	errInvalidProjectID = apperr.Invalid(apperr.CodeInvalidRequest, "project ID is not a UUID").WithDetail("field", "projectId")
 )
 
 // Permissions reads the permission of every operation in spec, keyed by the operation's
@@ -62,7 +62,7 @@ func Permissions(spec *openapi3.T) (map[string]string, error) {
 
 // Authorizer checks a permission inside a project.
 type Authorizer interface {
-	Authorize(ctx context.Context, identity domain.Identity, projectID uuid.UUID, permission domain.Permission) error
+	Authorize(ctx context.Context, params service.AuthorizeParams) error
 }
 
 // CheckPermission lets an operation run only for an identity with its permission. The
@@ -94,11 +94,16 @@ func CheckPermission(permissions map[string]string, authorizer Authorizer) gen.S
 			if projectID := r.PathValue("projectId"); projectID != "" {
 				id, err := uuid.Parse(projectID)
 				if err != nil {
-					return nil, errInvalidProjectID
+					return nil, fmt.Errorf("parse project id: %w", err)
 				}
 
-				if err := authorizer.Authorize(ctx, identity, id, domain.Permission(permission)); err != nil {
-					return nil, err
+				err = authorizer.Authorize(ctx, service.AuthorizeParams{
+					Identity:   identity,
+					ProjectID:  id,
+					Permission: domain.Permission(permission),
+				})
+				if err != nil {
+					return nil, fmt.Errorf("authorize: %w", err)
 				}
 
 				return f(ctx, w, r, req)
