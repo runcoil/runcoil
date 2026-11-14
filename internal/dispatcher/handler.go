@@ -304,6 +304,7 @@ var failureCodes = map[domain.FailureCode]runcoilv1.Failure_Code{
 	domain.FailureCodeAttemptLost:        runcoilv1.Failure_CODE_ATTEMPT_LOST,
 	domain.FailureCodeStartDeadline:      runcoilv1.Failure_CODE_START_DEADLINE,
 	domain.FailureCodeOutputNotEncodable: runcoilv1.Failure_CODE_OUTPUT_NOT_ENCODABLE,
+	domain.FailureCodeOutputTooLarge:     runcoilv1.Failure_CODE_OUTPUT_TOO_LARGE,
 }
 
 // failureCodeFromProto maps what a worker reports to a failure code. An unset kind is an error.
@@ -313,6 +314,8 @@ func failureCodeFromProto(kind runcoilv1.ErrorKind) domain.FailureCode {
 		return domain.FailureCodePanic
 	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE:
 		return domain.FailureCodeOutputNotEncodable
+	case runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE:
+		return domain.FailureCodeOutputTooLarge
 	default:
 		return domain.FailureCodeError
 	}

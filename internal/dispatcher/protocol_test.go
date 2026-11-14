@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -43,14 +44,18 @@ type fakeRunStore struct {
 	err    error
 	ended  bool
 	decide domain.RetryDecider
+	params *domain.CompleteStepParams
+	end    *domain.RunEnd
 }
 
-func (f *fakeRunStore) CompleteStep(_ context.Context, _ domain.CompleteStepParams, decide domain.RetryDecider) (domain.StepResult, error) {
+func (f *fakeRunStore) CompleteStep(_ context.Context, params domain.CompleteStepParams, decide domain.RetryDecider) (domain.StepResult, error) {
 	f.decide = decide
+	f.params = &params
 	return f.result, f.err
 }
 
-func (f *fakeRunStore) FinishRun(context.Context, uuid.UUID, domain.Lease, domain.RunEnd) (bool, error) {
+func (f *fakeRunStore) FinishRun(_ context.Context, _ uuid.UUID, _ domain.Lease, end domain.RunEnd) (bool, error) {
+	f.end = &end
 	return f.ended, f.err
 }
 
@@ -145,6 +150,102 @@ func TestCompleteStepRefusesAnInvalidRetry(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	assert.Equal(t, apperr.CodeInvalidRequest, appErr.Code)
 	assert.Nil(t, store.decide, "nothing reaches the store")
+}
+
+func TestCompleteStepRefusesWhatCannotBeStored(t *testing.T) {
+	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+
+	tests := []struct {
+		name     string
+		stepID   string
+		output   []byte
+		wantCode apperr.Code
+	}{
+		{name: "an empty step id", stepID: "", wantCode: apperr.CodeInvalidRequest},
+		{name: "a NUL in the step id", stepID: "bad\x00id", wantCode: apperr.CodeInvalidRequest},
+		{name: "a long step id", stepID: strings.Repeat("x", domain.MaxStepIDBytes+1), wantCode: apperr.CodeInvalidRequest},
+		{name: "an output over the limit", stepID: "big", output: make([]byte, domain.MaxOutputBytes+1), wantCode: apperr.CodeOutputTooLarge},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeRunStore{}
+			s := retryService(0, store)
+
+			_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
+				Lease:   lease,
+				StepID:  tt.stepID,
+				Outcome: domain.StepOutcome{Output: tt.output},
+			})
+
+			var apiErr *apperr.Error
+			require.ErrorAs(t, err, &apiErr)
+			assert.Equal(t, apperr.KindInvalid, apiErr.Kind)
+			assert.Equal(t, tt.wantCode, apiErr.Code)
+			assert.Nil(t, store.params, "nothing reaches the store")
+		})
+	}
+}
+
+func TestCompleteStepStoresAnOutputAtTheLimit(t *testing.T) {
+	store := &fakeRunStore{}
+	s := retryService(0, store)
+
+	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
+		StepID:  strings.Repeat("x", domain.MaxStepIDBytes),
+		Outcome: domain.StepOutcome{Output: make([]byte, domain.MaxOutputBytes)},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, store.params)
+}
+
+func TestCompleteStepCleansTheMessage(t *testing.T) {
+	store := &fakeRunStore{}
+	s := retryService(0, store)
+	failure := &domain.Failure{Code: domain.FailureCodeError, Message: "bad\x00byte"}
+
+	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
+		StepID:  "charge",
+		Outcome: domain.StepOutcome{Failure: failure},
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.params)
+	assert.Equal(t, "bad\uFFFDbyte", store.params.Outcome.Failure.Message)
+	assert.Equal(t, "bad\x00byte", failure.Message, "the caller's failure is not changed")
+}
+
+func TestCompleteRunRefusesAnOutputOverTheLimit(t *testing.T) {
+	worker := domain.Worker{ID: uuid.New()}
+	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+	store := &fakeRunStore{ended: true}
+	s := retryService(0, store)
+	s.streams[worker.ID] = heldStream(worker.ID, lease)
+
+	err := s.CompleteRun(context.Background(), worker, lease, domain.RunResult{Output: make([]byte, domain.MaxOutputBytes+1)})
+
+	var apiErr *apperr.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, apperr.KindInvalid, apiErr.Kind)
+	assert.Equal(t, apperr.CodeOutputTooLarge, apiErr.Code)
+	assert.Equal(t, "run output is 1048577 bytes, over the limit of 1048576 bytes", apiErr.Message)
+	assert.Nil(t, store.end, "nothing reaches the store")
+	assert.Equal(t, 0, s.streams[worker.ID].free(), "the worker still holds the attempt and reports its failure")
+}
+
+func TestCompleteRunCleansTheMessage(t *testing.T) {
+	worker := domain.Worker{ID: uuid.New()}
+	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+	store := &fakeRunStore{ended: true}
+	s := retryService(0, store)
+
+	err := s.CompleteRun(context.Background(), worker, lease, domain.RunResult{
+		Failure: &domain.Failure{Code: domain.FailureCodeError, Message: "bad\x00byte"},
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, store.end)
+	assert.Equal(t, "bad\uFFFDbyte", store.end.Failure.Message)
 }
 
 func failed(code domain.FailureCode) domain.StepOutcome {

@@ -27,6 +27,10 @@ type Config struct {
 	ClaimInterval     time.Duration
 	HeartbeatInterval time.Duration
 	WorkerTTL         time.Duration
+	// MaxLostAttempts is the scheduler's run.max-lost-attempts, which main copies here: a
+	// Run whose worker dropped it without a result more often fails. It has no key of its
+	// own.
+	MaxLostAttempts int
 	// Retry is the policy of a failed Step whose Run and Step set none.
 	Retry RetryConfig
 }
@@ -112,7 +116,7 @@ func (c *Config) Validate() error {
 type WorkerStore interface {
 	Register(ctx context.Context, keyHash []byte, session domain.WorkerSession) (domain.Worker, error)
 	GetWorkerBySessionToken(ctx context.Context, tokenHash []byte) (domain.Worker, error)
-	AttachStream(ctx context.Context, params domain.AttachStreamParams) ([]domain.Lease, error)
+	AttachStream(ctx context.Context, params domain.AttachStreamParams) (domain.AttachStreamResult, error)
 	FlushHeartbeats(ctx context.Context, ids []uuid.UUID, beats []time.Time) error
 	BeatDispatcher(ctx context.Context, id uuid.UUID) error
 	ClaimRuns(ctx context.Context, params domain.ClaimRunsParams) ([]domain.Assign, error)

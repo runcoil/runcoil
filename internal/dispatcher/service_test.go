@@ -9,8 +9,13 @@ import (
 	"time"
 	"uuid"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	runcoilv1 "github.com/runcoil/runcoil/proto/gen/go/runcoil/v1"
+	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
 
 var validRetry = RetryConfig{MaxAttempts: 4, Delays: []time.Duration{time.Second}, Jitter: 0.2}
@@ -149,4 +154,22 @@ func TestRunListenError(t *testing.T) {
 	s := newTestService(t, 70000)
 
 	assert.ErrorContains(t, s.Run(context.Background()), "listen")
+}
+
+func TestAMessageOverTheReadLimitIsRefused(t *testing.T) {
+	s := newTestService(t, 7070)
+	base, done := start(t, s)
+	defer func() {
+		s.Stop()
+		assert.NoError(t, wait(t, done))
+	}()
+
+	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(h2Client(), base)))
+	_, err := client.CompleteStep(context.Background(), &runcoilv1.CompleteStepRequest{
+		Lease:   &runcoilv1.Lease{RunId: uuid.New().String(), Epoch: 1},
+		StepId:  "big",
+		Outcome: &runcoilv1.CompleteStepRequest_Output{Output: make([]byte, readMaxBytes+1)},
+	})
+
+	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
 }

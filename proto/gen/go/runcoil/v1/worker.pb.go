@@ -31,6 +31,7 @@ const (
 	ErrorKind_ERROR_KIND_ERROR                ErrorKind = 1
 	ErrorKind_ERROR_KIND_PANIC                ErrorKind = 2
 	ErrorKind_ERROR_KIND_OUTPUT_NOT_ENCODABLE ErrorKind = 3
+	ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE     ErrorKind = 4
 )
 
 // Enum value maps for ErrorKind.
@@ -40,12 +41,14 @@ var (
 		1: "ERROR_KIND_ERROR",
 		2: "ERROR_KIND_PANIC",
 		3: "ERROR_KIND_OUTPUT_NOT_ENCODABLE",
+		4: "ERROR_KIND_OUTPUT_TOO_LARGE",
 	}
 	ErrorKind_value = map[string]int32{
 		"ERROR_KIND_UNSPECIFIED":          0,
 		"ERROR_KIND_ERROR":                1,
 		"ERROR_KIND_PANIC":                2,
 		"ERROR_KIND_OUTPUT_NOT_ENCODABLE": 3,
+		"ERROR_KIND_OUTPUT_TOO_LARGE":     4,
 	}
 )
 
@@ -1341,12 +1344,13 @@ const file_runcoil_v1_worker_proto_rawDesc = "" +
 	"\x13CompleteRunResponse\"+\n" +
 	"\x11DeregisterRequest\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x14\n" +
-	"\x12DeregisterResponse*x\n" +
+	"\x12DeregisterResponse*\x99\x01\n" +
 	"\tErrorKind\x12\x1a\n" +
 	"\x16ERROR_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10ERROR_KIND_ERROR\x10\x01\x12\x14\n" +
 	"\x10ERROR_KIND_PANIC\x10\x02\x12#\n" +
-	"\x1fERROR_KIND_OUTPUT_NOT_ENCODABLE\x10\x032\xd3\x03\n" +
+	"\x1fERROR_KIND_OUTPUT_NOT_ENCODABLE\x10\x03\x12\x1f\n" +
+	"\x1bERROR_KIND_OUTPUT_TOO_LARGE\x10\x042\xd3\x03\n" +
 	"\rWorkerService\x12E\n" +
 	"\bRegister\x12\x1b.runcoil.v1.RegisterRequest\x1a\x1c.runcoil.v1.RegisterResponse\x12A\n" +
 	"\x06Listen\x12\x19.runcoil.v1.ListenRequest\x1a\x1a.runcoil.v1.ListenResponse0\x01\x12H\n" +
