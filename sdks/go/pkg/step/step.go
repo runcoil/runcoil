@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/runcoil/runcoil/sdks/go/internal/runstate"
 )
@@ -34,7 +35,8 @@ type Error = runstate.StepError
 //
 // The Step is stored under id the first time; a later Step with the same id in the same
 // Run gets a counter (charge, charge#2). The stored id, counter included, is at most 255
-// bytes and has no NUL byte; Do returns an error for any other id and does not call fn.
+// bytes of UTF-8 and has no NUL byte; Do returns an error for any other id and does not
+// call fn.
 //
 // An output over the server's size limit fails the Step with the kind
 // "output_too_large", which is never tried again.
@@ -64,6 +66,10 @@ func Do[T any](ctx context.Context, id string, fn func(ctx context.Context) (T, 
 
 	if strings.ContainsRune(id, 0) {
 		return zero, errors.New("step: id must not contain a NUL byte")
+	}
+
+	if !utf8.ValidString(id) {
+		return zero, errors.New("step: id must be valid UTF-8")
 	}
 
 	var c cfg

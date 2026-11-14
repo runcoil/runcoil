@@ -183,7 +183,7 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 	ctx := w.reportCtx
 	session := w.sessionToken()
 	err := w.completeRun(ctx, req)
-	if err != nil && refused(err) {
+	if err != nil && refused(err) && a.open() {
 		a.logger.WarnContext(ctx, "run result refused; reporting the failure instead", slog.Any("error", err))
 
 		req = refusedRunResult(req, err)
@@ -289,6 +289,7 @@ func (w *Worker) recordStep(a *attempt, r runstate.StepReport) (runstate.Record,
 		case w.endSession(a.ctx, session, err):
 			logger.WarnContext(a.ctx, "step report refused: worker session ended; attempt ended")
 		case a.ctx.Err() != nil:
+			// The attempt ended while the report was sent; there is nothing to fail.
 		case refused(err):
 			logger.ErrorContext(a.ctx, "step report refused; the run fails", slog.Any("error", err))
 			w.report(a, runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR,
