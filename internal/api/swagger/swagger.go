@@ -40,21 +40,27 @@ const page = `<!doctype html>
 `
 
 // Register serves the docs page at /docs and spec, the bundled OpenAPI document, at
-// /docs/openapi.yaml.
-func Register(mux *http.ServeMux, spec []byte) {
+// /docs/openapi.yaml with info.version set to version.
+func Register(mux *http.ServeMux, spec []byte, version string) {
+	versionedSpec, err := withVersion(spec, version)
+
 	mux.HandleFunc("GET "+pagePath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(page))
 	})
 
 	mux.HandleFunc("GET "+specPath, func(w http.ResponseWriter, _ *http.Request) {
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/yaml")
-		_, _ = w.Write(spec)
+		_, _ = w.Write(versionedSpec)
 	})
 }
 
-// WithVersion returns spec with info.version set to version.
-func WithVersion(spec []byte, version string) ([]byte, error) {
+func withVersion(spec []byte, version string) ([]byte, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(spec, &doc); err != nil {
 		return nil, fmt.Errorf("decode spec: %w", err)

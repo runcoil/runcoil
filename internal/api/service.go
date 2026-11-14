@@ -75,7 +75,6 @@ type Service struct {
 	accountService AccountService
 
 	spec        *openapi3.T
-	docsSpec    []byte
 	permissions map[string]string
 
 	stopped  chan struct{}
@@ -94,18 +93,12 @@ func New(cfg Config, logger *slog.Logger, checks *healthutil.Checks, accountServ
 		return nil, fmt.Errorf("read permissions: %w", err)
 	}
 
-	docsSpec, err := swagger.WithVersion(openapi.Spec, build.Get().Version)
-	if err != nil {
-		return nil, fmt.Errorf("set docs spec version: %w", err)
-	}
-
 	return &Service{
 		cfg:            cfg,
 		logger:         logger,
 		checks:         checks,
 		accountService: accountService,
 		spec:           spec,
-		docsSpec:       docsSpec,
 		permissions:    permissions,
 		stopped:        make(chan struct{}),
 	}, nil
@@ -163,7 +156,7 @@ func (s *Service) newHTTPServer() *http.Server {
 	mux.Handle("/", uiHandler(ui.Dist()))
 
 	if s.cfg.Swagger {
-		swagger.Register(mux, s.docsSpec)
+		swagger.Register(mux, openapi.Spec, build.Version)
 	} else {
 		mux.Handle("/docs", http.NotFoundHandler())
 		mux.Handle("/docs/", http.NotFoundHandler())
