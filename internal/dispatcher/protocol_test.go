@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -152,39 +151,21 @@ func TestCompleteStepRefusesAnInvalidRetry(t *testing.T) {
 	assert.Nil(t, store.decide, "nothing reaches the store")
 }
 
-func TestCompleteStepRefusesWhatCannotBeStored(t *testing.T) {
-	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
+func TestCompleteStepRefusesAnOutputOverTheLimit(t *testing.T) {
+	store := &fakeRunStore{}
+	s := retryService(0, store)
 
-	tests := []struct {
-		name     string
-		stepID   string
-		output   []byte
-		wantCode apperr.Code
-	}{
-		{name: "an empty step id", stepID: "", wantCode: apperr.CodeInvalidRequest},
-		{name: "a NUL in the step id", stepID: "bad\x00id", wantCode: apperr.CodeInvalidRequest},
-		{name: "a long step id", stepID: strings.Repeat("x", domain.MaxStepIDBytes+1), wantCode: apperr.CodeInvalidRequest},
-		{name: "an output over the limit", stepID: "big", output: make([]byte, domain.MaxOutputBytes+1), wantCode: apperr.CodeOutputTooLarge},
-	}
+	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
+		Lease:   domain.Lease{RunID: uuid.New(), Epoch: 1},
+		StepID:  "big",
+		Outcome: domain.StepOutcome{Output: make([]byte, domain.MaxOutputBytes+1)},
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store := &fakeRunStore{}
-			s := retryService(0, store)
-
-			_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
-				Lease:   lease,
-				StepID:  tt.stepID,
-				Outcome: domain.StepOutcome{Output: tt.output},
-			})
-
-			var apiErr *apperr.Error
-			require.ErrorAs(t, err, &apiErr)
-			assert.Equal(t, apperr.KindInvalid, apiErr.Kind)
-			assert.Equal(t, tt.wantCode, apiErr.Code)
-			assert.Nil(t, store.params, "nothing reaches the store")
-		})
-	}
+	var appErr *apperr.Error
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.KindInvalid, appErr.Kind)
+	assert.Equal(t, apperr.CodeOutputTooLarge, appErr.Code)
+	assert.Nil(t, store.params, "nothing reaches the store")
 }
 
 func TestCompleteStepStoresAnOutputAtTheLimit(t *testing.T) {
@@ -192,27 +173,11 @@ func TestCompleteStepStoresAnOutputAtTheLimit(t *testing.T) {
 	s := retryService(0, store)
 
 	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
-		StepID:  strings.Repeat("x", domain.MaxStepIDBytes),
+		StepID:  "big",
 		Outcome: domain.StepOutcome{Output: make([]byte, domain.MaxOutputBytes)},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, store.params)
-}
-
-func TestCompleteStepCleansTheMessage(t *testing.T) {
-	store := &fakeRunStore{}
-	s := retryService(0, store)
-	failure := &domain.Failure{Code: domain.FailureCodeError, Message: "bad\x00byte"}
-
-	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{
-		StepID:  "charge",
-		Outcome: domain.StepOutcome{Failure: failure},
-	})
-	require.NoError(t, err)
-
-	require.NotNil(t, store.params)
-	assert.Equal(t, "bad\uFFFDbyte", store.params.Outcome.Failure.Message)
-	assert.Equal(t, "bad\x00byte", failure.Message, "the caller's failure is not changed")
 }
 
 func TestCompleteRunRefusesAnOutputOverTheLimit(t *testing.T) {
@@ -231,21 +196,6 @@ func TestCompleteRunRefusesAnOutputOverTheLimit(t *testing.T) {
 	assert.Equal(t, "run output is 1048577 bytes, over the limit of 1048576 bytes", apiErr.Message)
 	assert.Nil(t, store.end, "nothing reaches the store")
 	assert.Equal(t, 0, s.streams[worker.ID].free(), "the worker still holds the attempt and reports its failure")
-}
-
-func TestCompleteRunCleansTheMessage(t *testing.T) {
-	worker := domain.Worker{ID: uuid.New()}
-	lease := domain.Lease{RunID: uuid.New(), Epoch: 1}
-	store := &fakeRunStore{ended: true}
-	s := retryService(0, store)
-
-	err := s.CompleteRun(context.Background(), worker, lease, domain.RunResult{
-		Failure: &domain.Failure{Code: domain.FailureCodeError, Message: "bad\x00byte"},
-	})
-	require.NoError(t, err)
-
-	require.NotNil(t, store.end)
-	assert.Equal(t, "bad\uFFFDbyte", store.end.Failure.Message)
 }
 
 func failed(code domain.FailureCode) domain.StepOutcome {

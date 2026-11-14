@@ -73,6 +73,7 @@ func run() error {
 
 	cfg.Dispatcher.MaxLostAttempts = cfg.Scheduler.MaxLostAttempts
 	dispatcherService := dispatcher.New(cfg.Dispatcher, logger, workerStore, runStore)
+
 	cfg.Scheduler.WorkerTTL = cfg.Dispatcher.WorkerTTL
 	schedulerService := scheduler.New(cfg.Scheduler, logger, runStore, workerStore)
 

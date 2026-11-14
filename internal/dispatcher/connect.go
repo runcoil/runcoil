@@ -20,8 +20,9 @@ import (
 	"github.com/runcoil/runcoil/proto/gen/go/runcoil/v1/runcoilv1connect"
 )
 
-// readMaxBytes is the largest message a worker may send: an output at its limit, with
-// room for the rest of the message. A larger one is refused with resource_exhausted.
+// readMaxBytes is the largest message a worker may send, 2 MiB: an output at its 1 MiB
+// limit, with room for the rest of the message. A larger one is refused with
+// resource_exhausted.
 const readMaxBytes = domain.MaxOutputBytes + 1<<20
 
 // newHTTPServer returns the server of the worker protocol. The dispatcher holds the

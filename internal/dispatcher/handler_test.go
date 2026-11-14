@@ -1,8 +1,10 @@
 package dispatcher
 
 import (
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/stretchr/testify/assert"
@@ -113,6 +115,12 @@ func TestCompleteStepParams(t *testing.T) {
 		Outcome: &runcoilv1.CompleteStepRequest_Output{Output: []byte(`1`)},
 	})
 	assert.Equal(t, domain.StepOutcome{Output: []byte(`1`)}, succeeded.Outcome)
+
+	nul := completeStepParams(workerID, lease, &runcoilv1.CompleteStepRequest{
+		StepId:  "charge",
+		Outcome: &runcoilv1.CompleteStepRequest_Error{Error: &runcoilv1.StepError{Message: "bad\x00byte"}},
+	})
+	assert.Equal(t, "bad\uFFFDbyte", nul.Outcome.Failure.Message, "the message is cleaned")
 	assert.Equal(t, domain.StepRetry{}, succeeded.Retry, "no policy, no marks")
 }
 
@@ -147,4 +155,23 @@ func TestScheduleFromProto(t *testing.T) {
 		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *", Overlap: runcoilv1.OverlapPolicy_OVERLAP_POLICY_SKIP}))
 	assert.Equal(t, &domain.Schedule{Cron: "0 * * * *", Overlap: domain.OverlapAllow},
 		scheduleFromProto(&runcoilv1.Schedule{Cron: "0 * * * *", Overlap: runcoilv1.OverlapPolicy_OVERLAP_POLICY_ALLOW}))
+}
+
+func TestCleanMessage(t *testing.T) {
+	assert.Equal(t, "smtp down", cleanMessage("smtp down"))
+	assert.Equal(t, "bad\uFFFDbyte", cleanMessage("bad\x00byte"))
+
+	long := strings.Repeat("x", maxErrorMessageBytes+10)
+	assert.Equal(t, long[:maxErrorMessageBytes], cleanMessage(long))
+
+	// A three-byte character across the limit is dropped whole.
+	cut := cleanMessage(strings.Repeat("x", maxErrorMessageBytes-1) + "\u20ac")
+	assert.Len(t, cut, maxErrorMessageBytes-1)
+	assert.True(t, utf8.ValidString(cut))
+
+	// NUL grows to three bytes before the cut.
+	nuls := cleanMessage(strings.Repeat("\x00", maxErrorMessageBytes))
+	assert.LessOrEqual(t, len(nuls), maxErrorMessageBytes)
+	assert.True(t, utf8.ValidString(nuls))
+	assert.NotContains(t, nuls, "\x00")
 }
