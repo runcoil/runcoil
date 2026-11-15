@@ -182,15 +182,7 @@ func (w *Worker) report(a *attempt, req *runcoilv1.CompleteRunRequest) bool {
 	// is sent, or until Shutdown cuts it short.
 	ctx := w.reportCtx
 	session := w.sessionToken()
-	err := w.completeRun(ctx, req)
-	if err != nil && refused(err) && a.open() {
-		a.logger.WarnContext(ctx, "run result refused; reporting the failure instead", slog.Any("error", err))
-
-		req = refusedRunResult(req, err)
-		req.Lease = a.lease()
-		err = w.completeRun(ctx, req)
-	}
-
+	err := w.sendResult(ctx, a, req)
 	if err == nil {
 		return true
 	}
@@ -221,14 +213,31 @@ func (w *Worker) completeRun(ctx context.Context, req *runcoilv1.CompleteRunRequ
 	})
 }
 
+// sendResult sends the result of the attempt. completeRun already sends it again after a
+// transient error. A result the server refuses for good would be refused on every try and
+// leave the Run running, so the Run's failure is sent in its place, once.
+func (w *Worker) sendResult(ctx context.Context, a *attempt, req *runcoilv1.CompleteRunRequest) error {
+	err := w.completeRun(ctx, req)
+	if err == nil || !refused(err) || !a.open() {
+		return err
+	}
+
+	a.logger.WarnContext(ctx, "run result refused; reporting the failure instead", slog.Any("error", err))
+
+	return w.completeRun(ctx, refusedRunResult(req, err))
+}
+
 // refusedRunResult is the failure that replaces a Run result the server refused: an
 // output over the limit fails the Run with OUTPUT_TOO_LARGE, anything else with an error.
 func refusedRunResult(req *runcoilv1.CompleteRunRequest, err error) *runcoilv1.CompleteRunRequest {
+	failure := runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR, "the server refused the run result: "+refusal(err), "")
 	if out := req.GetOutput(); out != nil && outputTooLarge(err) {
-		return runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE, tooLargeMessage("run", len(out), err), "")
+		failure = runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_OUTPUT_TOO_LARGE, tooLargeMessage("run", len(out), err), "")
 	}
 
-	return runFailureToProto(runcoilv1.ErrorKind_ERROR_KIND_ERROR, "the server refused the run result: "+refusal(err), "")
+	failure.Lease = req.GetLease()
+
+	return failure
 }
 
 // forget drops the attempt from the held set, so Listen stops reporting it.

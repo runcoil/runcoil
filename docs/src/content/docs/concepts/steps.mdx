@@ -34,7 +34,7 @@ A retry is a new attempt of the same Run. The handler starts again from its firs
 
 The server stores a Step under its `id`. A later Step with the same `id` in the same Run gets a counter: `charge`, `charge#2`, `charge#3`. A loop that calls one Step is fine if it calls the Steps in the same order on every attempt.
 
-An ID, counter included, is at most 255 bytes and has no NUL byte. For any other ID, `step.Do` returns an error and does not call `fn`.
+An ID, counter included, is at most 255 bytes. For a longer ID, `step.Do` returns an error and does not call `fn`.
 
 ## Output size
 
