@@ -5,8 +5,8 @@ import (
 	"uuid"
 )
 
-// MaxOutputBytes is the largest output a Step or a Run may store: 1 MiB.
-const MaxOutputBytes = 1 << 20
+// MaxOutputBytes is the largest output a Step or a Run may store.
+const MaxOutputBytes = 1 << 20 // 1 MiB
 
 // RunStatus is where a Run is in its life.
 type RunStatus string

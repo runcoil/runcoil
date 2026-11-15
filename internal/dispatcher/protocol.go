@@ -157,7 +157,7 @@ func (s *Service) Deregister(ctx context.Context, worker domain.Worker, reason s
 // failed try that may be tried again ends the attempt instead: the result carries the
 // retry, the Run waits for its next try, and the worker's slot is free.
 func (s *Service) CompleteStep(ctx context.Context, params domain.CompleteStepParams) (domain.StepResult, error) {
-	if err := params.Retry.Validate(); err != nil {
+	if err := params.Validate(); err != nil {
 		return domain.StepResult{}, apperr.Invalid(apperr.CodeInvalidRequest, err.Error())
 	}
 

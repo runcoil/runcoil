@@ -3,14 +3,14 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"uuid"
 )
 
 // MaxSlots is the most Runs one worker process may run at once.
 const MaxSlots = 100
 
-// MaxTasks is the most Tasks one registration may declare. Register stores them all in
-// one transaction, and every Register repeats it.
+// MaxTasks is the most Tasks one registration may declare.
 const MaxTasks = 1000
 
 // Registration is what one worker process declares at Register.
@@ -31,12 +31,16 @@ func (e *RegistrationError) Error() string {
 	return e.Message
 }
 
-// Validate checks what the request rules do not: the slots, the number of Tasks, that
-// each Task is declared once, and the limits of each Task's retry policy and start
-// deadline.
+// Validate checks what the request rules do not: the slots, the number of Tasks, that no
+// name has a NUL byte, that each Task is declared once, and the limits of each Task's
+// retry policy and start deadline.
 func (r Registration) Validate() error {
 	if r.Slots < 1 || r.Slots > MaxSlots {
 		return &RegistrationError{Message: fmt.Sprintf("slots must be between 1 and %d", MaxSlots)}
+	}
+
+	if strings.ContainsRune(r.App, 0) {
+		return &RegistrationError{Message: "app name must not contain a NUL byte"}
 	}
 
 	if len(r.Tasks) == 0 {
@@ -49,6 +53,10 @@ func (r Registration) Validate() error {
 
 	seen := make(map[string]struct{}, len(r.Tasks))
 	for _, def := range r.Tasks {
+		if strings.ContainsRune(def.Name, 0) {
+			return &RegistrationError{Message: "task name must not contain a NUL byte", TaskName: def.Name}
+		}
+
 		if _, ok := seen[def.Name]; ok {
 			return &RegistrationError{Message: "task is declared twice", TaskName: def.Name}
 		}

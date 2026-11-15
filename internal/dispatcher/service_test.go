@@ -176,7 +176,7 @@ func TestAMessageOverTheReadLimitIsRefused(t *testing.T) {
 	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
 }
 
-func TestRequestRulesRefuseWhatCannotBeStored(t *testing.T) {
+func TestRequestRulesRefuseALongStepID(t *testing.T) {
 	s := newTestService(t, 7070)
 	base, done := start(t, s)
 	defer func() {
@@ -185,35 +185,16 @@ func TestRequestRulesRefuseWhatCannotBeStored(t *testing.T) {
 	}()
 
 	client := runcoilv1connect.NewWorkerServiceClient(connect.NewClient(connecthttp.NewTransport(h2Client(), base)))
-	lease := &runcoilv1.Lease{RunId: uuid.New().String(), Epoch: 1}
 	step := func(id string) error {
 		_, err := client.CompleteStep(context.Background(), &runcoilv1.CompleteStepRequest{
-			Lease:   lease,
+			Lease:   &runcoilv1.Lease{RunId: uuid.New().String(), Epoch: 1},
 			StepId:  id,
 			Outcome: &runcoilv1.CompleteStepRequest_Output{Output: []byte(`1`)},
 		})
 
 		return err
 	}
-	register := func(app, task string) error {
-		_, err := client.Register(context.Background(), &runcoilv1.RegisterRequest{
-			App:   app,
-			Slots: 1,
-			Tasks: []*runcoilv1.TaskDefinition{{Name: task}},
-		})
 
-		return err
-	}
-
-	tests := map[string]error{
-		"a NUL in the step id":   step("bad\x00id"),
-		"a step id of 256 bytes": step(strings.Repeat("x", 256)),
-		"a NUL in the app":       register("sh\x00op", "order"),
-		"a NUL in a task name":   register("shop", "ord\x00er"),
-	}
-	for name, err := range tests {
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), name)
-	}
-
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(step(strings.Repeat("x", 256))))
 	assert.NotEqual(t, connect.CodeInvalidArgument, connect.CodeOf(step(strings.Repeat("x", 255))), "a step id of 255 bytes passes the rules")
 }

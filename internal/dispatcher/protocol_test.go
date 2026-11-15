@@ -154,6 +154,19 @@ func TestCompleteStepRefusesAnInvalidRetry(t *testing.T) {
 	assert.Nil(t, store.decide, "nothing reaches the store")
 }
 
+func TestCompleteStepRefusesANULInTheStepID(t *testing.T) {
+	store := &fakeRunStore{}
+	s := retryService(0, store)
+
+	_, err := s.CompleteStep(context.Background(), domain.CompleteStepParams{StepID: "bad\x00id"})
+
+	var appErr *apperr.Error
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeInvalidRequest, appErr.Code)
+	assert.Equal(t, "step id must not contain a NUL byte", appErr.Message)
+	assert.Nil(t, store.params, "nothing reaches the store")
+}
+
 func TestCompleteStepRefusesAnOutputOverTheLimit(t *testing.T) {
 	store := &fakeRunStore{}
 	s := retryService(0, store)

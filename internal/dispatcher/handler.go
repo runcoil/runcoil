@@ -166,8 +166,8 @@ func (h workerHandler) authenticate(ctx context.Context) (domain.Worker, error) 
 	return worker, nil
 }
 
-// maxErrorMessageBytes is the longest error message stored: 64 KiB.
-const maxErrorMessageBytes = 64 << 10
+// maxErrorMessageBytes is the longest error message stored.
+const maxErrorMessageBytes = 64 << 10 // 64 KiB
 
 // cleanMessage returns a worker's error message as it can be stored: each NUL byte
 // becomes U+FFFD, and the text is cut to maxErrorMessageBytes at a character boundary.
