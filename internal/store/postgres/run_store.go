@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 	"uuid"
 
 	"github.com/runcoil/runcoil/internal/domain"
@@ -275,6 +276,7 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 				continue
 			}
 
+			next := c.Next(now)
 			runID := uuid.Nil()
 			if domain.OverlapPolicy(row.OverlapPolicy) == domain.OverlapSkip && row.LastRunID != nil && active[*row.LastRunID] {
 				ticks.Skipped++
@@ -282,11 +284,12 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 				runID = uuid.NewV7()
 				runs.Ids = append(runs.Ids, runID)
 				runs.TaskIds = append(runs.TaskIds, row.TaskID)
+				runs.StartDeadlineAts = append(runs.StartDeadlineAts, scheduledStartDeadline(row.NextTickAt, next))
 				ticks.Fired++
 			}
 
 			advance.Ids = append(advance.Ids, row.ID)
-			advance.NextTickAts = append(advance.NextTickAts, c.Next(now))
+			advance.NextTickAts = append(advance.NextTickAts, next)
 			advance.RunIds = append(advance.RunIds, runID)
 		}
 
@@ -309,6 +312,21 @@ func (s *Store) FireDueSchedules(ctx context.Context, batchSize int) (domain.Sch
 	}
 
 	return ticks, nil
+}
+
+// minScheduledStartWait is the least time a scheduled Run of a Task with no start deadline
+// may wait for a worker, so a cron with seconds does not fail its Runs between two claims.
+const minScheduledStartWait = time.Minute
+
+// scheduledStartDeadline is the start deadline of a Run made for tick, when its Task sets
+// none: the schedule's next tick, and no sooner than minScheduledStartWait after tick.
+func scheduledStartDeadline(tick, next time.Time) time.Time {
+	floor := tick.Add(minScheduledStartWait)
+	if next.After(floor) {
+		return next
+	}
+
+	return floor
 }
 
 // listActiveLastRuns returns which last Runs of the skip schedules among rows are queued
