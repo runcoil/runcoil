@@ -90,8 +90,10 @@ type Service struct {
 	stopped  chan struct{}
 	stopOnce sync.Once
 
-	// startedAt is when Run started. The reaper waits one worker TTL from it.
-	startedAt time.Time
+	// startedAt is when Run started, and reaperFailedAt when a sweep of the reaper last
+	// failed. The reaper waits one worker TTL from each.
+	startedAt      time.Time
+	reaperFailedAt time.Time
 }
 
 // New creates the scheduler. It does nothing until Run.
@@ -196,18 +198,19 @@ func (s *Service) failRunsPastStartDeadline(ctx context.Context) {
 // worker TTL, and puts the Runs they held back in the queue, or fails the Runs lost too
 // often. A failed batch is tried again at the next tick.
 //
-// It does nothing for one worker TTL after Run starts. While the server was down, nothing
-// wrote the heartbeats of its workers, so a worker that reconnects at once still looks
-// dead until the first flush after it; the wait gives every live worker a TTL to
-// reconnect and send a heartbeat.
+// It does nothing for one worker TTL after Run starts, and for one worker TTL after a
+// sweep fails. While the server was down or the database refused writes, no heartbeat
+// was written, so a live worker still looks dead until the first flush after it; the
+// wait gives every live worker a TTL to send a heartbeat that is written.
 func (s *Service) endDeadWorkers(ctx context.Context) {
-	if time.Since(s.startedAt) < s.cfg.WorkerTTL {
+	if time.Since(s.startedAt) < s.cfg.WorkerTTL || time.Since(s.reaperFailedAt) < s.cfg.WorkerTTL {
 		return
 	}
 
 	dead, err := s.workerStore.EndDeadWorkers(ctx, s.cfg.WorkerTTL, s.cfg.MaxLostAttempts, workerBatchSize)
 	if err != nil {
 		if ctx.Err() == nil {
+			s.reaperFailedAt = time.Now()
 			s.logger.ErrorContext(ctx, "end dead workers failed", slog.Any("error", err))
 		}
 
