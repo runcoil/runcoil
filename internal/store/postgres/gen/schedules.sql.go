@@ -79,7 +79,7 @@ type ScheduleTakeDueRow struct {
 // servers fire the same tick. It reads no other table: when another server committed a
 // schedule after this statement's snapshot, PostgreSQL rechecks the newest version of the
 // locked row but keeps joined rows from the old snapshot. So last_run_id is current, and
-// RunListActive reads that Run in a later statement. now is the clock the ticks are
+// RunListLastState reads that Run in a later statement. now is the clock the ticks are
 // compared with: the next tick is computed from it, so it is always after the tick taken.
 func (q *Queries) ScheduleTakeDue(ctx context.Context, db DBTX, batchSize int32) ([]ScheduleTakeDueRow, error) {
 	rows, err := db.Query(ctx, scheduleTakeDue, batchSize)

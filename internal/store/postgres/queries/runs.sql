@@ -30,18 +30,25 @@ RETURNING r.id;
 -- name: RunGetStatus :one
 SELECT status FROM runs WHERE id = @id::uuid;
 
--- name: RunListActive :many
--- The Runs among @ids that are queued or running. A queued Run past its start deadline
--- counts as ended: it can no longer be claimed, and the start deadline job fails it only
--- later. FireDueSchedules reads the last Runs of the schedules it locked with it, in a
--- statement of its own, so its snapshot sees every Run committed before the lock.
-SELECT r.id
+-- name: RunListLastState :many
+-- The status of the last Runs among @ids, and whether each is queued past its start
+-- deadline. FireDueSchedules reads them in a statement of its own after ScheduleTakeDue
+-- holds the schedules' locks, so its snapshot sees every Run committed before the lock.
+SELECT r.id,
+       COALESCE(r.status = 'running'
+                OR (r.status = 'queued' AND (q.start_deadline_at IS NULL OR q.start_deadline_at > now())),
+                false)::boolean AS active,
+       COALESCE(r.status = 'queued' AND q.start_deadline_at <= now(),
+                false)::boolean AS expired
 FROM runs r
-WHERE r.id = ANY (@ids::uuid[])
-  AND (r.status = 'running'
-       OR (r.status = 'queued' AND NOT EXISTS (
-               SELECT 1 FROM run_queue q WHERE q.run_id = r.id AND q.start_deadline_at <= now()
-           )));
+LEFT JOIN run_queue q ON q.run_id = r.id
+WHERE r.id = ANY (@ids::uuid[]);
+
+-- name: RunListActive :many
+-- The Runs among @ids that are queued or running. FireDueSchedules reads any expired last
+-- Run that QueueExpireRuns did not fail, to see whether a claim started it or the
+-- deadline job failed it.
+SELECT id FROM runs WHERE id = ANY (@ids::uuid[]) AND status IN ('queued', 'running');
 
 -- name: RunCreateScheduled :exec
 -- One queued Run per schedule tick, with no input. config keeps the Task's retry policy,

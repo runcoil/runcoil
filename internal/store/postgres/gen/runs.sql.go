@@ -249,19 +249,12 @@ func (q *Queries) RunList(ctx context.Context, db DBTX, arg RunListParams) ([]Ru
 }
 
 const runListActive = `-- name: RunListActive :many
-SELECT r.id
-FROM runs r
-WHERE r.id = ANY ($1::uuid[])
-  AND (r.status = 'running'
-       OR (r.status = 'queued' AND NOT EXISTS (
-               SELECT 1 FROM run_queue q WHERE q.run_id = r.id AND q.start_deadline_at <= now()
-           )))
+SELECT id FROM runs WHERE id = ANY ($1::uuid[]) AND status IN ('queued', 'running')
 `
 
-// The Runs among @ids that are queued or running. A queued Run past its start deadline
-// counts as ended: it can no longer be claimed, and the start deadline job fails it only
-// later. FireDueSchedules reads the last Runs of the schedules it locked with it, in a
-// statement of its own, so its snapshot sees every Run committed before the lock.
+// The Runs among @ids that are queued or running. FireDueSchedules reads any expired last
+// Run that QueueExpireRuns did not fail, to see whether a claim started it or the
+// deadline job failed it.
 func (q *Queries) RunListActive(ctx context.Context, db DBTX, ids []uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := db.Query(ctx, runListActive, ids)
 	if err != nil {
@@ -311,6 +304,47 @@ func (q *Queries) RunListForAssign(ctx context.Context, db DBTX, ids []uuid.UUID
 			&i.Input,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const runListLastState = `-- name: RunListLastState :many
+SELECT r.id,
+       COALESCE(r.status = 'running'
+                OR (r.status = 'queued' AND (q.start_deadline_at IS NULL OR q.start_deadline_at > now())),
+                false)::boolean AS active,
+       COALESCE(r.status = 'queued' AND q.start_deadline_at <= now(),
+                false)::boolean AS expired
+FROM runs r
+LEFT JOIN run_queue q ON q.run_id = r.id
+WHERE r.id = ANY ($1::uuid[])
+`
+
+type RunListLastStateRow struct {
+	ID      uuid.UUID
+	Active  bool
+	Expired bool
+}
+
+// The status of the last Runs among @ids, and whether each is queued past its start
+// deadline. FireDueSchedules reads them in a statement of its own after ScheduleTakeDue
+// holds the schedules' locks, so its snapshot sees every Run committed before the lock.
+func (q *Queries) RunListLastState(ctx context.Context, db DBTX, ids []uuid.UUID) ([]RunListLastStateRow, error) {
+	rows, err := db.Query(ctx, runListLastState, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RunListLastStateRow{}
+	for rows.Next() {
+		var i RunListLastStateRow
+		if err := rows.Scan(&i.ID, &i.Active, &i.Expired); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

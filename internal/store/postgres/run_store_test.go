@@ -12,18 +12,51 @@ func TestScheduledStartDeadline(t *testing.T) {
 
 	tests := []struct {
 		name string
+		now  time.Time
 		next time.Time
 		want time.Time
 	}{
-		{"a cron of one second waits at least a minute", tick.Add(time.Second), tick.Add(time.Minute)},
-		{"a cron of one minute waits until the next tick", tick.Add(time.Minute), tick.Add(time.Minute)},
-		{"a daily cron waits until the next tick", tick.Add(24 * time.Hour), tick.Add(24 * time.Hour)},
-		{"a tick fired late counts from the tick, not the sweep", tick.Add(90 * time.Second), tick.Add(90 * time.Second)},
+		{
+			name: "a cron of one second waits at least a minute",
+			now:  tick,
+			next: tick.Add(time.Second),
+			want: tick.Add(time.Minute),
+		},
+		{
+			name: "a cron of one minute waits until the next tick",
+			now:  tick,
+			next: tick.Add(time.Minute),
+			want: tick.Add(time.Minute),
+		},
+		{
+			name: "a daily cron waits until the next tick",
+			now:  tick,
+			next: tick.Add(24 * time.Hour),
+			want: tick.Add(24 * time.Hour),
+		},
+		{
+			name: "a tick fired slightly late counts from the tick, not the sweep",
+			now:  tick.Add(5 * time.Second),
+			next: tick.Add(time.Minute),
+			want: tick.Add(time.Minute),
+		},
+		{
+			name: "a tick fired over a minute late on a one-second cron waits a minute from now",
+			now:  tick.Add(5 * time.Minute),
+			next: tick.Add(5*time.Minute + time.Second),
+			want: tick.Add(6 * time.Minute),
+		},
+		{
+			name: "a daily tick fired over a minute late still waits until the next tick",
+			now:  tick.Add(5 * time.Minute),
+			next: tick.Add(24 * time.Hour),
+			want: tick.Add(24 * time.Hour),
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, scheduledStartDeadline(tick, tt.next))
+			assert.Equal(t, tt.want, scheduledStartDeadline(tick, tt.now, tt.next))
 		})
 	}
 }
