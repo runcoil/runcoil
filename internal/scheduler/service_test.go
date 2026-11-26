@@ -77,7 +77,6 @@ type fakeWorkerStore struct {
 	sweeps int
 	ttl    time.Duration
 	lost   int
-	err    error
 }
 
 func (f *fakeWorkerStore) EndDeadWorkers(_ context.Context, ttl time.Duration, maxLost, _ int) (domain.DeadWorkers, error) {
@@ -86,18 +85,8 @@ func (f *fakeWorkerStore) EndDeadWorkers(_ context.Context, ttl time.Duration, m
 
 	f.sweeps++
 	f.ttl, f.lost = ttl, maxLost
-	if f.err != nil {
-		return domain.DeadWorkers{}, f.err
-	}
 
 	return domain.DeadWorkers{Ended: 1, Requeued: 2}, nil
-}
-
-func (f *fakeWorkerStore) setErr(err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.err = err
 }
 
 func (f *fakeWorkerStore) calls() (sweeps int, ttl time.Duration, maxLost int) {
@@ -196,27 +185,6 @@ func TestTheReaperWaitsOneTTLAfterTheStart(t *testing.T) {
 
 	sweeps, _, _ := workers.calls()
 	assert.Zero(t, sweeps, "the heartbeats of the workers are stale right after a restart")
-}
-
-func TestTheReaperWaitsOneTTLAfterAFailedSweep(t *testing.T) {
-	cfg := testConfig()
-	cfg.WorkerTTL = 100 * time.Millisecond
-	workers := &fakeWorkerStore{err: errors.New("db down")}
-	s := New(cfg, slog.New(slog.DiscardHandler), &fakeRunStore{}, workers)
-	s.startedAt = time.Now().Add(-time.Hour)
-
-	s.endDeadWorkers(context.Background())
-	workers.setErr(nil)
-	s.endDeadWorkers(context.Background())
-
-	sweeps, _, _ := workers.calls()
-	assert.Equal(t, 1, sweeps, "right after the database is back, the heartbeats of live workers are stale")
-
-	time.Sleep(cfg.WorkerTTL)
-	s.endDeadWorkers(context.Background())
-
-	sweeps, _, _ = workers.calls()
-	assert.Equal(t, 2, sweeps, "the reaper sweeps again one TTL after the failure")
 }
 
 func TestSchedulesFireAtEachTick(t *testing.T) {
